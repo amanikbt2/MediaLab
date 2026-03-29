@@ -2,61 +2,49 @@ import express from "express";
 import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import User from "../models/User.js";
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 import dotenv from "dotenv";
 
 dotenv.config();
 
 const router = express.Router();
 
-// --- 1. THE "BOSS LEVEL" CLOUD TRANSPORTER ---
-// This configuration is designed specifically to bypass Render's IPv6 networking bugs.
-// --- THE "ULTIMATE BYPASS" TRANSPORTER ---
-const transporter = nodemailer.createTransport({
-  // Direct IPv4 for smtp.gmail.com to prevent IPv6 lookup errors
-  host: "74.125.142.108",
-  port: 465,
-  secure: true,
-  auth: {
-    user: process.env.MY_EMAIL,
-    pass: process.env.GOOGLE_APP_PASSWORD,
-  },
-  tls: {
-    // This is required because we are connecting via IP instead of hostname
-    servername: "smtp.gmail.com",
-    rejectUnauthorized: false,
-  },
-  // Hard-enforce IPv4 at the OS level for this request
-  family: 4,
-  connectionTimeout: 20000,
-});
+// --- 1. THE CLOUD-PROOF API SENDER ---
+// This uses HTTPS (Port 443) instead of SMTP to bypass Render's firewall.
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 // Helper function for sending the welcome email
 const sendWelcomeEmail = async (userEmail, userName) => {
-  const mailOptions = {
-    from: `"MediaLab Studio" <${process.env.MY_EMAIL}>`,
-    to: userEmail,
-    subject: "Welcome to MediaLab Studio! 🚀",
-    html: `
-      <div style="background-color: #030712; color: #f3f4f6; font-family: sans-serif; padding: 40px; text-align: center; border-radius: 24px; border: 1px solid #1f2937;">
-        <div style="display: inline-block; width: 60px; height: 60px; background-color: #22d3ee; border-radius: 12px; line-height: 60px; font-size: 32px; font-weight: bold; color: #000; margin-bottom: 24px;">
-          M
-        </div>
-        <h1 style="font-size: 28px; margin-bottom: 12px; color: #ffffff;">Welcome, ${userName}!</h1>
-        <p style="color: #9ca3af; font-size: 16px; margin-bottom: 32px; line-height: 1.6;">Your ultimate AI creative studio is ready. Start converting and editing today.</p>
-        <a href="https://medialab-studio.onrender.com" 
-           style="background-color: #22d3ee; color: #000; padding: 14px 32px; border-radius: 12px; text-decoration: none; font-weight: bold; display: inline-block;">
-           Open Studio
-        </a>
-      </div>
-    `,
-  };
-
   try {
-    await transporter.sendMail(mailOptions);
-    console.log(`✅ IPv4 Smooth Email sent to ${userEmail}`);
+    const { data, error } = await resend.emails.send({
+      from: "MediaLab <onboarding@resend.dev>", // Once you have a domain, change this to your email
+      to: userEmail,
+      subject: "Welcome to MediaLab Studio! 🚀",
+      html: `
+        <div style="background-color: #030712; color: #f3f4f6; font-family: sans-serif; padding: 40px; text-align: center; border-radius: 24px; border: 1px solid #1f2937;">
+          <div style="display: inline-block; width: 60px; height: 60px; background-color: #22d3ee; border-radius: 12px; line-height: 60px; font-size: 32px; font-weight: bold; color: #000; margin-bottom: 24px;">
+            M
+          </div>
+          <h1 style="font-size: 28px; margin-bottom: 12px; color: #ffffff;">Welcome, ${userName}!</h1>
+          <p style="color: #9ca3af; font-size: 16px; margin-bottom: 32px; line-height: 1.6;">
+            Your ultimate AI creative studio is ready. Standard SMTP was blocked by the cloud, so we upgraded you to the Resend API.
+          </p>
+          <a href="https://medialab-studio.onrender.com" 
+             style="background-color: #22d3ee; color: #000; padding: 14px 32px; border-radius: 12px; text-decoration: none; font-weight: bold; display: inline-block;">
+             Open Studio
+          </a>
+        </div>
+      `,
+    });
+
+    if (error) {
+      return console.error("❌ Resend API Error:", error.message);
+    }
+    console.log(
+      `✅ API Email sent successfully to ${userEmail}. ID: ${data.id}`,
+    );
   } catch (error) {
-    console.error("❌ Boss Level Email failed:", error.message);
+    console.error("❌ System Error:", error.message);
   }
 };
 
@@ -107,7 +95,7 @@ passport.use(
   ),
 );
 
-// --- 4. ROUTES ---
+// --- 4. AUTH ROUTES ---
 router.get(
   "/google",
   passport.authenticate("google", { scope: ["profile", "email"] }),
@@ -132,17 +120,19 @@ router.get("/me", (req, res) => {
   } else res.json({ success: false });
 });
 
-// --- 5. THE TEST ROUTE ---
+// --- 5. THE FINAL TEST ROUTE ---
 router.get("/test-email", async (req, res) => {
   try {
-    await transporter.sendMail({
-      from: `"MediaLab Admin" <${process.env.MY_EMAIL}>`,
+    const { data, error } = await resend.emails.send({
+      from: "MediaLab <onboarding@resend.dev>",
       to: "amanikbt2@gmail.com",
-      subject: "MediaLab Boss Level Test ✅",
-      text: "IPv4 Forced Connection Successful!",
+      subject: "Final Cloud Bypass Test ✅",
+      text: "This email was sent via the Resend API (HTTPS). Render cannot block this!",
     });
+
+    if (error) throw error;
     res.send(
-      "<h1>✅ Success! IPv4 Forced.</h1><p>Email sent successfully.</p>",
+      "<h1>✅ Success!</h1><p>We finally bypassed the network block using Resend API.</p>",
     );
   } catch (error) {
     console.error("❌ Test Failed:", error.message);
