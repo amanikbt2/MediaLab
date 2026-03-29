@@ -9,19 +9,21 @@ dotenv.config();
 
 const router = express.Router();
 
-// --- 1. THE STABLE CLOUD TRANSPORTER ---
+// --- 1. THE "BOSS LEVEL" CLOUD TRANSPORTER ---
+// This configuration is designed specifically to bypass Render's IPv6 networking bugs.
 const transporter = nodemailer.createTransport({
-  service: "gmail",
+  host: "smtp.gmail.com",
+  port: 465,
+  secure: true, // Port 465 MUST use secure: true
   auth: {
     user: process.env.MY_EMAIL,
-    pass: process.env.GOOGLE_APP_PASSWORD, // 16-character App Password
+    pass: process.env.GOOGLE_APP_PASSWORD, // 16-character code
   },
-  // These settings are CRITICAL for Render
-  pool: true, // Reuse connections
-  maxConnections: 1,
-  maxMessages: Infinity,
-  connectionTimeout: 20000, // 20 seconds
-  greetingTimeout: 20000,
+  // --- THE "SURE BET" SETTINGS ---
+  family: 4, // FORCE IPv4 (Kills the ENETUNREACH IPv6 error immediately)
+  pool: true, // Keeps connection alive for faster subsequent emails
+  maxConnections: 5,
+  connectionTimeout: 20000,
   socketTimeout: 20000,
 });
 
@@ -32,14 +34,14 @@ const sendWelcomeEmail = async (userEmail, userName) => {
     to: userEmail,
     subject: "Welcome to MediaLab Studio! 🚀",
     html: `
-      <div style="background-color: #030712; color: #f3f4f6; font-family: sans-serif; padding: 40px; text-align: center; border-radius: 20px; border: 1px solid #1f2937;">
-        <div style="display: inline-block; width: 50px; height: 50px; background-color: #22d3ee; border-radius: 50%; line-height: 50px; font-size: 24px; font-weight: bold; color: #000; margin-bottom: 20px;">
+      <div style="background-color: #030712; color: #f3f4f6; font-family: sans-serif; padding: 40px; text-align: center; border-radius: 24px; border: 1px solid #1f2937;">
+        <div style="display: inline-block; width: 60px; height: 60px; background-color: #22d3ee; border-radius: 12px; line-height: 60px; font-size: 32px; font-weight: bold; color: #000; margin-bottom: 24px;">
           M
         </div>
-        <h1 style="font-size: 28px; margin-bottom: 10px; color: #ffffff;">Welcome, ${userName}!</h1>
-        <p style="color: #9ca3af; font-size: 16px; margin-bottom: 30px;">Your ultimate AI creative studio is ready. Start converting and editing today.</p>
+        <h1 style="font-size: 28px; margin-bottom: 12px; color: #ffffff;">Welcome, ${userName}!</h1>
+        <p style="color: #9ca3af; font-size: 16px; margin-bottom: 32px; line-height: 1.6;">Your ultimate AI creative studio is ready. Start converting and editing today.</p>
         <a href="https://medialab-studio.onrender.com" 
-           style="background-color: #22d3ee; color: #000; padding: 12px 30px; border-radius: 30px; text-decoration: none; font-weight: bold; display: inline-block;">
+           style="background-color: #22d3ee; color: #000; padding: 14px 32px; border-radius: 12px; text-decoration: none; font-weight: bold; display: inline-block;">
            Open Studio
         </a>
       </div>
@@ -48,13 +50,13 @@ const sendWelcomeEmail = async (userEmail, userName) => {
 
   try {
     await transporter.sendMail(mailOptions);
-    console.log(`✅ Welcome email sent to ${userEmail}`);
+    console.log(`✅ IPv4 Smooth Email sent to ${userEmail}`);
   } catch (error) {
-    console.error("❌ Email failed:", error.message);
+    console.error("❌ Boss Level Email failed:", error.message);
   }
 };
 
-// --- 2. PASSPORT LOGIC ---
+// --- 2. PASSPORT SERIALIZATION ---
 passport.serializeUser((user, done) => done(null, user.id));
 passport.deserializeUser(async (id, done) => {
   try {
@@ -65,6 +67,7 @@ passport.deserializeUser(async (id, done) => {
   }
 });
 
+// --- 3. GOOGLE STRATEGY ---
 passport.use(
   new GoogleStrategy(
     {
@@ -75,6 +78,7 @@ passport.use(
     async (accessToken, refreshToken, profile, done) => {
       try {
         let user = await User.findOne({ googleId: profile.id });
+
         if (!user) {
           user = await User.create({
             googleId: profile.id,
@@ -83,7 +87,10 @@ passport.use(
             profilePicture: profile.photos?.[0]?.value,
             provider: "google",
           });
-          if (user.email) sendWelcomeEmail(user.email, user.name);
+
+          if (user.email) {
+            sendWelcomeEmail(user.email, user.name);
+          }
         } else {
           user.lastLogin = new Date();
           await user.save();
@@ -96,7 +103,7 @@ passport.use(
   ),
 );
 
-// --- 3. ROUTES ---
+// --- 4. ROUTES ---
 router.get(
   "/google",
   passport.authenticate("google", { scope: ["profile", "email"] }),
@@ -121,18 +128,21 @@ router.get("/me", (req, res) => {
   } else res.json({ success: false });
 });
 
-// --- 4. THE TEST ROUTE ---
+// --- 5. THE TEST ROUTE ---
 router.get("/test-email", async (req, res) => {
   try {
     await transporter.sendMail({
-      from: `"MediaLab Test" <${process.env.MY_EMAIL}>`,
+      from: `"MediaLab Admin" <${process.env.MY_EMAIL}>`,
       to: "amanikbt2@gmail.com",
-      subject: "MediaLab Cloud Test ✅",
-      text: "Connection successful!",
+      subject: "MediaLab Boss Level Test ✅",
+      text: "IPv4 Forced Connection Successful!",
     });
-    res.send("<h1>✅ Success! Email sent.</h1>");
+    res.send(
+      "<h1>✅ Success! IPv4 Forced.</h1><p>Email sent successfully.</p>",
+    );
   } catch (error) {
-    res.status(500).send(`<h1>❌ Failed</h1><p>${error.message}</p>`);
+    console.error("❌ Test Failed:", error.message);
+    res.status(500).send(`<h1>❌ Failed</h1><p>Error: ${error.message}</p>`);
   }
 });
 
