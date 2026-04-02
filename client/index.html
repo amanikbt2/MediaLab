@@ -1475,7 +1475,7 @@
                         Google AdSense
                       </div>
                       <div class="text-xs text-amber-100/80 mt-1">
-                        Open AdSense. Monetize your work.
+                        Open AdSense to Monetize your work.
                       </div>
                     </div>
                   </div>
@@ -1543,7 +1543,8 @@
           onclick="handlePremiumPlanAction()"
           class="flex items-center gap-x-4 px-6 py-3 hover:bg-gray-800 cursor-pointer"
         >
-          <i id="premium-plan-icon" class="fas fa-crown text-cyan-300"></i><span id="premium-plan-label">Upgrade Plan</span>
+          <i id="premium-plan-icon" class="fas fa-crown text-cyan-300"></i
+          ><span id="premium-plan-label">Upgrade Plan</span>
         </a>
         <a
           onclick="switchAccount()"
@@ -1597,90 +1598,88 @@
       id="studio"
       class="hidden h-screen bg-gray-950 flex flex-col overflow-hidden"
     >
-      <div
-        class="studio-tool-ribbon lg:hidden px-4 py-3 shrink-0"
-      >
+      <div class="studio-tool-ribbon lg:hidden px-4 py-3 shrink-0">
         <div class="studio-tool-ribbon-track no-scrollbar">
-        <div
-          data-tool-switch="web-builder"
-          onclick="switchTool('web-builder')"
-          class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-cyan-500/10 border border-cyan-500/20 px-5 py-2.5 rounded-3xl cursor-pointer"
-        >
-          <i class="fas fa-drafting-compass text-cyan-400"></i>
-          <span class="font-medium text-sm text-gray-200">Web Builder</span>
-          <span
-            class="text-[7px] font-black bg-cyan-500 text-gray-950 px-1.5 py-0.5 rounded ml-1 uppercase"
-            >New</span
+          <div
+            data-tool-switch="web-builder"
+            onclick="switchTool('web-builder')"
+            class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-cyan-500/10 border border-cyan-500/20 px-5 py-2.5 rounded-3xl cursor-pointer"
           >
-        </div>
-        <div
-          data-tool-switch="image-pdf"
-          onclick="switchTool('image-pdf')"
-          class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 px-5 py-2.5 rounded-3xl cursor-pointer"
-        >
-          <i class="fas fa-image text-cyan-400"></i>
-          <span class="font-medium text-sm text-gray-200">Image → PDF</span>
-        </div>
-        <div
-          data-tool-switch="text-doc"
-          onclick="switchTool('text-doc')"
-          class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 px-5 py-2.5 rounded-3xl cursor-pointer"
-        >
-          <i class="fas fa-file-alt text-cyan-400"></i>
-          <span class="font-medium text-sm text-gray-200">Text → Word</span>
-        </div>
-        <div
-          data-tool-switch="video-audio"
-          onclick="switchTool('video-audio')"
-          class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 px-5 py-2.5 rounded-3xl cursor-pointer"
-        >
-          <i class="fas fa-video text-cyan-400"></i>
-          <span class="font-medium text-sm text-gray-200">Video → Audio</span>
-        </div>
-        <div
-          data-tool-switch="text-to-speech"
-          onclick="switchTool('text-to-speech')"
-          class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800/50 border border-amber-500/10 px-5 py-2.5 rounded-3xl cursor-pointer hover:border-amber-500/40 transition-all relative"
-        >
-          <i class="fas fa-volume-up text-amber-500 text-sm"></i>
-          <span class="font-medium text-sm text-gray-200">Text → Speech</span>
-          <span
-            class="text-[6px] font-black bg-amber-500/20 text-amber-500 border border-amber-500/30 px-1.5 py-0.5 rounded-md uppercase tracking-tighter"
-            >Pro</span
+            <i class="fas fa-drafting-compass text-cyan-400"></i>
+            <span class="font-medium text-sm text-gray-200">Web Builder</span>
+            <span
+              class="text-[7px] font-black bg-cyan-500 text-gray-950 px-1.5 py-0.5 rounded ml-1 uppercase"
+              >New</span
+            >
+          </div>
+          <div
+            data-tool-switch="image-pdf"
+            onclick="switchTool('image-pdf')"
+            class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 px-5 py-2.5 rounded-3xl cursor-pointer"
           >
-        </div>
-        <div
-          data-tool-switch="voice-clone"
-          onclick="switchTool('voice-clone')"
-          class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800/50 border border-amber-500/10 px-5 py-2.5 rounded-3xl cursor-pointer hover:border-amber-500/40 transition-all relative"
-        >
-          <i class="fas fa-microphone-alt text-amber-500 text-sm"></i>
-          <span class="font-medium text-sm text-gray-200">Voice Clone</span>
-          <span
-            class="text-[6px] font-black bg-amber-500/20 text-amber-500 border border-amber-500/30 px-1.5 py-0.5 rounded-md uppercase tracking-tighter"
-            >Pro</span
+            <i class="fas fa-image text-cyan-400"></i>
+            <span class="font-medium text-sm text-gray-200">Image → PDF</span>
+          </div>
+          <div
+            data-tool-switch="text-doc"
+            onclick="switchTool('text-doc')"
+            class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 px-5 py-2.5 rounded-3xl cursor-pointer"
           >
-        </div>
-        <div
-          data-tool-switch="image-edit"
-          onclick="switchTool('image-edit')"
-          class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800/50 border border-amber-500/10 px-5 py-2.5 rounded-3xl cursor-pointer hover:border-amber-500/40 transition-all relative"
-        >
-          <i class="fas fa-magic text-amber-500 text-sm"></i>
-          <span class="font-medium text-sm text-gray-200">AI Editor</span>
-          <span
-            class="text-[6px] font-black bg-amber-500/20 text-amber-500 border border-amber-500/30 px-1.5 py-0.5 rounded-md uppercase tracking-tighter"
-            >Pro</span
+            <i class="fas fa-file-alt text-cyan-400"></i>
+            <span class="font-medium text-sm text-gray-200">Text → Word</span>
+          </div>
+          <div
+            data-tool-switch="video-audio"
+            onclick="switchTool('video-audio')"
+            class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 px-5 py-2.5 rounded-3xl cursor-pointer"
           >
-        </div>
-        <div
-          data-tool-switch="history"
-          onclick="switchTool('history')"
-          class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 px-5 py-2.5 rounded-3xl cursor-pointer"
-        >
-          <i class="fas fa-history text-gray-400"></i>
-          <span class="font-medium text-sm text-gray-200">History</span>
-        </div>
+            <i class="fas fa-video text-cyan-400"></i>
+            <span class="font-medium text-sm text-gray-200">Video → Audio</span>
+          </div>
+          <div
+            data-tool-switch="text-to-speech"
+            onclick="switchTool('text-to-speech')"
+            class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800/50 border border-amber-500/10 px-5 py-2.5 rounded-3xl cursor-pointer hover:border-amber-500/40 transition-all relative"
+          >
+            <i class="fas fa-volume-up text-amber-500 text-sm"></i>
+            <span class="font-medium text-sm text-gray-200">Text → Speech</span>
+            <span
+              class="text-[6px] font-black bg-amber-500/20 text-amber-500 border border-amber-500/30 px-1.5 py-0.5 rounded-md uppercase tracking-tighter"
+              >Pro</span
+            >
+          </div>
+          <div
+            data-tool-switch="voice-clone"
+            onclick="switchTool('voice-clone')"
+            class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800/50 border border-amber-500/10 px-5 py-2.5 rounded-3xl cursor-pointer hover:border-amber-500/40 transition-all relative"
+          >
+            <i class="fas fa-microphone-alt text-amber-500 text-sm"></i>
+            <span class="font-medium text-sm text-gray-200">Voice Clone</span>
+            <span
+              class="text-[6px] font-black bg-amber-500/20 text-amber-500 border border-amber-500/30 px-1.5 py-0.5 rounded-md uppercase tracking-tighter"
+              >Pro</span
+            >
+          </div>
+          <div
+            data-tool-switch="image-edit"
+            onclick="switchTool('image-edit')"
+            class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800/50 border border-amber-500/10 px-5 py-2.5 rounded-3xl cursor-pointer hover:border-amber-500/40 transition-all relative"
+          >
+            <i class="fas fa-magic text-amber-500 text-sm"></i>
+            <span class="font-medium text-sm text-gray-200">AI Editor</span>
+            <span
+              class="text-[6px] font-black bg-amber-500/20 text-amber-500 border border-amber-500/30 px-1.5 py-0.5 rounded-md uppercase tracking-tighter"
+              >Pro</span
+            >
+          </div>
+          <div
+            data-tool-switch="history"
+            onclick="switchTool('history')"
+            class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 px-5 py-2.5 rounded-3xl cursor-pointer"
+          >
+            <i class="fas fa-history text-gray-400"></i>
+            <span class="font-medium text-sm text-gray-200">History</span>
+          </div>
         </div>
       </div>
       <div class="flex flex-1 overflow-hidden">
@@ -1841,29 +1840,83 @@
         <div class="flex-1 flex flex-col bg-gray-950 relative overflow-hidden">
           <div class="studio-tool-ribbon hidden lg:block px-4 sm:px-8 py-3">
             <div class="studio-tool-ribbon-track no-scrollbar">
-              <button data-tool-switch="web-builder" onclick="switchTool('web-builder')" class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 border border-white/5 px-5 py-2.5 rounded-3xl cursor-pointer">
-                <i class="fas fa-drafting-compass text-cyan-400"></i><span class="font-medium text-sm text-gray-200">Web Builder</span>
+              <button
+                data-tool-switch="web-builder"
+                onclick="switchTool('web-builder')"
+                class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 border border-white/5 px-5 py-2.5 rounded-3xl cursor-pointer"
+              >
+                <i class="fas fa-drafting-compass text-cyan-400"></i
+                ><span class="font-medium text-sm text-gray-200"
+                  >Web Builder</span
+                >
               </button>
-              <button data-tool-switch="image-pdf" onclick="switchTool('image-pdf')" class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 border border-white/5 px-5 py-2.5 rounded-3xl cursor-pointer">
-                <i class="fas fa-image text-cyan-400"></i><span class="font-medium text-sm text-gray-200">Image to PDF</span>
+              <button
+                data-tool-switch="image-pdf"
+                onclick="switchTool('image-pdf')"
+                class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 border border-white/5 px-5 py-2.5 rounded-3xl cursor-pointer"
+              >
+                <i class="fas fa-image text-cyan-400"></i
+                ><span class="font-medium text-sm text-gray-200"
+                  >Image to PDF</span
+                >
               </button>
-              <button data-tool-switch="text-doc" onclick="switchTool('text-doc')" class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 border border-white/5 px-5 py-2.5 rounded-3xl cursor-pointer">
-                <i class="fas fa-file-word text-cyan-400"></i><span class="font-medium text-sm text-gray-200">Word Processor</span>
+              <button
+                data-tool-switch="text-doc"
+                onclick="switchTool('text-doc')"
+                class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 border border-white/5 px-5 py-2.5 rounded-3xl cursor-pointer"
+              >
+                <i class="fas fa-file-word text-cyan-400"></i
+                ><span class="font-medium text-sm text-gray-200"
+                  >Word Processor</span
+                >
               </button>
-              <button data-tool-switch="video-audio" onclick="switchTool('video-audio')" class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 border border-white/5 px-5 py-2.5 rounded-3xl cursor-pointer">
-                <i class="fas fa-video text-cyan-400"></i><span class="font-medium text-sm text-gray-200">Video to Audio</span>
+              <button
+                data-tool-switch="video-audio"
+                onclick="switchTool('video-audio')"
+                class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 border border-white/5 px-5 py-2.5 rounded-3xl cursor-pointer"
+              >
+                <i class="fas fa-video text-cyan-400"></i
+                ><span class="font-medium text-sm text-gray-200"
+                  >Video to Audio</span
+                >
               </button>
-              <button data-tool-switch="text-to-speech" onclick="switchTool('text-to-speech')" class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 border border-amber-500/10 px-5 py-2.5 rounded-3xl cursor-pointer">
-                <i class="fas fa-volume-up text-amber-500 text-sm"></i><span class="font-medium text-sm text-gray-200">Text to Speech</span>
+              <button
+                data-tool-switch="text-to-speech"
+                onclick="switchTool('text-to-speech')"
+                class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 border border-amber-500/10 px-5 py-2.5 rounded-3xl cursor-pointer"
+              >
+                <i class="fas fa-volume-up text-amber-500 text-sm"></i
+                ><span class="font-medium text-sm text-gray-200"
+                  >Text to Speech</span
+                >
               </button>
-              <button data-tool-switch="voice-clone" onclick="switchTool('voice-clone')" class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 border border-amber-500/10 px-5 py-2.5 rounded-3xl cursor-pointer">
-                <i class="fas fa-microphone-alt text-amber-500 text-sm"></i><span class="font-medium text-sm text-gray-200">Voice Clone</span>
+              <button
+                data-tool-switch="voice-clone"
+                onclick="switchTool('voice-clone')"
+                class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 border border-amber-500/10 px-5 py-2.5 rounded-3xl cursor-pointer"
+              >
+                <i class="fas fa-microphone-alt text-amber-500 text-sm"></i
+                ><span class="font-medium text-sm text-gray-200"
+                  >Voice Clone</span
+                >
               </button>
-              <button data-tool-switch="image-edit" onclick="switchTool('image-edit')" class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 border border-amber-500/10 px-5 py-2.5 rounded-3xl cursor-pointer">
-                <i class="fas fa-magic text-amber-500 text-sm"></i><span class="font-medium text-sm text-gray-200">AI Editor</span>
+              <button
+                data-tool-switch="image-edit"
+                onclick="switchTool('image-edit')"
+                class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 border border-amber-500/10 px-5 py-2.5 rounded-3xl cursor-pointer"
+              >
+                <i class="fas fa-magic text-amber-500 text-sm"></i
+                ><span class="font-medium text-sm text-gray-200"
+                  >AI Editor</span
+                >
               </button>
-              <button data-tool-switch="history" onclick="switchTool('history')" class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 border border-white/5 px-5 py-2.5 rounded-3xl cursor-pointer">
-                <i class="fas fa-history text-gray-400"></i><span class="font-medium text-sm text-gray-200">History</span>
+              <button
+                data-tool-switch="history"
+                onclick="switchTool('history')"
+                class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 border border-white/5 px-5 py-2.5 rounded-3xl cursor-pointer"
+              >
+                <i class="fas fa-history text-gray-400"></i
+                ><span class="font-medium text-sm text-gray-200">History</span>
               </button>
             </div>
           </div>
@@ -2494,17 +2547,17 @@
       function hasPremiumAccess() {
         return Boolean(
           loggedIn &&
-            (currentUser?.isPro ||
-              String(currentPremiumRequest?.status || "").toLowerCase() ===
-                "granted"),
+          (currentUser?.isPro ||
+            String(currentPremiumRequest?.status || "").toLowerCase() ===
+              "granted"),
         );
       }
       function hasPendingPremiumRequest() {
         return Boolean(
           currentPremiumRequest &&
-            ["pending", "reviewing", "received"].includes(
-              String(currentPremiumRequest.status || "").toLowerCase(),
-            ),
+          ["pending", "reviewing", "received"].includes(
+            String(currentPremiumRequest.status || "").toLowerCase(),
+          ),
         );
       }
       function hasDeniedPremiumRequest() {
@@ -2561,7 +2614,7 @@
                 <span>Request Review</span>
                 <i class="fas fa-arrow-right"></i>
               </button>`
-          : `<button onclick="${loggedIn ? "upgradePlan()" : "showLogin()"}" class="feature-gate-button feature-gate-button--premium relative hover:scale-[1.03] transition-all">
+            : `<button onclick="${loggedIn ? "upgradePlan()" : "showLogin()"}" class="feature-gate-button feature-gate-button--premium relative hover:scale-[1.03] transition-all">
                 <span>${loggedIn ? "Request Premium" : "Sign in to Unlock"}</span>
                 <i class="fas fa-arrow-right"></i>
               </button>`;
@@ -2609,7 +2662,7 @@
             </div>
           </div>`;
       }
-      function goToStudio(defaultTool = "image-pdf") {
+      function goToStudio(defaultTool = "web-builder") {
         document.getElementById("landing").classList.add("hidden");
         document.getElementById("studio").classList.remove("hidden");
         logUsageActivity(
@@ -2890,11 +2943,17 @@
           "https://via.placeholder.com/32/22d3ee/ffffff?text=U";
         if (profilePic) {
           profilePic.src = picSrc;
-          profilePic.classList.toggle("pro-avatar-ring", Boolean(currentUser.isPro));
+          profilePic.classList.toggle(
+            "pro-avatar-ring",
+            Boolean(currentUser.isPro),
+          );
         }
         if (dropdownPic) {
           dropdownPic.src = picSrc;
-          dropdownPic.classList.toggle("pro-avatar-ring", Boolean(currentUser.isPro));
+          dropdownPic.classList.toggle(
+            "pro-avatar-ring",
+            Boolean(currentUser.isPro),
+          );
         }
         if (username) username.textContent = currentUser.name || "User";
         if (dropdownName) dropdownName.textContent = currentUser.name || "User";
@@ -2929,7 +2988,9 @@
           });
           const data = await res.json();
           if (!res.ok || !data.success) {
-            throw new Error(data.message || "Could not cancel premium right now.");
+            throw new Error(
+              data.message || "Could not cancel premium right now.",
+            );
           }
           currentUser.isPro = false;
           currentPremiumRequest = {
@@ -2937,7 +2998,10 @@
             status: "closed",
           };
           updateUserProfileUi();
-          if (currentStudioToolId && PREMIUM_TOOL_IDS.includes(currentStudioToolId)) {
+          if (
+            currentStudioToolId &&
+            PREMIUM_TOOL_IDS.includes(currentStudioToolId)
+          ) {
             switchTool(currentStudioToolId);
           }
         } catch (error) {
@@ -3019,7 +3083,9 @@
           prefill?.name ?? document.getElementById("upgrade-name")?.value ?? "",
         ).trim();
         const email = String(
-          prefill?.email ?? document.getElementById("upgrade-email")?.value ?? "",
+          prefill?.email ??
+            document.getElementById("upgrade-email")?.value ??
+            "",
         ).trim();
         const message = String(
           prefill?.message ??
@@ -5859,7 +5925,8 @@
             profileMenu.classList.add("hidden");
           } else if (
             !profileMenu.classList.contains("hidden") &&
-            (profileMenu.contains(event.target) || userSection.contains(event.target))
+            (profileMenu.contains(event.target) ||
+              userSection.contains(event.target))
           ) {
             queueProfileMenuAutoHide();
           }
@@ -5872,7 +5939,8 @@
           profileMenu &&
           userSection &&
           !profileMenu.classList.contains("hidden") &&
-          (profileMenu.contains(event.target) || userSection.contains(event.target))
+          (profileMenu.contains(event.target) ||
+            userSection.contains(event.target))
         ) {
           queueProfileMenuAutoHide();
         }
@@ -8467,11 +8535,14 @@
           const nextLayer = siblingLayers.find((value) => value > maxLayer);
           delta = nextLayer ? nextLayer - maxLayer : 1;
         } else {
-          const previousLayers = siblingLayers.filter((value) => value < minLayer);
+          const previousLayers = siblingLayers.filter(
+            (value) => value < minLayer,
+          );
           const previousLayer = previousLayers.length
             ? previousLayers[previousLayers.length - 1]
             : null;
-          delta = previousLayer !== null ? previousLayer - minLayer : 1 - minLayer;
+          delta =
+            previousLayer !== null ? previousLayer - minLayer : 1 - minLayer;
         }
         if (delta === 0) return;
         targets.forEach((el) => {
@@ -9581,4 +9652,3 @@ ${payload.body || "  "}
     </script>
   </body>
 </html>
-
