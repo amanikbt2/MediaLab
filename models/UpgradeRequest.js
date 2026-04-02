@@ -9,9 +9,19 @@ const UpgradeRequestSchema = new mongoose.Schema({
   message: { type: String, default: "", trim: true },
   status: {
     type: String,
-    enum: ["received", "reviewing", "contacted", "closed"],
-    default: "received",
+    enum: [
+      "pending",
+      "reviewing",
+      "granted",
+      "dismissed",
+      "received",
+      "contacted",
+      "closed",
+    ],
+    default: "pending",
   },
+  reviewedAt: { type: Date, default: null },
+  reviewedBy: { type: String, default: "", trim: true },
   createdAt: { type: Date, default: Date.now },
 });
 

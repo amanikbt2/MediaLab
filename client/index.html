@@ -64,6 +64,30 @@
         background-color: #27272a;
         transform: scale(1.05);
       }
+      .studio-tool-ribbon {
+        position: sticky;
+        top: 0;
+        z-index: 45;
+        background: rgba(3, 7, 18, 0.96);
+        backdrop-filter: blur(20px);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+      }
+      .studio-tool-ribbon-track {
+        display: flex;
+        gap: 0.75rem;
+        overflow-x: auto;
+        white-space: nowrap;
+        scrollbar-width: none;
+      }
+      .studio-tool-ribbon-track::-webkit-scrollbar {
+        display: none;
+      }
+      .toolbar-item.active {
+        background: rgba(34, 211, 238, 0.14);
+        border-color: rgba(34, 211, 238, 0.25);
+        color: #ecfeff;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      }
       @keyframes fadeIn {
         from {
           opacity: 0;
@@ -959,6 +983,34 @@
           ),
           rgba(15, 23, 42, 0.72);
       }
+      .feature-gate-lockline {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        margin: 0 auto 1.2rem;
+        color: #fbbf24;
+        font-size: 11px;
+        font-weight: 900;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+      }
+      .feature-gate-status {
+        max-width: 28rem;
+        margin: 0 auto 1.5rem;
+        padding: 0.95rem 1rem;
+        border-radius: 1rem;
+        border: 1px solid rgba(250, 204, 21, 0.18);
+        background: rgba(250, 204, 21, 0.08);
+        color: #fde68a;
+        font-size: 0.9rem;
+        line-height: 1.6;
+      }
+      .feature-gate-status--pending {
+        border-color: rgba(34, 197, 94, 0.15);
+        background: rgba(34, 197, 94, 0.08);
+        color: #bbf7d0;
+      }
       .feature-gate-badge {
         display: inline-flex;
         align-items: center;
@@ -1367,28 +1419,62 @@
         class="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between"
       >
         <div class="flex items-center gap-x-3">
-          <div
-            class="w-9 h-9 bg-cyan-500 rounded-3xl flex items-center justify-center text-2xl font-bold"
-          >
-            M
+          <div class="w-9 h-9 rounded-3xl overflow-hidden">
+            <img
+              src="/favicon.png"
+              alt="logo"
+              class="w-full h-full object-contain"
+            />
           </div>
           <span class="text-2xl sm:text-3xl font-semibold tracking-tighter"
             >MediaLab</span
           >
         </div>
         <div class="flex items-center gap-x-6">
-          <div class="relative group">
+          <div id="more-features-shell" class="relative">
             <button
-              onclick="toggleMore()"
+              id="more-features-toggle"
+              onclick="toggleMore(event)"
               class="flex items-center gap-x-2 text-gray-400 hover:text-white text-sm sm:text-base"
             >
-              More Features <i class="fas fa-chevron-down text-xs"></i>
+              Monetize your work<i class="fas fa-chevron-down text-xs"></i>
             </button>
             <div
               id="more-dropdown"
-              class="hidden group-hover:block absolute right-0 mt-3 w-72 bg-gray-900 border border-gray-700 rounded-3xl p-5 shadow-2xl text-sm"
+              class="hidden absolute right-0 mt-3 w-80 bg-gray-900 border border-gray-700 rounded-3xl p-5 shadow-2xl text-sm"
             >
-              Login to unlock unlimited conversions and advanced tools.
+              <div class="space-y-4">
+                <div>
+                  <p class="text-sm text-gray-400 mt-2">
+                    Open monetization resources in one place.
+                  </p>
+                </div>
+                <a
+                  href="https://www.google.com/adsense/start/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="flex items-center justify-between gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-4 hover:bg-amber-500/15 transition-all"
+                >
+                  <div class="flex items-center gap-3 min-w-0">
+                    <div
+                      class="w-11 h-11 rounded-2xl bg-white/10 border border-white/10 flex items-center justify-center shrink-0"
+                    >
+                      <i class="fab fa-google text-amber-300 text-lg"></i>
+                    </div>
+                    <div class="min-w-0">
+                      <div class="text-sm font-bold text-white">
+                        Google AdSense
+                      </div>
+                      <div class="text-xs text-amber-100/80 mt-1">
+                        Open AdSense. Monetize your work.
+                      </div>
+                    </div>
+                  </div>
+                  <i
+                    class="fas fa-arrow-up-right-from-square text-amber-300 text-sm shrink-0"
+                  ></i>
+                </a>
+              </div>
             </div>
           </div>
           <button
@@ -1503,9 +1589,11 @@
       class="hidden h-screen bg-gray-950 flex flex-col overflow-hidden"
     >
       <div
-        class="lg:hidden bg-gray-900 border-b border-gray-800 px-4 py-4 overflow-x-auto whitespace-nowrap flex gap-3 no-scrollbar shrink-0 sticky top-0 z-50"
+        class="studio-tool-ribbon lg:hidden px-4 py-3 shrink-0"
       >
+        <div class="studio-tool-ribbon-track no-scrollbar">
         <div
+          data-tool-switch="web-builder"
           onclick="switchTool('web-builder')"
           class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-cyan-500/10 border border-cyan-500/20 px-5 py-2.5 rounded-3xl cursor-pointer"
         >
@@ -1517,6 +1605,7 @@
           >
         </div>
         <div
+          data-tool-switch="image-pdf"
           onclick="switchTool('image-pdf')"
           class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 px-5 py-2.5 rounded-3xl cursor-pointer"
         >
@@ -1524,6 +1613,7 @@
           <span class="font-medium text-sm text-gray-200">Image → PDF</span>
         </div>
         <div
+          data-tool-switch="text-doc"
           onclick="switchTool('text-doc')"
           class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 px-5 py-2.5 rounded-3xl cursor-pointer"
         >
@@ -1531,6 +1621,7 @@
           <span class="font-medium text-sm text-gray-200">Text → Word</span>
         </div>
         <div
+          data-tool-switch="video-audio"
           onclick="switchTool('video-audio')"
           class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 px-5 py-2.5 rounded-3xl cursor-pointer"
         >
@@ -1538,6 +1629,7 @@
           <span class="font-medium text-sm text-gray-200">Video → Audio</span>
         </div>
         <div
+          data-tool-switch="text-to-speech"
           onclick="switchTool('text-to-speech')"
           class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800/50 border border-amber-500/10 px-5 py-2.5 rounded-3xl cursor-pointer hover:border-amber-500/40 transition-all relative"
         >
@@ -1549,6 +1641,7 @@
           >
         </div>
         <div
+          data-tool-switch="voice-clone"
           onclick="switchTool('voice-clone')"
           class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800/50 border border-amber-500/10 px-5 py-2.5 rounded-3xl cursor-pointer hover:border-amber-500/40 transition-all relative"
         >
@@ -1560,6 +1653,7 @@
           >
         </div>
         <div
+          data-tool-switch="image-edit"
           onclick="switchTool('image-edit')"
           class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800/50 border border-amber-500/10 px-5 py-2.5 rounded-3xl cursor-pointer hover:border-amber-500/40 transition-all relative"
         >
@@ -1571,11 +1665,13 @@
           >
         </div>
         <div
+          data-tool-switch="history"
           onclick="switchTool('history')"
           class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 px-5 py-2.5 rounded-3xl cursor-pointer"
         >
           <i class="fas fa-history text-gray-400"></i>
           <span class="font-medium text-sm text-gray-200">History</span>
+        </div>
         </div>
       </div>
       <div class="flex flex-1 overflow-hidden">
@@ -1734,6 +1830,34 @@
           </div>
         </div>
         <div class="flex-1 flex flex-col bg-gray-950 relative overflow-hidden">
+          <div class="studio-tool-ribbon hidden lg:block px-4 sm:px-8 py-3">
+            <div class="studio-tool-ribbon-track no-scrollbar">
+              <button data-tool-switch="web-builder" onclick="switchTool('web-builder')" class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 border border-white/5 px-5 py-2.5 rounded-3xl cursor-pointer">
+                <i class="fas fa-drafting-compass text-cyan-400"></i><span class="font-medium text-sm text-gray-200">Web Builder</span>
+              </button>
+              <button data-tool-switch="image-pdf" onclick="switchTool('image-pdf')" class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 border border-white/5 px-5 py-2.5 rounded-3xl cursor-pointer">
+                <i class="fas fa-image text-cyan-400"></i><span class="font-medium text-sm text-gray-200">Image to PDF</span>
+              </button>
+              <button data-tool-switch="text-doc" onclick="switchTool('text-doc')" class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 border border-white/5 px-5 py-2.5 rounded-3xl cursor-pointer">
+                <i class="fas fa-file-word text-cyan-400"></i><span class="font-medium text-sm text-gray-200">Word Processor</span>
+              </button>
+              <button data-tool-switch="video-audio" onclick="switchTool('video-audio')" class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 border border-white/5 px-5 py-2.5 rounded-3xl cursor-pointer">
+                <i class="fas fa-video text-cyan-400"></i><span class="font-medium text-sm text-gray-200">Video to Audio</span>
+              </button>
+              <button data-tool-switch="text-to-speech" onclick="switchTool('text-to-speech')" class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 border border-amber-500/10 px-5 py-2.5 rounded-3xl cursor-pointer">
+                <i class="fas fa-volume-up text-amber-500 text-sm"></i><span class="font-medium text-sm text-gray-200">Text to Speech</span>
+              </button>
+              <button data-tool-switch="voice-clone" onclick="switchTool('voice-clone')" class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 border border-amber-500/10 px-5 py-2.5 rounded-3xl cursor-pointer">
+                <i class="fas fa-microphone-alt text-amber-500 text-sm"></i><span class="font-medium text-sm text-gray-200">Voice Clone</span>
+              </button>
+              <button data-tool-switch="image-edit" onclick="switchTool('image-edit')" class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 border border-amber-500/10 px-5 py-2.5 rounded-3xl cursor-pointer">
+                <i class="fas fa-magic text-amber-500 text-sm"></i><span class="font-medium text-sm text-gray-200">AI Editor</span>
+              </button>
+              <button data-tool-switch="history" onclick="switchTool('history')" class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 border border-white/5 px-5 py-2.5 rounded-3xl cursor-pointer">
+                <i class="fas fa-history text-gray-400"></i><span class="font-medium text-sm text-gray-200">History</span>
+              </button>
+            </div>
+          </div>
           <div
             class="flex-1 p-4 sm:p-8 overflow-y-auto sidebar-scroll relative"
             id="content-area"
@@ -1963,6 +2087,12 @@
             <p id="feedback-identity" class="text-sm text-slate-400 mt-2">
               Signed in feedback will include your account details.
             </p>
+            <p
+              id="feedback-exit-note"
+              class="hidden text-xs text-amber-300 mt-3 font-bold uppercase tracking-[0.18em]"
+            >
+              Share quick feedback before exit, or skip and leave.
+            </p>
           </div>
           <button
             onclick="closeFeedbackModal()"
@@ -2029,10 +2159,18 @@
           </label>
           <div class="flex flex-wrap justify-end gap-3">
             <button
+              id="feedback-cancel-btn"
               onclick="closeFeedbackModal()"
               class="px-4 py-3 rounded-2xl bg-white/5 text-sm font-bold text-slate-300 hover:bg-white/10 transition-all"
             >
               Cancel
+            </button>
+            <button
+              id="feedback-skip-exit-btn"
+              onclick="skipFeedbackAndExit()"
+              class="hidden px-4 py-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-sm font-bold text-amber-200 hover:bg-amber-500/15 transition-all"
+            >
+              Skip & Exit
             </button>
             <button
               id="feedback-submit-btn"
@@ -2273,7 +2411,10 @@
       // ====================== STATE ======================
       let loggedIn = false;
       let currentUser = null;
+      let currentPremiumRequest = null;
       let currentStudioToolId = "image-pdf";
+      const LOGIN_REQUIRED_TOOL_IDS = ["image-pdf"];
+      const PREMIUM_TOOL_IDS = ["voice-clone", "text-to-speech", "image-edit"];
       let historyItems = [];
       let currentImages = [];
       const toolsData = [
@@ -2341,6 +2482,102 @@
         if (loggedIn) goToStudio();
         else showLogin();
       }
+      function hasPremiumAccess() {
+        return Boolean(loggedIn && currentUser?.isPro);
+      }
+      function hasPendingPremiumRequest() {
+        return Boolean(
+          currentPremiumRequest &&
+            ["pending", "reviewing", "received"].includes(
+              String(currentPremiumRequest.status || "").toLowerCase(),
+            ),
+        );
+      }
+      function updateStudioToolSwitches() {
+        document.querySelectorAll("[data-tool-switch]").forEach((node) => {
+          node.classList.toggle(
+            "active",
+            node.dataset.toolSwitch === currentStudioToolId,
+          );
+        });
+      }
+      function renderPremiumFeatureGate(id) {
+        const labels = {
+          "voice-clone": {
+            icon: "fa-microphone-alt",
+            title: "AI Voice Clone",
+            descLoggedOut:
+              "Sign in to request access to MediaLab Pro and unlock studio-grade voice cloning.",
+            descLoggedIn:
+              "Upgrade to MediaLab Pro to unlock studio-grade voice cloning and premium AI voice tools.",
+          },
+          "text-to-speech": {
+            icon: "fa-volume-up",
+            title: "Text to Speech",
+            descLoggedOut:
+              "Sign in to request access to MediaLab Pro and unlock premium neural voice generation.",
+            descLoggedIn:
+              "Upgrade to MediaLab Pro to unlock premium neural voice generation and longer sessions.",
+          },
+          "image-edit": {
+            icon: "fa-magic",
+            title: "AI Image Editor",
+            descLoggedOut:
+              "Sign in to request access to MediaLab Pro and unlock the AI image editing studio.",
+            descLoggedIn:
+              "Upgrade to MediaLab Pro to unlock the AI image editing studio and premium enhancement tools.",
+          },
+        };
+        const config = labels[id] || labels["voice-clone"];
+        const pendingMessage = hasPendingPremiumRequest()
+          ? `<div class="feature-gate-status feature-gate-status--pending">Pending. Your premium request is being processed. You'll get feedback within 48 hours.</div>`
+          : "";
+        return `
+          <div class="feature-gate-shell max-w-3xl">
+            <div class="feature-gate-card feature-gate-card--premium">
+              <div class="feature-gate-badge feature-gate-badge--premium">Pro Feature</div>
+              <div class="feature-gate-icon">
+                <i class="fas fa-crown text-4xl text-amber-400"></i>
+              </div>
+              <div class="feature-gate-lockline"><i class="fas fa-crown"></i><span>Premium Locked</span></div>
+              <h3 class="feature-gate-title">${config.title}</h3>
+              <p class="feature-gate-text">
+                ${loggedIn ? config.descLoggedIn : config.descLoggedOut}
+              </p>
+              ${pendingMessage}
+              <button onclick="${loggedIn ? "upgradePlan()" : "showLogin()"}" class="feature-gate-button feature-gate-button--premium relative hover:scale-[1.03] transition-all" ${hasPendingPremiumRequest() ? "disabled" : ""}>
+                <span>${loggedIn ? hasPendingPremiumRequest() ? "Request Pending" : "Request Premium" : "Sign in to Unlock"}</span>
+                <i class="fas fa-arrow-right"></i>
+              </button>
+            </div>
+          </div>`;
+      }
+      function renderLoginRequiredFeatureGate(id) {
+        const labels = {
+          "image-pdf": {
+            icon: "fa-file-pdf",
+            title: "Image to PDF",
+            description:
+              "Sign in to unlock high-resolution image to PDF conversion and cloud-backed project access.",
+          },
+        };
+        const config = labels[id] || labels["image-pdf"];
+        return `
+          <div class="feature-gate-shell max-w-3xl">
+            <div class="feature-gate-card">
+              <div class="feature-gate-badge">Login Required</div>
+              <div class="feature-gate-icon">
+                <i class="fas ${config.icon} text-4xl text-cyan-400"></i>
+              </div>
+              <h3 class="feature-gate-title">${config.title}</h3>
+              <p class="feature-gate-text">${config.description}</p>
+              <button onclick="showLogin()" class="feature-gate-button active:scale-95">
+                <span>Sign In to Unlock</span>
+                <i class="fas fa-arrow-right"></i>
+              </button>
+            </div>
+          </div>`;
+      }
       function goToStudio(defaultTool = "image-pdf") {
         document.getElementById("landing").classList.add("hidden");
         document.getElementById("studio").classList.remove("hidden");
@@ -2355,6 +2592,7 @@
       // Initialize Socket.io
       const socket = io();
       let clientSocketId = "";
+      let moreDropdownTimer = null;
       socket.on("connect", () => {
         clientSocketId = socket.id;
         console.log("Connected to AI Engine. ID:", clientSocketId);
@@ -2561,10 +2799,45 @@
       function toggleProfileMenu() {
         document.getElementById("profile-menu").classList.toggle("hidden");
       }
-      function upgradePlan() {
+      async function fetchPremiumRequestStatus() {
+        if (!loggedIn) {
+          currentPremiumRequest = null;
+          return null;
+        }
+        try {
+          const res = await fetch("/api/upgrade-request/status", {
+            credentials: "include",
+          });
+          const data = await res.json();
+          currentPremiumRequest = data.success ? data.request || null : null;
+          return currentPremiumRequest;
+        } catch (error) {
+          console.warn("Premium request status check skipped:", error);
+          return null;
+        }
+      }
+      async function upgradePlan() {
         logUsageActivity("upgrade-click", "clicked upgrade", "profile");
-        openUpgradeModal();
         document.getElementById("profile-menu")?.classList.add("hidden");
+        if (!loggedIn) {
+          showLogin();
+          return;
+        }
+        if (!currentUser?.name || !currentUser?.email) {
+          openUpgradeModal();
+          return;
+        }
+        if (hasPendingPremiumRequest()) {
+          alert(
+            "Pending. Your premium request is being processed. You'll get feedback within 48 hours.",
+          );
+          return;
+        }
+        await submitUpgradeRequest({
+          name: currentUser.name,
+          email: currentUser.email,
+          message: "Request premium join.",
+        });
       }
       function getUpgradeFeatureLabel() {
         const labels = {
@@ -2590,7 +2863,8 @@
               ? `Request premium access for ${feature}. We will use your account details for follow-up.`
               : `Request premium access for ${feature}. Add your details and we will follow up soon.`;
         }
-        if (featureText) featureText.textContent = `Requesting access to ${feature}`;
+        if (featureText)
+          featureText.textContent = `Requesting access to ${feature}`;
         if (nameField) nameField.value = currentUser?.name || "";
         if (emailField) emailField.value = currentUser?.email || "";
         if (messageField) {
@@ -2601,16 +2875,24 @@
       function closeUpgradeModal() {
         document.getElementById("upgrade-modal")?.classList.add("hidden");
       }
-      async function submitUpgradeRequest() {
-        const name = document.getElementById("upgrade-name")?.value?.trim();
-        const email = document.getElementById("upgrade-email")?.value?.trim();
-        const message = document.getElementById("upgrade-message")?.value?.trim();
+      async function submitUpgradeRequest(prefill = null) {
+        const name = String(
+          prefill?.name ?? document.getElementById("upgrade-name")?.value ?? "",
+        ).trim();
+        const email = String(
+          prefill?.email ?? document.getElementById("upgrade-email")?.value ?? "",
+        ).trim();
+        const message = String(
+          prefill?.message ??
+            document.getElementById("upgrade-message")?.value ??
+            "",
+        ).trim();
         const submitBtn = document.getElementById("upgrade-submit-btn");
         const requestedFeature = getUpgradeFeatureLabel();
         if (!name) return alert("Please enter your name.");
         if (!email || !email.includes("@"))
           return alert("Please enter a valid email.");
-        if (submitBtn) {
+        if (submitBtn && !prefill) {
           submitBtn.disabled = true;
           submitBtn.textContent = "Sending...";
         }
@@ -2633,14 +2915,26 @@
               data.message || "Could not save your upgrade request right now.",
             );
           }
+          currentPremiumRequest = data.request || currentPremiumRequest;
           closeUpgradeModal();
-          alert("Your request has been reves, uyoull get a feedback soon.");
+          if (
+            currentUser &&
+            currentPremiumRequest &&
+            !currentUser.isPro &&
+            currentStudioToolId
+          ) {
+            switchTool(currentStudioToolId);
+          }
+          alert(
+            data.message ||
+              "Pending. Your premium request is being processed. You'll get feedback within 48 hours.",
+          );
         } catch (error) {
           alert(
             error.message || "Could not save your upgrade request right now.",
           );
         } finally {
-          if (submitBtn) {
+          if (submitBtn && !prefill) {
             submitBtn.disabled = false;
             submitBtn.textContent = "Send Request";
           }
@@ -2658,6 +2952,7 @@
           } catch (e) {}
           loggedIn = false;
           currentUser = null;
+          currentPremiumRequest = null;
           document.getElementById("user-section").classList.add("hidden");
           document.getElementById("start-btn").classList.remove("hidden");
           document.getElementById("profile-menu").classList.add("hidden");
@@ -2682,7 +2977,11 @@
         const password = document.getElementById("password").value.trim();
         if (!email || !password) return alert("Please fill in all fields");
         try {
-          await logUsageActivity("email-login-attempt", "attempted email login", "auth");
+          await logUsageActivity(
+            "email-login-attempt",
+            "attempted email login",
+            "auth",
+          );
           if (
             email.toLowerCase() === "dev@gmail.com" &&
             password === "spiderman"
@@ -2699,7 +2998,12 @@
             }
             loggedIn = true;
             currentUser = devData.user || null;
-            await logUsageActivity("developer-login", "logged in with developer login", "auth");
+            await fetchPremiumRequestStatus();
+            await logUsageActivity(
+              "developer-login",
+              "logged in with developer login",
+              "auth",
+            );
             hideLogin();
             goToStudio();
             return;
@@ -2737,6 +3041,7 @@
           if (data.success && data.user) {
             loggedIn = true;
             currentUser = data.user;
+            await fetchPremiumRequestStatus();
             // UI: Toggle Login Buttons
             document.getElementById("start-btn").classList.add("hidden");
             document.getElementById("user-section").classList.remove("hidden");
@@ -2758,8 +3063,14 @@
             }
             currentUser.builderDrafts = currentUser.builderDrafts || [];
             renderBuilderDrafts();
-            await logUsageActivity("session-restored", "restored logged-in session", "auth");
+            await logUsageActivity(
+              "session-restored",
+              "restored logged-in session",
+              "auth",
+            );
             goToStudio();
+          } else {
+            currentPremiumRequest = null;
           }
         } catch (e) {
           console.error("Auth check failed:", e);
@@ -3732,6 +4043,7 @@
       }
       async function switchTool(id) {
         currentStudioToolId = id;
+        updateStudioToolSwitches();
         logUsageActivity("tool-open", `opened tool ${id}`, "tool-switch", {
           toolId: id,
         });
@@ -3744,6 +4056,17 @@
           if (builderToolbar) builderToolbar.classList.remove("hidden");
         } else {
           if (builderToolbar) builderToolbar.classList.add("hidden");
+        }
+        if (LOGIN_REQUIRED_TOOL_IDS.includes(id) && !loggedIn) {
+          html = renderLoginRequiredFeatureGate(id);
+          area.innerHTML = html;
+          showLogin();
+          return;
+        }
+        if (PREMIUM_TOOL_IDS.includes(id) && !hasPremiumAccess()) {
+          html = renderPremiumFeatureGate(id);
+          area.innerHTML = html;
+          return;
         }
         // =============================================================
         // 0. PROJECT HISTORY / LIBRARY
@@ -4121,8 +4444,8 @@
                             <div class="feature-gate-icon">
                                 <i class="fas fa-file-word text-3xl text-cyan-400"></i>
                             </div>
-                            <h2 class="feature-gate-title">Studio Word Processor Pro Max</h2>
-                            <p class="feature-gate-text">Launch a fullscreen writing workspace with a premium top ribbon, responsive layout, structured document tools, and polished export.</p>
+                            <h2 class="feature-gate-title">Studio Word Processor</h2>
+                            <p class="feature-gate-text">Launch a fullscreen writing workspace.</p>
                             <button onclick="launchWordProcessorMode()" class="feature-gate-button active:scale-95">
                                 <span>Launch Full Screen Mode</span>
                                 <i class="fas fa-arrow-right"></i>
@@ -5317,10 +5640,56 @@
         });
         if (historyItems.length > 6) historyItems.pop();
       }
-      function toggleMore() {
-        const dd = document.getElementById("more-dropdown");
-        dd.style.display = dd.style.display === "block" ? "none" : "block";
+      function queueMoreDropdownAutoHide() {
+        clearTimeout(moreDropdownTimer);
+        moreDropdownTimer = setTimeout(() => {
+          hideMoreDropdown();
+        }, 15000);
       }
+      function hideMoreDropdown() {
+        const dd = document.getElementById("more-dropdown");
+        if (!dd) return;
+        dd.classList.add("hidden");
+        dd.style.display = "none";
+      }
+      function toggleMore(event) {
+        event?.stopPropagation();
+        const dd = document.getElementById("more-dropdown");
+        if (!dd) return;
+        const shouldOpen =
+          dd.classList.contains("hidden") || dd.style.display !== "block";
+        dd.classList.toggle("hidden", !shouldOpen);
+        dd.style.display = shouldOpen ? "block" : "none";
+        if (shouldOpen) queueMoreDropdownAutoHide();
+        else clearTimeout(moreDropdownTimer);
+      }
+      document.addEventListener("mousedown", (event) => {
+        const shell = document.getElementById("more-features-shell");
+        if (shell && !shell.contains(event.target)) {
+          hideMoreDropdown();
+        }
+        if (shell && shell.contains(event.target)) {
+          queueMoreDropdownAutoHide();
+        }
+      });
+      document.addEventListener("mousemove", (event) => {
+        const shell = document.getElementById("more-features-shell");
+        const dd = document.getElementById("more-dropdown");
+        if (
+          shell &&
+          dd &&
+          !dd.classList.contains("hidden") &&
+          shell.contains(event.target)
+        ) {
+          queueMoreDropdownAutoHide();
+        }
+      });
+      document.addEventListener("keydown", () => {
+        const dd = document.getElementById("more-dropdown");
+        if (dd && !dd.classList.contains("hidden")) {
+          queueMoreDropdownAutoHide();
+        }
+      });
       // ====================== INIT ======================
       window.onload = () => {
         renderCards();
@@ -5560,6 +5929,7 @@
       let builderConfirmAction = null;
       let builderConfirmSecondaryAction = null;
       let feedbackRating = 5;
+      let feedbackExitPending = false;
       let activeDesignModalMode = "templates";
       const BUILDER_GRID_SIZE = 20;
       let guestBuilderDrafts = [];
@@ -5596,22 +5966,10 @@
           performExitStudio();
           return;
         }
-        if (!loggedIn) {
-          openBuilderConfirmModal(
-            "Login to protect your project",
-            "Guest work disappears after refresh. Login so MediaLab can save your draft safely before you leave.",
-            "Exit Anyway",
-            () => {
-              saveBuilderDraft({ silent: true, isAutoSave: true });
-              performExitStudio();
-            },
-            "Login",
-            () => showLogin(),
-          );
-          return;
+        if (loggedIn) {
+          await saveBuilderDraft({ silent: true, isAutoSave: true });
         }
-        await saveBuilderDraft({ silent: true, isAutoSave: true });
-        performExitStudio();
+        openFeedbackModal({ exitAfter: true });
       }
       function builderHasCanvasContent() {
         const canvas = document.getElementById("web-canvas");
@@ -5956,16 +6314,26 @@
         }
       }
       function hideStudioMenu() {
+        clearTimeout(builderPanelIdleTimer);
         document.getElementById("studio-menu-panel")?.classList.add("hidden");
       }
-      function openFeedbackModal() {
+      function openFeedbackModal(options = {}) {
         const identity = document.getElementById("feedback-identity");
         const feedbackText = document.getElementById("feedback-text");
+        const exitNote = document.getElementById("feedback-exit-note");
+        const skipExitBtn = document.getElementById("feedback-skip-exit-btn");
+        const cancelBtn = document.getElementById("feedback-cancel-btn");
+        feedbackExitPending = Boolean(options?.exitAfter);
         if (identity) {
           identity.textContent =
             loggedIn && currentUser
               ? `Feedback will be saved as ${currentUser.name || "User"} (${currentUser.email || "no email"}).`
               : "You are not logged in, so this feedback will be saved anonymously.";
+        }
+        exitNote?.classList.toggle("hidden", !feedbackExitPending);
+        skipExitBtn?.classList.toggle("hidden", !feedbackExitPending);
+        if (cancelBtn) {
+          cancelBtn.textContent = feedbackExitPending ? "Stay Here" : "Cancel";
         }
         if (feedbackText) feedbackText.value = "";
         setFeedbackRating(5);
@@ -5975,6 +6343,14 @@
       }
       function closeFeedbackModal() {
         document.getElementById("feedback-modal")?.classList.add("hidden");
+        feedbackExitPending = false;
+      }
+      function skipFeedbackAndExit() {
+        const shouldExit = feedbackExitPending;
+        closeFeedbackModal();
+        if (shouldExit) {
+          performExitStudio();
+        }
       }
       function setFeedbackRating(value) {
         feedbackRating = value;
@@ -6008,8 +6384,12 @@
           const data = await res.json();
           if (!data.success)
             throw new Error(data.message || "Feedback could not be saved.");
+          const shouldExit = feedbackExitPending;
           closeFeedbackModal();
           alert("Thank you. Your feedback has been saved.");
+          if (shouldExit) {
+            performExitStudio();
+          }
         } catch (error) {
           alert(error.message || "Could not save feedback right now.");
         } finally {
@@ -6070,6 +6450,27 @@
           !document
             .getElementById("studio-menu-panel")
             ?.classList.contains("hidden")
+        ) {
+          queueBuilderPanelAutoHide();
+        }
+      });
+      document.addEventListener("mousemove", (e) => {
+        const toolbarShell = document.getElementById("builder-toolbar-shell");
+        const studioMenu = document.getElementById("studio-menu-panel");
+        if (
+          (activeBuilderPanel ||
+            !(studioMenu?.classList.contains("hidden") ?? true)) &&
+          toolbarShell &&
+          toolbarShell.contains(e.target)
+        ) {
+          queueBuilderPanelAutoHide();
+        }
+      });
+      document.addEventListener("keydown", () => {
+        const studioMenu = document.getElementById("studio-menu-panel");
+        if (
+          activeBuilderPanel ||
+          !(studioMenu?.classList.contains("hidden") ?? true)
         ) {
           queueBuilderPanelAutoHide();
         }

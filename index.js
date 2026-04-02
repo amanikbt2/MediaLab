@@ -355,6 +355,24 @@ app.post("/api/upgrade-request", async (req, res) => {
         .json({ success: false, message: "A valid email is required." });
     }
 
+    const activeStatuses = ["pending", "reviewing", "received"];
+    const existingRequest = await UpgradeRequest.findOne({
+      email,
+      status: { $in: activeStatuses },
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    if (existingRequest) {
+      return res.json({
+        success: true,
+        request: existingRequest,
+        alreadyPending: true,
+        message:
+          "Pending. Your premium request is being processed. You'll get feedback within 48 hours.",
+      });
+    }
+
     const record = await UpgradeRequest.create({
       userId: isLoggedIn ? req.user._id : null,
       name,
@@ -362,7 +380,7 @@ app.post("/api/upgrade-request", async (req, res) => {
       requestedFeature,
       source: String(req.body?.source || "studio-upgrade"),
       message,
-      status: "received",
+      status: "pending",
     });
     await createUsageLog({
       ...buildUsageIdentity(req),
@@ -377,7 +395,9 @@ app.post("/api/upgrade-request", async (req, res) => {
 
     res.json({
       success: true,
-      message: "Your request has been received. You will get feedback soon.",
+      request: record,
+      message:
+        "Pending. Your premium request is being processed. You'll get feedback within 48 hours.",
       requestId: record._id,
     });
   } catch (error) {
@@ -386,6 +406,27 @@ app.post("/api/upgrade-request", async (req, res) => {
       success: false,
       message: "Could not save your upgrade request right now.",
     });
+  }
+});
+
+app.get("/api/upgrade-request/status", async (req, res) => {
+  try {
+    if (!req.user?.email) {
+      return res.json({ success: true, request: null });
+    }
+
+    const request = await UpgradeRequest.findOne({
+      $or: [{ userId: req.user._id }, { email: req.user.email.toLowerCase() }],
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.json({ success: true, request: request || null });
+  } catch (error) {
+    console.error("Upgrade request status fetch failed:", error);
+    res
+      .status(500)
+      .json({ success: false, message: "Could not load upgrade request status." });
   }
 });
 
@@ -487,6 +528,42 @@ app.get("/api/admin/usage-logs", async (_req, res) => {
   }
 });
 
+app.get("/api/admin/upgrade-requests", async (_req, res) => {
+  try {
+    const requests = await UpgradeRequest.find({})
+      .sort({ createdAt: -1 })
+      .limit(300)
+      .lean();
+    res.json({ success: true, requests });
+  } catch (error) {
+    console.error("Admin upgrade request fetch failed:", error);
+    res
+      .status(500)
+      .json({ success: false, message: "Could not load upgrade requests." });
+  }
+});
+
+app.delete("/api/admin/usage-logs", async (_req, res) => {
+  try {
+    await UsageLog.deleteMany({});
+    io.emit("admin:usage-log-cleared", {
+      action: "logs-cleared",
+      summary: "admin cleared usage logs",
+      source: "admin",
+      kind: "activity",
+      createdAt: new Date().toISOString(),
+      isAnonymous: true,
+      isPro: false,
+      email: "",
+      name: "admin",
+    });
+    res.json({ success: true, message: "Usage logs cleared." });
+  } catch (error) {
+    console.error("Admin usage log clear failed:", error);
+    res.status(500).json({ success: false, message: "Could not clear usage logs." });
+  }
+});
+
 app.patch("/api/admin/feedbacks/:id", async (req, res) => {
   try {
     const updates = {};
@@ -514,8 +591,69 @@ app.patch("/api/admin/feedbacks/:id", async (req, res) => {
   }
 });
 
+app.patch("/api/admin/upgrade-requests/:id", async (req, res) => {
+  try {
+    const nextStatus = String(req.body?.status || "").trim().toLowerCase();
+    if (!["granted", "dismissed", "reviewing", "pending"].includes(nextStatus)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid request status." });
+    }
+
+    const updates = {
+      status: nextStatus,
+      reviewedAt: new Date(),
+      reviewedBy: "admin",
+    };
+
+    const request = await UpgradeRequest.findByIdAndUpdate(
+      req.params.id,
+      { $set: updates },
+      { new: true },
+    ).lean();
+
+    if (!request) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Upgrade request not found." });
+    }
+
+    if (nextStatus === "granted") {
+      await User.updateMany(
+        {
+          $or: [
+            request.userId ? { _id: request.userId } : null,
+            { email: request.email },
+          ].filter(Boolean),
+        },
+        { $set: { isPro: true } },
+      );
+    }
+
+    await createUsageLog({
+      email: request.email,
+      name: request.name,
+      isAnonymous: false,
+      isPro: nextStatus === "granted",
+      action: `premium-request-${nextStatus}`,
+      summary: `${nextStatus} premium request for ${request.requestedFeature}`,
+      source: "admin-premium-requests",
+      metadata: { requestId: request._id, status: nextStatus },
+    });
+
+    res.json({ success: true, request });
+  } catch (error) {
+    console.error("Admin upgrade request update failed:", error);
+    res
+      .status(500)
+      .json({ success: false, message: "Could not update premium request." });
+  }
+});
+
 app.get("/api/admin/analytics", async (_req, res) => {
   try {
+    const last30Days = new Date();
+    last30Days.setDate(last30Days.getDate() - 30);
     const [
       totalUsers,
       proUsers,
@@ -523,10 +661,19 @@ app.get("/api/admin/analytics", async (_req, res) => {
       openFeedbacks,
       completedFeedbacks,
       hiddenFeedbacks,
+      totalUpgradeRequests,
+      pendingUpgradeRequests,
       averageRatingRow,
       recentUsers,
+      premiumRequests,
       totalUsageLogs,
       recentErrors,
+      newUsers30d,
+      newProUsers30d,
+      newFeedbacks30d,
+      newUsageLogs30d,
+      newErrors30d,
+      newUpgradeRequests30d,
     ] = await Promise.all([
       User.countDocuments(),
       User.countDocuments({ isPro: true }),
@@ -534,14 +681,28 @@ app.get("/api/admin/analytics", async (_req, res) => {
       Feedback.countDocuments({ status: "open", hidden: false }),
       Feedback.countDocuments({ status: "completed" }),
       Feedback.countDocuments({ hidden: true }),
+      UpgradeRequest.countDocuments(),
+      UpgradeRequest.countDocuments({
+        status: { $in: ["pending", "reviewing", "received"] },
+      }),
       Feedback.aggregate([{ $group: { _id: null, avgRating: { $avg: "$rating" } } }]),
       User.find({})
         .sort({ createdAt: -1 })
         .limit(8)
         .select("name email isPro createdAt profilePicture lastLogin location provider")
         .lean(),
+      UpgradeRequest.find({})
+        .sort({ createdAt: -1 })
+        .limit(30)
+        .lean(),
       UsageLog.countDocuments(),
       UsageLog.countDocuments({ kind: "error" }),
+      User.countDocuments({ createdAt: { $gte: last30Days } }),
+      User.countDocuments({ isPro: true, createdAt: { $gte: last30Days } }),
+      Feedback.countDocuments({ createdAt: { $gte: last30Days } }),
+      UsageLog.countDocuments({ createdAt: { $gte: last30Days } }),
+      UsageLog.countDocuments({ kind: "error", createdAt: { $gte: last30Days } }),
+      UpgradeRequest.countDocuments({ createdAt: { $gte: last30Days } }),
     ]);
 
     res.json({
@@ -553,12 +714,23 @@ app.get("/api/admin/analytics", async (_req, res) => {
         openFeedbacks,
         completedFeedbacks,
         hiddenFeedbacks,
+        totalUpgradeRequests,
+        pendingUpgradeRequests,
         totalUsageLogs,
         recentErrors,
+        last30Days: {
+          newUsers: newUsers30d,
+          newProUsers: newProUsers30d,
+          feedbacks: newFeedbacks30d,
+          usageLogs: newUsageLogs30d,
+          errors: newErrors30d,
+          upgradeRequests: newUpgradeRequests30d,
+        },
         averageRating: averageRatingRow?.[0]?.avgRating
           ? Number(averageRatingRow[0].avgRating.toFixed(1))
           : 0,
         recentUsers,
+        premiumRequests,
       },
     });
   } catch (error) {

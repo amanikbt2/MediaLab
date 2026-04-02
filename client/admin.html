@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -8,6 +8,7 @@
     <script src="/socket.io/socket.io.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="icon" href="/favicon.png" type="image/png" />
     <link
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap"
       rel="stylesheet"
@@ -69,7 +70,14 @@
       .terminal-shell {
         background:
           linear-gradient(180deg, rgba(2, 6, 23, 0.98), rgba(9, 13, 20, 0.98)),
-          radial-gradient(circle at top, rgba(34, 211, 238, 0.08), transparent 35%);
+          radial-gradient(
+            circle at top,
+            rgba(34, 211, 238, 0.08),
+            transparent 35%
+          );
+      }
+      .terminal-shell-window {
+        max-height: min(72vh, calc(100vh - 240px));
       }
       .terminal-shell.collapsed .terminal-body {
         display: none;
@@ -96,6 +104,16 @@
       .hide-scrollbar::-webkit-scrollbar {
         display: none;
       }
+      .mini-tab {
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.03);
+        color: #cbd5e1;
+      }
+      .mini-tab.active {
+        background: rgba(34, 211, 238, 0.14);
+        border-color: rgba(34, 211, 238, 0.25);
+        color: #ecfeff;
+      }
     </style>
   </head>
   <body class="min-h-screen bg-slate-950 text-slate-100">
@@ -110,13 +128,16 @@
       <div
         class="w-full max-w-md glass border border-white/10 rounded-[2rem] p-6 sm:p-8 shadow-[0_30px_80px_rgba(0,0,0,0.55)]"
       >
-        <p class="text-[11px] uppercase tracking-[0.32em] text-cyan-400 font-bold">
+        <p
+          class="text-[11px] uppercase tracking-[0.32em] text-cyan-400 font-bold"
+        >
           Admin Access
         </p>
         <h2 class="text-3xl font-bold mt-3">Enter admin password</h2>
         <p class="text-slate-400 mt-3 text-sm">Secure dashboard access.</p>
         <label class="block mt-6">
-          <span class="text-[11px] uppercase tracking-[0.22em] text-slate-500 font-bold"
+          <span
+            class="text-[11px] uppercase tracking-[0.22em] text-slate-500 font-bold"
             >Password</span
           >
           <input
@@ -145,14 +166,54 @@
       </div>
     </div>
 
+    <div
+      id="clear-logs-modal"
+      class="hidden fixed inset-0 z-50 items-center justify-center p-4 bg-slate-950/82 backdrop-blur-xl"
+    >
+      <div
+        onclick="event.stopPropagation()"
+        class="w-full max-w-md glass border border-white/10 rounded-[2rem] p-6 sm:p-7 shadow-[0_30px_80px_rgba(0,0,0,0.55)]"
+      >
+        <div
+          class="text-[11px] uppercase tracking-[0.28em] text-rose-300 font-bold"
+        >
+          Clear Logs
+        </div>
+        <h3 class="text-2xl font-bold mt-3">Delete all usage logs?</h3>
+        <p class="text-slate-400 mt-3 text-sm">
+          This clears the live terminal history from the database. This action
+          cannot be undone.
+        </p>
+        <div class="flex gap-3 mt-6">
+          <button
+            onclick="closeClearLogsModal()"
+            class="flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-slate-200"
+          >
+            Cancel
+          </button>
+          <button
+            id="clear-logs-confirm-btn"
+            onclick="clearUsageLogs()"
+            class="flex-1 rounded-2xl bg-rose-500 px-4 py-3 text-sm font-bold text-white"
+          >
+            Clear Logs
+          </button>
+        </div>
+      </div>
+    </div>
+
     <main class="relative z-10 max-w-7xl mx-auto px-3 py-4 sm:px-6 sm:py-8">
       <header
         class="glass border border-white/10 rounded-[1.6rem] sm:rounded-[2rem] p-4 sm:p-7 shadow-[0_30px_80px_rgba(0,0,0,0.45)]"
       >
         <div class="flex flex-col gap-5">
-          <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div
+            class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"
+          >
             <div>
-              <p class="text-[11px] uppercase tracking-[0.32em] text-cyan-400 font-bold">
+              <p
+                class="text-[11px] uppercase tracking-[0.32em] text-cyan-400 font-bold"
+              >
                 MediaLab Admin
               </p>
               <h1 class="text-2xl sm:text-4xl font-bold mt-2 tracking-tight">
@@ -165,10 +226,14 @@
               >
                 <span id="live-update-dot" class="live-dot"></span>
                 <div>
-                  <div class="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-300">
+                  <div
+                    class="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-300"
+                  >
                     Live Updates
                   </div>
-                  <div id="live-update-label" class="text-xs text-slate-200">Connected</div>
+                  <div id="live-update-label" class="text-xs text-slate-200">
+                    Connected
+                  </div>
                 </div>
               </div>
               <button
@@ -210,6 +275,13 @@
               >
                 Audience
               </button>
+              <button
+                data-tab="premium"
+                class="top-tab px-4 py-3 rounded-2xl text-sm font-bold transition-all"
+                onclick="showAdminTab('premium', this)"
+              >
+                Premium Requests
+              </button>
             </div>
           </div>
         </div>
@@ -219,13 +291,23 @@
       <section id="tab-feedbacks" class="mt-6 space-y-3 hidden"></section>
       <section id="tab-logs" class="mt-6 space-y-4 hidden"></section>
       <section id="tab-users" class="mt-6 space-y-4 hidden"></section>
+      <section id="tab-premium" class="mt-6 space-y-4 hidden"></section>
     </main>
 
     <script>
       let adminFeedbacks = [];
       let adminAnalytics = null;
       let adminUsageLogs = [];
+      let adminPremiumRequests = [];
       let adminSocket = null;
+      let adminCounterValues = {};
+      let feedbackView = "all";
+      let feedbackFilters = {
+        name: "",
+        email: "",
+        location: "",
+        time: "",
+      };
       const ADMIN_PASSWORD = "spiderman";
       const ADMIN_ACCESS_KEY = "medialab_admin_access";
 
@@ -236,11 +318,20 @@
         document
           .querySelectorAll(`.top-tab[data-tab="${name}"]`)
           .forEach((tab) => tab.classList.add("active"));
-        ["analytics", "feedbacks", "logs", "users"].forEach((tabName) => {
+        ["analytics", "feedbacks", "logs", "users", "premium"].forEach((tabName) => {
           document
             .getElementById(`tab-${tabName}`)
             ?.classList.toggle("hidden", tabName !== name);
         });
+        if (name === "logs") {
+          requestAnimationFrame(() => {
+            document
+              .querySelectorAll("#tab-logs .terminal-body")
+              .forEach((node) => {
+                node.scrollTop = node.scrollHeight;
+              });
+          });
+        }
       }
 
       function formatDate(value) {
@@ -256,14 +347,64 @@
           .replace(/'/g, "&#39;");
       }
 
+      function formatLogIdentity(item) {
+        if (item.isAnonymous) return "anonymous";
+        const email = (item.email || "unknown").trim();
+        const name = (item.name || "unknown").trim();
+        return `${email}-${name}`;
+      }
+
+      function formatLogSummary(item) {
+        return item.summary || item.action || "activity";
+      }
+
+      function animateCountValue(target, nextValue) {
+        const finalValue = Number(nextValue || 0);
+        const startValue = Number(target.dataset.currentValue || 0);
+        if (startValue === finalValue) {
+          target.textContent = finalValue.toLocaleString();
+          target.dataset.currentValue = String(finalValue);
+          return;
+        }
+        const duration = 900;
+        const startTime = performance.now();
+        function step(now) {
+          const progress = Math.min((now - startTime) / duration, 1);
+          const eased = 1 - Math.pow(1 - progress, 3);
+          const current = Math.round(
+            startValue + (finalValue - startValue) * eased,
+          );
+          target.textContent = current.toLocaleString();
+          if (progress < 1) {
+            requestAnimationFrame(step);
+          } else {
+            target.dataset.currentValue = String(finalValue);
+          }
+        }
+        requestAnimationFrame(step);
+      }
+
+      function animateAnalyticsCounts() {
+        document.querySelectorAll("[data-count-value]").forEach((node) => {
+          const key = node.dataset.countKey || "";
+          const nextValue = Number(node.dataset.countValue || 0);
+          const previousValue = Number(node.dataset.currentValue || nextValue);
+          if (previousValue === nextValue) {
+            node.textContent = nextValue.toLocaleString();
+            node.dataset.currentValue = String(nextValue);
+          } else {
+            animateCountValue(node, nextValue);
+          }
+          if (key) adminCounterValues[key] = nextValue;
+        });
+      }
+
       function setLiveStatus(connected) {
         const dot = document.getElementById("live-update-dot");
         const label = document.getElementById("live-update-label");
         dot?.classList.toggle("offline", !connected);
         if (label) {
-          label.textContent = connected
-            ? "Connected"
-            : "Reconnecting";
+          label.textContent = connected ? "Connected" : "Reconnecting";
         }
       }
 
@@ -294,6 +435,116 @@
         document.getElementById(`feedback-row-${id}`)?.classList.toggle("open");
       }
 
+      function setFeedbackView(view) {
+        feedbackView = view;
+        renderFeedbacks();
+      }
+
+      function updateFeedbackFilter(key, value) {
+        const activeInput = document.activeElement;
+        const selectionStart =
+          activeInput && typeof activeInput.selectionStart === "number"
+            ? activeInput.selectionStart
+            : null;
+        const selectionEnd =
+          activeInput && typeof activeInput.selectionEnd === "number"
+            ? activeInput.selectionEnd
+            : null;
+        const activeKey = activeInput?.dataset?.feedbackFilter || "";
+        feedbackFilters[key] = String(value || "")
+          .trim()
+          .toLowerCase();
+        renderFeedbacks();
+        requestAnimationFrame(() => {
+          const nextInput = document.querySelector(
+            `[data-feedback-filter="${activeKey || key}"]`,
+          );
+          if (nextInput) {
+            nextInput.focus();
+            if (
+              typeof selectionStart === "number" &&
+              typeof selectionEnd === "number"
+            ) {
+              nextInput.setSelectionRange(selectionStart, selectionEnd);
+            }
+          }
+        });
+      }
+
+      function openClearLogsModal() {
+        document.getElementById("clear-logs-modal")?.classList.remove("hidden");
+        document.getElementById("clear-logs-modal")?.classList.add("flex");
+      }
+
+      function closeClearLogsModal() {
+        document.getElementById("clear-logs-modal")?.classList.add("hidden");
+        document.getElementById("clear-logs-modal")?.classList.remove("flex");
+      }
+
+      async function clearUsageLogs() {
+        const btn = document.getElementById("clear-logs-confirm-btn");
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = "Clearing...";
+        }
+        try {
+          const res = await fetch("/api/admin/usage-logs", {
+            method: "DELETE",
+          });
+          const data = await res.json();
+          if (!data.success)
+            throw new Error(data.message || "Could not clear logs.");
+          adminUsageLogs = [];
+          if (adminAnalytics) {
+            adminAnalytics.totalUsageLogs = 0;
+            adminAnalytics.recentErrors = 0;
+            if (adminAnalytics.last30Days) {
+              adminAnalytics.last30Days.usageLogs = 0;
+              adminAnalytics.last30Days.errors = 0;
+            }
+          }
+          renderAnalyticsDetails();
+          renderLogs();
+          closeClearLogsModal();
+        } catch (error) {
+          alert(error.message || "Could not clear logs.");
+        } finally {
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = "Clear Logs";
+          }
+        }
+      }
+
+      function getFilteredFeedbacks() {
+        return adminFeedbacks.filter((item) => {
+          if (feedbackView === "flagged" && !item.hidden) return false;
+          const nameText = String(
+            item.username || item.name || "anonymous",
+          ).toLowerCase();
+          const emailText = String(item.email || "").toLowerCase();
+          const locationText = String(
+            item.location || item.country || item.region || "",
+          ).toLowerCase();
+          const timeText = formatDate(item.createdAt).toLowerCase();
+          if (feedbackFilters.name && !nameText.includes(feedbackFilters.name))
+            return false;
+          if (
+            feedbackFilters.email &&
+            !emailText.includes(feedbackFilters.email)
+          )
+            return false;
+          if (
+            feedbackFilters.location &&
+            !locationText.includes(feedbackFilters.location)
+          )
+            return false;
+          if (feedbackFilters.time && !timeText.includes(feedbackFilters.time))
+            return false;
+          return true;
+        });
+      }
+
       function toggleAudienceRow(id) {
         document.getElementById(`audience-row-${id}`)?.classList.toggle("open");
       }
@@ -306,21 +557,21 @@
         const el = document.getElementById("tab-analytics");
         if (!el || !adminAnalytics) return;
         const cards = [
-          ["Users", adminAnalytics.totalUsers || 0],
-          ["Pro Users", adminAnalytics.proUsers || 0],
-          ["Feedbacks", adminAnalytics.totalFeedbacks || 0],
-          ["Usage Logs", adminAnalytics.totalUsageLogs || 0],
-          ["Open Feedbacks", adminAnalytics.openFeedbacks || 0],
-          ["Server Errors", adminAnalytics.recentErrors || 0],
+          ["users", "Users", adminAnalytics.totalUsers || 0],
+          ["proUsers", "Pro Users", adminAnalytics.proUsers || 0],
+          ["feedbacks", "Feedbacks", adminAnalytics.totalFeedbacks || 0],
+          ["premiumRequests", "Premium Requests", adminAnalytics.totalUpgradeRequests || 0],
+          ["usageLogs", "Usage Logs", adminAnalytics.totalUsageLogs || 0],
+          ["pendingPremium", "Pending Premium", adminAnalytics.pendingUpgradeRequests || 0],
         ];
         el.innerHTML = `
           <div class="grid grid-cols-2 xl:grid-cols-6 gap-3 sm:gap-4">
             ${cards
               .map(
-                ([label, value]) => `
+                ([key, label, value]) => `
               <div class="glass border border-white/10 rounded-[1.3rem] sm:rounded-[1.5rem] p-4 sm:p-5">
                 <div class="text-[11px] uppercase tracking-[0.22em] text-slate-400 font-bold">${label}</div>
-                <div class="text-2xl sm:text-3xl font-bold mt-3">${value}</div>
+                <div data-count-key="${key}" data-count-value="${value}" data-current-value="${adminCounterValues[key] ?? value}" class="text-2xl sm:text-3xl font-bold mt-3">${Number(adminCounterValues[key] ?? value).toLocaleString()}</div>
               </div>
             `,
               )
@@ -332,20 +583,95 @@
               <div class="space-y-3 mt-4 text-sm">
                 <div class="flex items-center justify-between"><span class="text-slate-300">Open</span><strong>${adminAnalytics.openFeedbacks || 0}</strong></div>
                 <div class="flex items-center justify-between"><span class="text-slate-300">Completed</span><strong>${adminAnalytics.completedFeedbacks || 0}</strong></div>
-                <div class="flex items-center justify-between"><span class="text-slate-300">Hidden</span><strong>${adminAnalytics.hiddenFeedbacks || 0}</strong></div>
+                <div class="flex items-center justify-between"><span class="text-slate-300">Flagged</span><strong>${adminAnalytics.hiddenFeedbacks || 0}</strong></div>
               </div>
             </div>
             <div class="glass border border-white/10 rounded-[1.5rem] p-5">
-              <div class="text-[11px] uppercase tracking-[0.22em] text-slate-400 font-bold">Audience Summary</div>
+              <div class="text-[11px] uppercase tracking-[0.22em] text-slate-400 font-bold">Premium Summary</div>
               <div class="space-y-3 mt-4 text-sm">
                 <div class="flex items-center justify-between"><span class="text-slate-300">Total users</span><strong>${adminAnalytics.totalUsers || 0}</strong></div>
                 <div class="flex items-center justify-between"><span class="text-slate-300">Pro users</span><strong>${adminAnalytics.proUsers || 0}</strong></div>
-                <div class="flex items-center justify-between"><span class="text-slate-300">Average rating</span><strong>${adminAnalytics.averageRating || 0}</strong></div>
-                <div class="flex items-center justify-between"><span class="text-slate-300">Recent errors</span><strong>${adminAnalytics.recentErrors || 0}</strong></div>
+                <div class="flex items-center justify-between"><span class="text-slate-300">Premium requests</span><strong>${adminAnalytics.totalUpgradeRequests || 0}</strong></div>
+                <div class="flex items-center justify-between"><span class="text-slate-300">Pending review</span><strong>${adminAnalytics.pendingUpgradeRequests || 0}</strong></div>
+              </div>
+            </div>
+          </div>
+          <div class="glass border border-white/10 rounded-[1.5rem] p-5">
+            <div class="flex items-center justify-between gap-3">
+              <div class="text-[11px] uppercase tracking-[0.22em] text-slate-400 font-bold">Last 30 Days</div>
+              <div class="text-xs text-slate-500">Rolling summary</div>
+            </div>
+            <div class="grid grid-cols-2 lg:grid-cols-6 gap-3 mt-4">
+              <div class="rounded-2xl border border-white/8 bg-white/[0.02] px-4 py-4">
+                <div class="text-[10px] uppercase tracking-[0.18em] text-slate-500 font-bold">New Signups</div>
+                <div class="text-xl font-bold mt-2">${adminAnalytics.last30Days?.newUsers || 0}</div>
+              </div>
+              <div class="rounded-2xl border border-white/8 bg-white/[0.02] px-4 py-4">
+                <div class="text-[10px] uppercase tracking-[0.18em] text-slate-500 font-bold">New Pro</div>
+                <div class="text-xl font-bold mt-2">${adminAnalytics.last30Days?.newProUsers || 0}</div>
+              </div>
+              <div class="rounded-2xl border border-white/8 bg-white/[0.02] px-4 py-4">
+                <div class="text-[10px] uppercase tracking-[0.18em] text-slate-500 font-bold">Feedbacks</div>
+                <div class="text-xl font-bold mt-2">${adminAnalytics.last30Days?.feedbacks || 0}</div>
+              </div>
+              <div class="rounded-2xl border border-white/8 bg-white/[0.02] px-4 py-4">
+                <div class="text-[10px] uppercase tracking-[0.18em] text-slate-500 font-bold">Logs</div>
+                <div class="text-xl font-bold mt-2">${adminAnalytics.last30Days?.usageLogs || 0}</div>
+              </div>
+              <div class="rounded-2xl border border-white/8 bg-white/[0.02] px-4 py-4">
+                <div class="text-[10px] uppercase tracking-[0.18em] text-slate-500 font-bold">Errors</div>
+                <div class="text-xl font-bold mt-2">${adminAnalytics.last30Days?.errors || 0}</div>
+              </div>
+              <div class="rounded-2xl border border-white/8 bg-white/[0.02] px-4 py-4">
+                <div class="text-[10px] uppercase tracking-[0.18em] text-slate-500 font-bold">Upgrade Requests</div>
+                <div class="text-xl font-bold mt-2">${adminAnalytics.last30Days?.upgradeRequests || 0}</div>
               </div>
             </div>
           </div>
         `;
+        requestAnimationFrame(() => animateAnalyticsCounts());
+      }
+
+      function renderPremiumRequests() {
+        const el = document.getElementById("tab-premium");
+        if (!el) return;
+        if (!adminPremiumRequests.length) {
+          el.innerHTML = `<div class="rounded-[1.5rem] border border-dashed border-white/10 p-8 text-center text-slate-400">No premium requests yet.</div>`;
+          return;
+        }
+        el.innerHTML = adminPremiumRequests
+          .map((item) => {
+            const statusTone =
+              item.status === "granted"
+                ? "bg-emerald-500/15 text-emerald-300"
+                : item.status === "dismissed"
+                  ? "bg-rose-500/15 text-rose-300"
+                  : "bg-amber-500/15 text-amber-300";
+            return `
+          <article class="glass border border-white/10 rounded-[1.35rem] p-4 sm:p-5">
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                  <h3 class="text-base sm:text-lg font-bold text-white">${escapeHtml(item.name || "Unknown User")}</h3>
+                  <span class="px-2.5 py-1 rounded-full ${statusTone} text-[10px] font-bold uppercase tracking-[0.16em]">${escapeHtml(item.status || "pending")}</span>
+                </div>
+                <div class="mt-2 text-sm text-slate-400 break-all">${escapeHtml(item.email || "No email")}</div>
+                <div class="mt-3 space-y-1 text-sm text-slate-300">
+                  <div><span class="text-slate-500">Feature:</span> ${escapeHtml(item.requestedFeature || "MediaLab Pro")}</div>
+                  <div><span class="text-slate-500">Source:</span> ${escapeHtml(item.source || "studio")}</div>
+                  <div><span class="text-slate-500">Requested:</span> ${escapeHtml(formatDate(item.createdAt))}</div>
+                  <div><span class="text-slate-500">Message:</span> ${escapeHtml(item.message || "Request premium join.")}</div>
+                </div>
+              </div>
+              <div class="flex flex-wrap gap-2 lg:justify-end">
+                <button onclick="updatePremiumRequest('${item._id}', 'granted')" class="px-3.5 py-2 rounded-xl bg-emerald-400 text-slate-950 text-xs sm:text-sm font-bold hover:bg-emerald-300 transition-all">Grant</button>
+                <button onclick="updatePremiumRequest('${item._id}', 'dismissed')" class="px-3.5 py-2 rounded-xl bg-white/5 border border-white/10 text-slate-200 text-xs sm:text-sm font-bold hover:bg-white/10 transition-all">Dismiss</button>
+              </div>
+            </div>
+          </article>
+        `;
+          })
+          .join("");
       }
 
       function renderFeedbacks() {
@@ -355,9 +681,29 @@
           el.innerHTML = `<div class="rounded-[1.5rem] border border-dashed border-white/10 p-8 text-center text-slate-400">No feedback saved yet.</div>`;
           return;
         }
-        el.innerHTML = adminFeedbacks
-          .map(
-            (item) => `
+        const filteredFeedbacks = getFilteredFeedbacks();
+        el.innerHTML = `
+          <div class="glass border border-white/10 rounded-[1.4rem] p-4 sm:p-5 space-y-4">
+            <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div class="flex gap-2 overflow-x-auto hide-scrollbar">
+                <button onclick="setFeedbackView('all')" class="mini-tab ${feedbackView === "all" ? "active" : ""} px-4 py-2 rounded-2xl text-xs font-bold uppercase tracking-[0.16em]">All Feedbacks</button>
+                <button onclick="setFeedbackView('flagged')" class="mini-tab ${feedbackView === "flagged" ? "active" : ""} px-4 py-2 rounded-2xl text-xs font-bold uppercase tracking-[0.16em]">Flagged</button>
+                <button onclick="setFeedbackView('filter')" class="mini-tab ${feedbackView === "filter" ? "active" : ""} px-4 py-2 rounded-2xl text-xs font-bold uppercase tracking-[0.16em]">Filter</button>
+              </div>
+              <div class="text-xs text-slate-400">${filteredFeedbacks.length} result${filteredFeedbacks.length === 1 ? "" : "s"}</div>
+            </div>
+            <div class="${feedbackView === "filter" ? "grid" : "hidden"} grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+              <input data-feedback-filter="name" value="${escapeHtml(feedbackFilters.name)}" oninput="updateFeedbackFilter('name', this.value)" placeholder="Filter by name" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none focus:border-cyan-400" />
+              <input data-feedback-filter="email" value="${escapeHtml(feedbackFilters.email)}" oninput="updateFeedbackFilter('email', this.value)" placeholder="Filter by email" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none focus:border-cyan-400" />
+              <input data-feedback-filter="location" value="${escapeHtml(feedbackFilters.location)}" oninput="updateFeedbackFilter('location', this.value)" placeholder="Filter by location" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none focus:border-cyan-400" />
+              <input data-feedback-filter="time" value="${escapeHtml(feedbackFilters.time)}" oninput="updateFeedbackFilter('time', this.value)" placeholder="Filter by time" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none focus:border-cyan-400" />
+            </div>
+          </div>
+          ${
+            filteredFeedbacks.length
+              ? filteredFeedbacks
+                  .map(
+                    (item) => `
           <article id="feedback-row-${item._id}" class="feedback-row rounded-[1.35rem] border border-white/10 bg-white/[0.03] overflow-hidden">
             <button onclick="toggleFeedbackRow('${item._id}')" class="w-full text-left px-4 py-4 sm:px-5 hover:bg-white/[0.03] transition-all">
               <div class="flex items-start gap-3">
@@ -367,7 +713,7 @@
                     <h3 class="text-sm sm:text-base font-bold text-white">${item.username || "Anonymous"}</h3>
                     <span class="px-2.5 py-1 rounded-full bg-white/5 text-slate-300 text-[10px] font-bold uppercase tracking-[0.16em]">${item.rating}/5</span>
                     <span class="px-2.5 py-1 rounded-full ${item.status === "completed" ? "bg-emerald-500/15 text-emerald-300" : "bg-cyan-500/15 text-cyan-300"} text-[10px] font-bold uppercase tracking-[0.16em]">${item.status || "open"}</span>
-                    <span class="px-2.5 py-1 rounded-full ${item.hidden ? "bg-amber-500/15 text-amber-300" : "bg-white/5 text-slate-400"} text-[10px] font-bold uppercase tracking-[0.16em]">${item.hidden ? "hidden" : "visible"}</span>
+                    <span class="px-2.5 py-1 rounded-full ${item.hidden ? "bg-amber-500/15 text-amber-300" : "bg-white/5 text-slate-400"} text-[10px] font-bold uppercase tracking-[0.16em]">${item.hidden ? "flagged" : "visible"}</span>
                   </div>
                   <p class="text-xs sm:text-sm text-slate-400 mt-1">${item.email || "Anonymous"} | ${formatDate(item.createdAt)}</p>
                 </div>
@@ -376,15 +722,24 @@
             </button>
             <div class="feedback-detail border-t border-white/6 px-4 py-4 sm:px-5 sm:py-5 bg-slate-950/35">
               <p class="text-sm sm:text-base text-slate-200 leading-relaxed">${item.feedback}</p>
+              <div class="mt-3 space-y-1 text-xs sm:text-sm text-slate-400">
+                <div>Name: ${item.username || "Anonymous"}</div>
+                <div>Email: ${item.email || "Anonymous"}</div>
+                <div>Location: ${item.location || item.country || item.region || "Not available"}</div>
+                <div>Time: ${formatDate(item.createdAt)}</div>
+              </div>
               <div class="flex flex-wrap gap-2 mt-4">
                 <button onclick="updateFeedback('${item._id}', { status: '${item.status === "completed" ? "open" : "completed"}' })" class="px-3.5 py-2 rounded-xl bg-cyan-400 text-slate-950 text-xs sm:text-sm font-bold hover:bg-cyan-300 transition-all">${item.status === "completed" ? "Reopen" : "Complete"}</button>
-                <button onclick="updateFeedback('${item._id}', { hidden: ${item.hidden ? "false" : "true"} })" class="px-3.5 py-2 rounded-xl bg-white/5 border border-white/10 text-slate-200 text-xs sm:text-sm font-bold hover:bg-white/10 transition-all">${item.hidden ? "Unhide" : "Hide"}</button>
+                <button onclick="updateFeedback('${item._id}', { hidden: ${item.hidden ? "false" : "true"} })" class="px-3.5 py-2 rounded-xl bg-white/5 border border-white/10 text-slate-200 text-xs sm:text-sm font-bold hover:bg-white/10 transition-all">${item.hidden ? "Unflag" : "Flag"}</button>
               </div>
             </div>
           </article>
         `,
-          )
-          .join("");
+                  )
+                  .join("")
+              : `<div class="rounded-[1.5rem] border border-dashed border-white/10 p-8 text-center text-slate-400">No feedback matches this view.</div>`
+          }
+        `;
       }
 
       function renderUsers() {
@@ -435,7 +790,7 @@
         }
         const activities = [...adminUsageLogs].reverse().slice(-140);
         el.innerHTML = `
-          <div id="activity-terminal" class="terminal-shell rounded-[1.6rem] border border-cyan-500/12 shadow-[0_25px_80px_rgba(2,6,23,0.35)] overflow-hidden">
+          <div id="activity-terminal" class="terminal-shell terminal-shell-window rounded-[1.6rem] border border-cyan-500/12 shadow-[0_25px_80px_rgba(2,6,23,0.35)] overflow-hidden">
             <button onclick="toggleTerminalPane('activity-terminal')" class="w-full flex items-center justify-between gap-3 px-5 py-4 border-b border-white/8">
               <div>
                 <div class="text-[11px] uppercase tracking-[0.22em] text-cyan-300 font-bold">Live Logs</div>
@@ -443,33 +798,48 @@
               </div>
               <div class="flex items-center gap-3">
                 <span class="px-3 py-1 rounded-full bg-cyan-500/15 text-cyan-300 text-[10px] font-bold uppercase tracking-[0.18em]">${activities.length} lines</span>
+                <button onclick="event.stopPropagation(); openClearLogsModal()" class="rounded-xl border border-rose-500/20 bg-rose-500/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-rose-200 hover:bg-rose-500/15 transition-all">Clear Log</button>
                 <svg class="terminal-chevron h-4 w-4 text-slate-500 transition-transform" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 011.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"></path></svg>
               </div>
             </button>
-            <div class="terminal-body max-h-[760px] overflow-y-auto px-4 py-4">
+            <div class="terminal-body overflow-y-auto px-4 py-4" style="max-height:min(62vh, calc(100vh - 320px));">
               ${activities
                 .map((item, index) => {
-                  const lineTone =
-                    item.kind === "error"
-                      ? "text-rose-300"
-                      : item.isPro
+                  const actionText = String(item.action || "").toLowerCase();
+                  const summaryText = String(item.summary || "").toLowerCase();
+                  const isErrorLog = item.kind === "error";
+                  const isLoginLog =
+                    actionText.includes("login") ||
+                    summaryText.includes("login");
+                  const isProLog =
+                    actionText.includes("upgrade") ||
+                    actionText.includes("pro") ||
+                    summaryText.includes("upgrade") ||
+                    summaryText.includes("pro");
+                  const lineTone = isErrorLog
+                    ? "text-rose-300"
+                    : isProLog
+                      ? "text-amber-300"
+                      : isLoginLog
                         ? "text-emerald-300"
                         : !item.isAnonymous
                           ? "text-emerald-200"
                           : "text-slate-200";
-                  const prefix =
-                    item.kind === "error"
-                      ? "[error]"
-                      : item.isPro
-                        ? "[pro]"
-                        : !item.isAnonymous
-                          ? "[user]"
-                          : "[anon]";
+                  const identityTone = isErrorLog
+                    ? "text-rose-400/90"
+                    : isProLog
+                      ? "text-amber-300/90"
+                      : isLoginLog
+                        ? "text-emerald-400/90"
+                        : "text-cyan-200/85";
                   return `
                 <div class="terminal-line px-1 py-1.5">
                   <div class="text-right text-[11px] font-black text-slate-600 pt-0.5">${String(index + 1).padStart(4, "0")}</div>
                   <div class="text-sm leading-6 break-words ${lineTone}">
-                    <span class="text-slate-500">${prefix}</span> ${escapeHtml(item.displayLine || item.summary)} <span class="text-slate-600">| ${escapeHtml(item.source || "web")}</span>
+                    <span class="${identityTone}">[${escapeHtml(formatLogIdentity(item))}]</span>
+                    <span class="${lineTone}">${escapeHtml(formatLogSummary(item))}</span>
+                    <span class="text-slate-500">| ${escapeHtml(item.source || "web")}</span>
+                    <span class="text-slate-600">-- ${escapeHtml(formatDate(item.createdAt))}</span>
                   </div>
                 </div>
               `;
@@ -505,10 +875,7 @@
       }
 
       function connectAdminLiveFeed() {
-        if (
-          adminSocket ||
-          localStorage.getItem(ADMIN_ACCESS_KEY) !== "granted"
-        )
+        if (adminSocket || localStorage.getItem(ADMIN_ACCESS_KEY) !== "granted")
           return;
         adminSocket = io();
         adminSocket.on("connect", () => setLiveStatus(true));
@@ -518,6 +885,10 @@
         });
         adminSocket.on("admin:server-error", (payload) => {
           upsertLiveLog({ ...payload, kind: "error" });
+        });
+        adminSocket.on("admin:usage-log-cleared", () => {
+          adminUsageLogs = [];
+          renderLogs();
         });
       }
 
@@ -535,24 +906,42 @@
         await loadAdminData();
       }
 
+      async function updatePremiumRequest(id, status) {
+        const res = await fetch(`/api/admin/upgrade-requests/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status }),
+        });
+        const data = await res.json();
+        if (!data.success) {
+          alert(data.message || "Could not update premium request.");
+          return;
+        }
+        await loadAdminData();
+      }
+
       async function loadAdminData() {
         if (localStorage.getItem(ADMIN_ACCESS_KEY) !== "granted") return;
         try {
-          const [feedbackRes, analyticsRes, usageLogRes] = await Promise.all([
+          const [feedbackRes, analyticsRes, usageLogRes, premiumRes] = await Promise.all([
             fetch("/api/admin/feedbacks"),
             fetch("/api/admin/analytics"),
             fetch("/api/admin/usage-logs"),
+            fetch("/api/admin/upgrade-requests"),
           ]);
           const feedbackData = await feedbackRes.json();
           const analyticsData = await analyticsRes.json();
           const usageLogData = await usageLogRes.json();
+          const premiumData = await premiumRes.json();
           adminFeedbacks = feedbackData.feedbacks || [];
           adminAnalytics = analyticsData.analytics || {};
           adminUsageLogs = usageLogData.logs || [];
+          adminPremiumRequests = premiumData.requests || [];
           renderAnalyticsDetails();
           renderFeedbacks();
           renderLogs();
           renderUsers();
+          renderPremiumRequests();
           connectAdminLiveFeed();
           setLiveStatus(Boolean(adminSocket?.connected));
         } catch (error) {
@@ -573,4 +962,3 @@
     </script>
   </body>
 </html>
-
