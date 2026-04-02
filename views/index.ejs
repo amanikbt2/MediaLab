@@ -4369,7 +4369,7 @@
                         <div class="builder-popover-grid">
                             <button onclick="requestNewBuilderProject(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-file-circle-plus text-cyan-400"></i><span>New Project<small>Reset current canvas</small></span></button>
                             <button onclick="saveBuilderDraft(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-floppy-disk text-cyan-400"></i><span>Save Draft<small>Keep work locally</small></span></button>
-                            <button onclick="document.getElementById('builder-file-input').click(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-file-import text-cyan-400"></i><span>Import HTML<small>Open local project code</small></span></button>
+                            <button onclick="openBuilderFilePicker('builder-file-input'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-file-import text-cyan-400"></i><span>Import HTML<small>Open local project code</small></span></button>
                             <button onclick="downloadBuilderHtmlFile(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-file-export text-cyan-400"></i><span>Export HTML<small>Download polished page file</small></span></button>
                             <button onclick="downloadBuilderStylesTxt(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-file-lines text-cyan-400"></i><span>Export TXT<small>Download full code as text</small></span></button>
                             <button onclick="requestCanvasClear(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-trash-can text-red-400"></i><span>Clear Canvas<small>Remove all current elements</small></span></button>
@@ -4451,7 +4451,7 @@
                     </div>
                 </div>
             </div>
-            <div id="canvas-container" onclick="deselectAll(event)" class="flex-1 overflow-auto flex justify-center items-start px-2 sm:px-4 pt-2 sm:pt-4 pb-2 sm:pb-4 cursor-default custom-scrollbar">
+            <div id="canvas-container" onclick="deselectAll(event)" class="flex-1 overflow-y-auto overflow-x-hidden flex justify-center items-start px-2 sm:px-4 pt-2 sm:pt-4 pb-2 sm:pb-4 cursor-default custom-scrollbar">
                 <div class="w-full max-w-[1680px]">
                     <div class="px-1 sm:px-2 pb-2 flex items-center justify-between">
                         <div class="text-[10px] font-black uppercase tracking-[0.22em] text-gray-500">Desktop Canvas</div>
@@ -4461,7 +4461,7 @@
                             <span class="px-3 py-1.5 rounded-full bg-white/5 border border-white/5">Mobile Safe</span>
                         </div>
                     </div>
-                    <div id="web-canvas" data-page-background="#ffffff" class="builder-grid bg-white w-[calc(100vw-1rem)] sm:w-[calc(100vw-2rem)] max-w-[1680px] min-h-[calc(100vh-5.2rem)] sm:min-h-[calc(100vh-7.2rem)] relative shadow-[0_60px_150px_rgba(0,0,0,0.55)] rounded-[1.2rem] sm:rounded-[2rem] overflow-hidden transition-transform duration-500">
+                    <div id="web-canvas" data-page-background="#ffffff" class="builder-grid bg-white w-full max-w-[1680px] min-h-[calc(100vh-5.2rem)] sm:min-h-[calc(100vh-7.2rem)] relative shadow-[0_60px_150px_rgba(0,0,0,0.55)] rounded-[1.2rem] sm:rounded-[2rem] overflow-hidden transition-transform duration-500">
                     </div>
                 </div>
             </div>
@@ -6124,7 +6124,7 @@
         "Effects",
         "Transform",
         "Position",
-        "Advanced",
+        "Custom CSS",
       ];
       let inspectorPageIndex = 0;
       let historyStack = [];
@@ -6716,7 +6716,19 @@
         openSmartInspector(type);
       }
       function triggerLocalImage() {
-        document.getElementById("local-img-input").click();
+        openBuilderFilePicker("local-img-input");
+      }
+      function requestBuilderFullscreen() {
+        const doc = document.documentElement;
+        if (!isBuilderActive() || document.fullscreenElement || !doc?.requestFullscreen) return;
+        Promise.resolve(doc.requestFullscreen()).catch(() => {});
+      }
+      function openBuilderFilePicker(inputId) {
+        const input = document.getElementById(inputId);
+        if (!input) return;
+        input.value = "";
+        requestBuilderFullscreen();
+        input.click();
       }
       function handleLocalImage(file) {
         if (!file) return;
@@ -6736,7 +6748,7 @@
         switch (type) {
           case "div":
             return {
-              text: "Content Block",
+              text: "",
             };
           case "text":
             return {
@@ -6801,7 +6813,7 @@
             body.appendChild(component);
             break;
           case "div":
-            body.innerHTML = `<div contenteditable="true" class="w-full h-full flex items-center justify-center font-semibold outline-none">${attrs.text || "Content Block"}</div>`;
+            body.innerHTML = `<div contenteditable="true" class="w-full h-full flex items-center justify-center font-semibold outline-none">${attrs.text || ""}</div>`;
             break;
           default:
             body.innerHTML = `<div class="w-full h-full block"></div>`;
@@ -6842,14 +6854,15 @@
         Object.assign(wrap.style, {
           width: normalizedStyles.width || "260px",
           height: normalizedStyles.height || "100px",
-          left: "150px",
-          top: "150px",
-          zIndex: "10",
+          left: normalizedStyles.left,
+          top: normalizedStyles.top,
+          zIndex: normalizedStyles.zIndex,
           opacity: normalizedStyles.opacity,
           mixBlendMode: normalizedStyles.mixBlendMode,
           transform: `rotate(${normalizedStyles.rotate})`,
         });
         applyElementContentStyles(wrap, type, normalizedStyles, mergedAttrs);
+        applyCustomCssRulesToElement(wrap, mergedAttrs.customCssRules);
         hydrateCanvasElement(wrap);
         canvas.appendChild(wrap);
         saveToHistory();
@@ -7033,6 +7046,7 @@
           editor.value = text;
           handleBuilderCodeInput();
           applyCodeModeToCanvas();
+          preserveBuilderFullscreenAfterUpload();
         };
         reader.readAsText(file);
       }
@@ -7158,7 +7172,7 @@
                 lineHeight: "1.5",
               },
               {
-                text: "Clean defaults, excellent spacing, and export that developers can actually work with.",
+                text: "",
               },
             );
           });
@@ -7179,11 +7193,11 @@
               height: `${cardH}px`,
               left: `${startX}px`,
               top: `${startY}px`,
-              backgroundMode: "solid",
-              backgroundColor: "#ffffff",
-              backgroundColorSecondary: "#ffffff",
+              backgroundMode: "gradient",
+              backgroundColor: "#06b6d4",
+              backgroundColorSecondary: "#0f172a",
               borderRadius: "32px",
-              boxShadow: "0 40px 100px rgba(0,0,0,0.1)",
+              boxShadow: "0 40px 100px rgba(8,145,178,0.18)",
             },
             { id: `login_bg_${Date.now()}` },
           );
@@ -7196,7 +7210,7 @@
               top: `${currentY}px`,
               fontSize: "28px",
               fontWeight: "800",
-              color: "#1e293b",
+              color: "#ecfeff",
               textAlign: "center",
             },
             { text: "Welcome Back" },
@@ -7289,7 +7303,7 @@
               color: "#64748b",
               fontWeight: "500",
             },
-            { text: "Tell us about your project and we’ll reply quickly." },
+            { text: "" },
           );
           addObject(
             "input",
@@ -7402,7 +7416,7 @@
                 lineHeight: "1.5",
               },
               {
-                text: "Professional product-ready essentials with reliable export and clean editing.",
+                text: "",
               },
             );
             addObject(
@@ -7464,7 +7478,7 @@
               fontSize: "15px",
               fontWeight: "500",
             },
-            { text: "Track product growth in real time." },
+            { text: "" },
           );
           [0, 1, 2].forEach((i) => {
             addObject(
@@ -7535,6 +7549,9 @@
                       ].includes(cls),
                   )
                   .join(" "),
+                customCssRules: normalizeCustomCssRules(
+                  JSON.parse(existingEl.dataset.customCssRules || "[]"),
+                ),
               }
             : {
                 id: `el_${Date.now()}`,
@@ -7545,6 +7562,7 @@
                 href: "#",
                 src: "",
                 className: "",
+                customCssRules: normalizeCustomCssRules(),
               },
         };
         syncInspectorUI();
@@ -7688,7 +7706,7 @@
                     <div class="text-[10px] text-slate-400 mt-1 truncate">${s.backgroundImageUrl ? "Uploaded image ready" : "No uploaded image yet"}</div>
                   </div>
                   <div class="flex items-center gap-2 shrink-0">
-                    <button type="button" onclick="document.getElementById('inspector-bg-img-input').click()" class="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-[10px] font-black uppercase tracking-[0.16em] text-slate-200 hover:bg-white/10 transition-all">Upload</button>
+                    <button type="button" onclick="openBuilderFilePicker('inspector-bg-img-input')" class="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-[10px] font-black uppercase tracking-[0.16em] text-slate-200 hover:bg-white/10 transition-all">Upload</button>
                     ${s.backgroundImageUrl ? `<button type="button" onclick="updateStyle('backgroundImageUrl', ''); updateStyle('backgroundMode', 'solid')" class="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400 hover:bg-white/10 transition-all">Clear</button>` : ""}
                   </div>
                 </div>
@@ -7810,12 +7828,39 @@
             </div>`;
             break;
           case 11:
+            const customCssRules = normalizeCustomCssRules(a.customCssRules);
             h += renderBuilderInput(
               "Custom CSS Class",
               "text",
               a.className || "",
               "updateAttr('className', this.value)",
             );
+            h += `<div class="rounded-2xl border border-white/5 bg-white/[0.03] p-3 space-y-3">
+              <div class="text-[8px] font-black uppercase tracking-[0.24em] text-cyan-400">Custom CSS A</div>
+              ${customCssRules
+                .slice(0, 3)
+                .map(
+                  (rule, index) => `
+                    <div class="grid grid-cols-2 gap-2">
+                      ${renderBuilderInput(`Target ${index + 1}`, "text", rule.selector, `updateCustomCssRule(${index}, 'selector', this.value)`)}
+                      ${renderBuilderInput(`Styles ${index + 1}`, "text", rule.styles, `updateCustomCssRule(${index}, 'styles', this.value)`)}
+                    </div>`,
+                )
+                .join("")}
+            </div>`;
+            h += `<div class="rounded-2xl border border-white/5 bg-white/[0.03] p-3 space-y-3">
+              <div class="text-[8px] font-black uppercase tracking-[0.24em] text-cyan-400">Custom CSS B</div>
+              ${customCssRules
+                .slice(3, 6)
+                .map(
+                  (rule, index) => `
+                    <div class="grid grid-cols-2 gap-2">
+                      ${renderBuilderInput(`Target ${index + 4}`, "text", rule.selector, `updateCustomCssRule(${index + 3}, 'selector', this.value)`)}
+                      ${renderBuilderInput(`Styles ${index + 4}`, "text", rule.styles, `updateCustomCssRule(${index + 3}, 'styles', this.value)`)}
+                    </div>`,
+                )
+                .join("")}
+            </div>`;
             break;
         }
         h += `</div>`;
@@ -8335,7 +8380,7 @@
         if (multiSelectButton) {
           multiSelectButton.textContent = multiSelectMode
             ? "Multi On"
-            : "Multi";
+            : "Multi Off";
           multiSelectButton.classList.toggle("bg-cyan-500/20", multiSelectMode);
           multiSelectButton.classList.toggle("text-cyan-300", multiSelectMode);
         }
@@ -8649,6 +8694,46 @@
         document.body.classList.add("builder-mode");
         document.getElementById("studio-workspace")?.classList.remove("hidden");
         document.getElementById("editor-welcome")?.classList.add("hidden");
+        requestBuilderFullscreen();
+      }
+      function normalizeCustomCssRules(rules = []) {
+        const safeRules = Array.isArray(rules) ? rules : [];
+        return Array.from({ length: 6 }, (_, index) => ({
+          selector: String(safeRules[index]?.selector || ""),
+          styles: String(safeRules[index]?.styles || ""),
+        }));
+      }
+      function updateCustomCssRule(index, key, value) {
+        const rules = normalizeCustomCssRules(
+          currentInspectorState.attributes.customCssRules,
+        );
+        if (!rules[index]) return;
+        rules[index][key] = value;
+        currentInspectorState.attributes.customCssRules = rules;
+        updateInspectorPreview();
+      }
+      function applyCustomCssRulesToElement(el, rulesInput) {
+        if (!el) return;
+        const rules = normalizeCustomCssRules(rulesInput);
+        el.dataset.customCssRules = JSON.stringify(rules);
+        const body = el.querySelector(".element-body");
+        if (!body) return;
+        const baseCss = body.dataset.baseInlineCss || body.style.cssText || "";
+        body.dataset.baseInlineCss = baseCss;
+        body.style.cssText = baseCss;
+        rules.forEach((rule) => {
+          const selector = String(rule.selector || "").trim().toLowerCase();
+          const styleText = String(rule.styles || "").trim();
+          if (!styleText) return;
+          if (
+            !selector ||
+            selector === "self" ||
+            selector === "&" ||
+            selector === "element"
+          ) {
+            body.style.cssText = `${body.style.cssText};${styleText}`;
+          }
+        });
       }
       function formatCssDeclarationBlock(styleText = "", indent = "  ") {
         return String(styleText)
@@ -8976,6 +9061,30 @@ ${payload.body || "  "}
             <button onclick="this.closest('.canvas-element').remove(); saveToHistory();" class="w-7 h-7 bg-gray-950 text-red-500 rounded-lg border border-white/10 flex items-center justify-center pointer-events-auto"><i class="fas fa-trash-alt text-[10px]"></i></button>
         </div>`;
       }
+      function dockStarterSelection() {
+        const canvas = document.getElementById("web-canvas");
+        const target = selectedEl;
+        if (!canvas || !target) return;
+        const compact = canvas.clientWidth < 640;
+        const inset = compact ? 12 : 24;
+        const topInset = compact ? 16 : 24;
+        const naturalWidth = target.offsetWidth || 0;
+        const maxWidth = Math.max(180, canvas.clientWidth - inset * 2);
+        const scale = compact && naturalWidth > maxWidth
+          ? Math.max(0.68, maxWidth / naturalWidth)
+          : 1;
+        const rotateMatch = String(target.style.transform || "").match(
+          /rotate\([^)]+\)/,
+        );
+        const rotatePart = rotateMatch ? ` ${rotateMatch[0]}` : "";
+        target.style.transformOrigin = "top left";
+        target.style.transform =
+          `${scale !== 1 ? `scale(${scale})` : ""}${rotatePart}`.trim() ||
+          "rotate(0deg)";
+        const scaledWidth = naturalWidth * scale;
+        target.style.left = `${Math.max(inset, canvas.clientWidth - scaledWidth - inset)}px`;
+        target.style.top = `${topInset}px`;
+      }
       function autoGroupStarterElements(startCount) {
         const canvas = document.getElementById("web-canvas");
         if (!canvas) return;
@@ -8986,6 +9095,8 @@ ${payload.body || "  "}
         deselectAll();
         if (newElements.length === 1) {
           selectElement(newElements[0]);
+          dockStarterSelection();
+          saveToHistory();
           return;
         }
         multiSelectMode = true;
@@ -8993,6 +9104,8 @@ ${payload.body || "  "}
         groupSelectedElements();
         multiSelectMode = false;
         updateBuilderUI();
+        dockStarterSelection();
+        saveToHistory();
       }
       function detectImportedCanvasType(node) {
         const content =
@@ -9196,6 +9309,7 @@ ${payload.body || "  "}
           currentInspectorState.styles.backgroundSize =
             currentInspectorState.styles.backgroundSize || "cover";
           syncInspectorUI(true);
+          preserveBuilderFullscreenAfterUpload();
         };
         reader.readAsDataURL(file);
       }
@@ -9297,6 +9411,7 @@ ${payload.body || "  "}
           ...getDefaultElementAttributes(type),
           ...a,
         });
+        applyCustomCssRulesToElement(previewShell, a.customCssRules);
         previewStage.appendChild(previewShell);
         preview.appendChild(previewStage);
       }
@@ -9354,6 +9469,10 @@ ${payload.body || "  "}
             currentInspectorState.type,
             normalizedStyles,
             currentInspectorState.attributes,
+          );
+          applyCustomCssRulesToElement(
+            el,
+            currentInspectorState.attributes.customCssRules,
           );
           saveToHistory();
         }
