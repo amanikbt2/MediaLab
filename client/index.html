@@ -1419,6 +1419,129 @@
           inset: 0;
         }
       }
+      .builder-tour-highlight {
+        position: fixed;
+        border-radius: 1.35rem;
+        border: 1px solid rgba(34, 211, 238, 0.85);
+        box-shadow:
+          0 0 0 9999px rgba(2, 6, 23, 0.58),
+          0 0 0 6px rgba(34, 211, 238, 0.14),
+          0 18px 50px rgba(8, 145, 178, 0.28);
+        animation: builderTourPulse 1.7s ease-in-out infinite;
+        transition:
+          top 0.22s ease,
+          left 0.22s ease,
+          width 0.22s ease,
+          height 0.22s ease;
+      }
+      .builder-tour-pointer {
+        position: fixed;
+        width: 3.2rem;
+        height: 3.2rem;
+        border-radius: 999px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background:
+          radial-gradient(circle at 30% 30%, rgba(255,255,255,0.96), rgba(226,232,240,0.88) 55%, rgba(148,163,184,0.65) 100%);
+        border: 1px solid rgba(255,255,255,0.78);
+        box-shadow:
+          0 18px 44px rgba(8, 145, 178, 0.35),
+          0 0 0 8px rgba(34, 211, 238, 0.12);
+        color: #0f172a;
+        transform-origin: center;
+        animation: builderTourPointerFloat 1.4s ease-in-out infinite;
+        transition:
+          top 0.22s ease,
+          left 0.22s ease,
+          opacity 0.18s ease;
+      }
+      .builder-tour-pointer i {
+        font-size: 1.2rem;
+        transform: rotate(-18deg);
+      }
+      @keyframes builderTourPulse {
+        0%,
+        100% {
+          box-shadow:
+            0 0 0 9999px rgba(2, 6, 23, 0.58),
+            0 0 0 6px rgba(34, 211, 238, 0.14),
+            0 18px 50px rgba(8, 145, 178, 0.28);
+        }
+        50% {
+          box-shadow:
+            0 0 0 9999px rgba(2, 6, 23, 0.58),
+            0 0 0 10px rgba(34, 211, 238, 0.2),
+            0 24px 80px rgba(34, 211, 238, 0.42);
+        }
+      }
+      @keyframes builderTourPointerFloat {
+        0%,
+        100% {
+          transform: translateY(0) scale(1);
+        }
+        50% {
+          transform: translateY(-4px) scale(1.04);
+        }
+      }
+      .builder-tour-card {
+        position: fixed;
+        left: 50%;
+        bottom: max(1rem, env(safe-area-inset-bottom));
+        transform: translateX(-50%);
+        width: min(92vw, 24rem);
+        padding: 0.95rem 1rem 1rem;
+        border-radius: 1.2rem;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background:
+          radial-gradient(circle at top, rgba(34, 211, 238, 0.12), transparent 52%),
+          rgba(2, 6, 23, 0.94);
+        box-shadow: 0 20px 70px rgba(2, 6, 23, 0.55);
+        backdrop-filter: blur(22px);
+      }
+      .builder-tour-chip {
+        font-size: 0.55rem;
+        font-weight: 900;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: #67e8f9;
+        margin-bottom: 0.55rem;
+      }
+      .builder-tour-title {
+        font-size: 0.95rem;
+        font-weight: 800;
+        color: #f8fafc;
+        margin: 0 0 0.35rem;
+      }
+      .builder-tour-message {
+        font-size: 0.82rem;
+        line-height: 1.45;
+        color: #cbd5e1;
+        margin: 0;
+      }
+      .builder-tour-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.55rem;
+        margin-top: 0.9rem;
+      }
+      .builder-tour-btn {
+        border: 0;
+        border-radius: 999px;
+        padding: 0.52rem 0.9rem;
+        font-size: 0.68rem;
+        font-weight: 900;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+      .builder-tour-btn--ghost {
+        background: rgba(255, 255, 255, 0.06);
+        color: #cbd5e1;
+      }
+      .builder-tour-btn--primary {
+        background: linear-gradient(135deg, #22d3ee, #0891b2);
+        color: #ecfeff;
+      }
     </style>
   </head>
   <body class="bg-gray-950 text-gray-100 min-h-screen">
@@ -2426,6 +2549,13 @@
       const PREMIUM_TOOL_IDS = ["voice-clone", "text-to-speech", "image-edit"];
       let historyItems = [];
       let currentImages = [];
+      let builderTourState = {
+        active: false,
+        stepIndex: -1,
+        steps: [],
+        dismissedThisSession: false,
+        timer: null,
+      };
       const toolsData = [
         {
           id: "web-builder",
@@ -4539,11 +4669,27 @@
             <div id="builder-snackbar" class="hidden fixed left-1/2 -translate-x-1/2 bottom-4 sm:bottom-6 z-[3400] px-4 py-3 rounded-2xl bg-slate-950/92 border border-cyan-400/20 text-sm font-bold text-cyan-100 shadow-[0_20px_50px_rgba(2,6,23,0.45)] backdrop-blur-xl">
               Code copied to clipboard
             </div>
+            <div id="builder-tour-overlay" class="hidden fixed inset-0 z-[3410] pointer-events-none">
+                <div id="builder-tour-highlight" class="builder-tour-highlight hidden"></div>
+                <div id="builder-tour-pointer" class="builder-tour-pointer hidden">
+                    <i class="fas fa-hand-pointer"></i>
+                </div>
+                <div id="builder-tour-card" class="builder-tour-card hidden pointer-events-auto">
+                    <div class="builder-tour-chip">Workflow AI Guide</div>
+                    <h4 id="builder-tour-title" class="builder-tour-title">Builder guide</h4>
+                    <p id="builder-tour-message" class="builder-tour-message">A quick tour helps you move faster.</p>
+                    <div class="builder-tour-actions">
+                        <button id="builder-tour-dismiss" type="button" class="builder-tour-btn builder-tour-btn--ghost">Dismiss</button>
+                        <button id="builder-tour-next" type="button" class="builder-tour-btn builder-tour-btn--primary">Next</button>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
     `;
           // Force immediate logic bind
           setTimeout(initCanvasLogic, 100);
+          setTimeout(scheduleBuilderTutorial, 180);
         }
         // 3. VIDEO → AUDIO CONVERTER
         // =============================================================
@@ -6167,8 +6313,10 @@
           updateBuilderUI();
           renderBuilderDrafts();
         }
+        scheduleBuilderTutorial();
       }
       function performExitStudio() {
+        closeBuilderTutorial();
         if (document.fullscreenElement) document.exitFullscreen();
         document.body.classList.remove("builder-mode");
         document.getElementById("studio-workspace").classList.add("hidden");
@@ -6214,6 +6362,7 @@
         updateBuilderUI();
         document.addEventListener("contextmenu", handleRightClick);
         builderInitialized = true;
+        bindBuilderTutorialControls();
       }
       function getCanvasPageStyleState(
         canvas = document.getElementById("web-canvas"),
@@ -8695,6 +8844,241 @@
         document.getElementById("studio-workspace")?.classList.remove("hidden");
         document.getElementById("editor-welcome")?.classList.add("hidden");
         requestBuilderFullscreen();
+      }
+      function bindBuilderTutorialControls() {
+        const dismissBtn = document.getElementById("builder-tour-dismiss");
+        const nextBtn = document.getElementById("builder-tour-next");
+        if (dismissBtn && !dismissBtn.dataset.bound) {
+          dismissBtn.dataset.bound = "true";
+          dismissBtn.addEventListener("click", () => {
+            const step = builderTourState.steps[builderTourState.stepIndex];
+            if (step?.secondaryAction) step.secondaryAction();
+          });
+        }
+        if (nextBtn && !nextBtn.dataset.bound) {
+          nextBtn.dataset.bound = "true";
+          nextBtn.addEventListener("click", () => {
+            const step = builderTourState.steps[builderTourState.stepIndex];
+            if (step?.primaryAction) step.primaryAction();
+          });
+        }
+      }
+      function shouldOfferBuilderTutorial() {
+        if (currentStudioToolId !== "web-builder") return false;
+        if (builderTourState.active || builderTourState.dismissedThisSession) return false;
+        if (loggedIn) return !currentUser?.builderTutorialSeen;
+        return sessionStorage.getItem("medialab_builder_tutorial_guest_done") !== "1";
+      }
+      function scheduleBuilderTutorial() {
+        clearTimeout(builderTourState.timer);
+        if (!shouldOfferBuilderTutorial()) return;
+        builderTourState.timer = setTimeout(() => {
+          if (shouldOfferBuilderTutorial()) openBuilderTutorialPrompt();
+        }, 700);
+      }
+      function getBuilderTutorialSteps() {
+        return [
+          {
+            title: "Builder Summary",
+            message:
+              "This studio helps you insert sections, style them, arrange layers, and export a clean page without losing your flow.",
+            targetSelector: "#builder-toolbar-shell",
+            primaryLabel: "Next",
+            primaryAction: advanceBuilderTutorial,
+            secondaryLabel: "Dismiss",
+            secondaryAction: () => dismissBuilderTutorial(true),
+          },
+          {
+            title: "Tabs And Ribbon",
+            message:
+              "These top tabs are your main workflow. On phones, swipe this row sideways to reach the hidden tabs.",
+            targetSelector: ".builder-tabbar",
+            primaryLabel: "Next",
+            primaryAction: advanceBuilderTutorial,
+            secondaryLabel: "Dismiss",
+            secondaryAction: () => dismissBuilderTutorial(true),
+          },
+          {
+            title: "Insert Templates",
+            message:
+              "Open Templates to drop in ready-made sections fast, then tweak them with the visual styler.",
+            targetSelector: "#tab-templates",
+            primaryLabel: "Next",
+            primaryAction: advanceBuilderTutorial,
+            secondaryLabel: "Dismiss",
+            secondaryAction: () => dismissBuilderTutorial(true),
+          },
+          {
+            title: "Export Your Work",
+            message:
+              "When your page is ready, open File to import, save drafts, or export the final HTML.",
+            targetSelector: "#tab-file",
+            primaryLabel: "Next",
+            primaryAction: advanceBuilderTutorial,
+            secondaryLabel: "Dismiss",
+            secondaryAction: () => dismissBuilderTutorial(true),
+          },
+          {
+            title: "Monetize Later",
+            message:
+              "After exporting your project, click Monetize your work to open AdSense resources and keep moving toward launch.",
+            targetSelector: "#more-features-toggle",
+            primaryLabel: loggedIn ? "Finish" : "Next",
+            primaryAction: loggedIn
+              ? completeBuilderTutorial
+              : advanceBuilderTutorial,
+            secondaryLabel: "Dismiss",
+            secondaryAction: () => dismissBuilderTutorial(true),
+          },
+          {
+            title: "Continue With Workflow AI",
+            message:
+              "Login to continue with Workflow AI step by step until you publish your first website.",
+            targetSelector: "#user-section",
+            primaryLabel: "Dismiss",
+            primaryAction: () => dismissBuilderTutorial(true),
+            secondaryLabel: "Login",
+            secondaryAction: () => {
+              dismissBuilderTutorial(true);
+              showLogin();
+            },
+          },
+        ];
+      }
+      function openBuilderTutorialPrompt() {
+        builderTourState.steps = [
+          {
+            title: "Workflow AI Guide",
+            message:
+              "Would you like Workflow AI to guide you through the Web Builder with short friendly tips?",
+            targetSelector: document.getElementById("editor-welcome")?.classList.contains("hidden")
+              ? "#studio-workspace"
+              : "#editor-welcome .feature-gate-card",
+            primaryLabel: "Yes",
+            primaryAction: startBuilderTutorial,
+            secondaryLabel: "No",
+            secondaryAction: () => dismissBuilderTutorial(false),
+          },
+        ];
+        builderTourState.stepIndex = 0;
+        builderTourState.active = true;
+        renderBuilderTutorialStep();
+      }
+      function startBuilderTutorial() {
+        if (!isBuilderActive()) {
+          launchBossMode();
+          setTimeout(() => startBuilderTutorial(), 260);
+          return;
+        }
+        builderTourState.steps = getBuilderTutorialSteps();
+        builderTourState.stepIndex = 0;
+        builderTourState.active = true;
+        renderBuilderTutorialStep();
+      }
+      function advanceBuilderTutorial() {
+        if (!builderTourState.active) return;
+        const nextIndex = builderTourState.stepIndex + 1;
+        if (nextIndex >= builderTourState.steps.length) {
+          completeBuilderTutorial();
+          return;
+        }
+        builderTourState.stepIndex = nextIndex;
+        renderBuilderTutorialStep();
+      }
+      function positionBuilderTutorialHighlight(target) {
+        const overlay = document.getElementById("builder-tour-overlay");
+        const highlight = document.getElementById("builder-tour-highlight");
+        const pointer = document.getElementById("builder-tour-pointer");
+        const card = document.getElementById("builder-tour-card");
+        if (!overlay || !highlight || !pointer || !card) return;
+        if (!target) {
+          highlight.classList.add("hidden");
+          pointer.classList.add("hidden");
+          return;
+        }
+        target.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+          inline: "center",
+        });
+        const rect = target.getBoundingClientRect();
+        const pad = 8;
+        highlight.style.top = `${Math.max(8, rect.top - pad)}px`;
+        highlight.style.left = `${Math.max(8, rect.left - pad)}px`;
+        highlight.style.width = `${Math.max(40, rect.width + pad * 2)}px`;
+        highlight.style.height = `${Math.max(36, rect.height + pad * 2)}px`;
+        highlight.classList.remove("hidden");
+        const pointerLeft = Math.min(
+          window.innerWidth - 62,
+          Math.max(8, rect.right - 18),
+        );
+        const pointerTop = Math.max(8, rect.top - 26);
+        pointer.style.left = `${pointerLeft}px`;
+        pointer.style.top = `${pointerTop}px`;
+        pointer.classList.remove("hidden");
+      }
+      function renderBuilderTutorialStep() {
+        const overlay = document.getElementById("builder-tour-overlay");
+        const card = document.getElementById("builder-tour-card");
+        const title = document.getElementById("builder-tour-title");
+        const message = document.getElementById("builder-tour-message");
+        const dismissBtn = document.getElementById("builder-tour-dismiss");
+        const nextBtn = document.getElementById("builder-tour-next");
+        const step = builderTourState.steps[builderTourState.stepIndex];
+        if (!overlay || !card || !title || !message || !dismissBtn || !nextBtn || !step) {
+          closeBuilderTutorial();
+          return;
+        }
+        overlay.classList.remove("hidden");
+        card.classList.remove("hidden");
+        title.textContent = step.title;
+        message.textContent = step.message;
+        dismissBtn.textContent = step.secondaryLabel || "Dismiss";
+        nextBtn.textContent = step.primaryLabel || "Next";
+        const target = step.targetSelector
+          ? document.querySelector(step.targetSelector)
+          : null;
+        positionBuilderTutorialHighlight(target);
+      }
+      async function completeBuilderTutorial() {
+        builderTourState.dismissedThisSession = true;
+        if (loggedIn && currentUser && !currentUser.builderTutorialSeen) {
+          try {
+            const res = await fetch("/api/auth/builder-tutorial/complete", {
+              method: "POST",
+              credentials: "include",
+            });
+            const data = await res.json();
+            if (data.success) {
+              currentUser.builderTutorialSeen = true;
+            }
+          } catch (error) {
+            console.warn("Builder tutorial completion skipped:", error);
+          }
+        } else if (!loggedIn) {
+          sessionStorage.setItem("medialab_builder_tutorial_guest_done", "1");
+        }
+        closeBuilderTutorial();
+      }
+      function dismissBuilderTutorial(markGuestDone = false) {
+        builderTourState.dismissedThisSession = true;
+        if (!loggedIn && markGuestDone) {
+          sessionStorage.setItem("medialab_builder_tutorial_guest_done", "1");
+        }
+        closeBuilderTutorial();
+      }
+      function closeBuilderTutorial() {
+        clearTimeout(builderTourState.timer);
+        builderTourState.active = false;
+        builderTourState.stepIndex = -1;
+        const overlay = document.getElementById("builder-tour-overlay");
+        const highlight = document.getElementById("builder-tour-highlight");
+        const pointer = document.getElementById("builder-tour-pointer");
+        const card = document.getElementById("builder-tour-card");
+        overlay?.classList.add("hidden");
+        highlight?.classList.add("hidden");
+        pointer?.classList.add("hidden");
+        card?.classList.add("hidden");
       }
       function normalizeCustomCssRules(rules = []) {
         const safeRules = Array.isArray(rules) ? rules : [];

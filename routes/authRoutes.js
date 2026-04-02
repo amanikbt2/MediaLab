@@ -286,4 +286,31 @@ router.get("/test-email", async (req, res) => {
   }
 });
 
+router.post("/builder-tutorial/complete", async (req, res) => {
+  if (!req.isAuthenticated() || !req.user) {
+    return res.status(401).json({ success: false, message: "Not authenticated" });
+  }
+
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found." });
+    }
+
+    if (!user.builderTutorialSeen) {
+      user.builderTutorialSeen = true;
+      await user.save();
+    }
+
+    req.user.builderTutorialSeen = true;
+    return res.json({ success: true, builderTutorialSeen: true, user });
+  } catch (error) {
+    console.error("Builder tutorial completion failed:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Could not save tutorial progress.",
+    });
+  }
+});
+
 export default router;

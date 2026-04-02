@@ -25,6 +25,7 @@ const UserSchema = new mongoose.Schema({
   provider: { type: String, default: "local" },
   location: { type: String, default: "" },
   lastLogin: { type: Date, default: null },
+  builderTutorialSeen: { type: Boolean, default: false },
 
   // --- PROJECT HISTORY ---
   // This stores the last 10-20 projects for the sidebar
