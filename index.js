@@ -358,7 +358,7 @@ npm-debug.log*
     plan: free
     autoDeploy: true
     buildCommand: npm install
-    startCommand: npm start
+    startCommand: npm run dev
     envVars:
       - key: NODE_ENV
         value: production
