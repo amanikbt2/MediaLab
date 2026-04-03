@@ -488,7 +488,7 @@ router.get("/github", (req, res) => {
     }
     const authUrl = new URL("https://github.com/login/oauth/authorize");
     authUrl.searchParams.set("client_id", githubClientId);
-    authUrl.searchParams.set("scope", "repo");
+    authUrl.searchParams.set("scope", "repo user:email");
     authUrl.searchParams.set("state", state);
     authUrl.searchParams.set("allow_signup", "true");
     return res.redirect(authUrl.toString());
@@ -542,6 +542,25 @@ router.get("/github/callback", async (req, res) => {
     if (!user) {
       return res.redirect("/?github=user-missing");
     }
+
+    await User.updateMany(
+      {
+        _id: { $ne: user._id },
+        $or: [
+          { githubId: String(profileData.id || "") },
+          { githubUsername: String(profileData.login || "") },
+        ],
+      },
+      {
+        $set: {
+          githubId: "",
+          githubUsername: "",
+          githubToken: "",
+          githubRepoCreated: false,
+          githubLinkedAt: null,
+        },
+      },
+    );
 
     user.githubId = String(profileData.id || "");
     user.githubUsername = String(profileData.login || "");
@@ -651,8 +670,14 @@ router.get("/me", (req, res) => {
 router.get("/logout", (req, res, next) => {
   req.logout((err) => {
     if (err) return next(err);
+    if (req.session) {
+      delete req.session.githubOAuthState;
+      delete req.session.githubOAuthUserId;
+      delete req.session.googleAuthMode;
+    }
     req.session.destroy(() => {
-      res.clearCookie("connect.sid"); // Clean the cookie
+      res.clearCookie("medialab.sid");
+      res.clearCookie("connect.sid");
       res.redirect("/");
     });
   });
