@@ -1600,34 +1600,45 @@
               <div class="space-y-4">
                 <div>
                   <p class="text-sm text-gray-400 mt-2">
-                    Open monetization resources in one place.
+                    Monetization starts from your live projects, not from the header.
                   </p>
                 </div>
-                <a
-                  href="https://www.google.com/adsense/start/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="flex items-center justify-between gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-4 hover:bg-amber-500/15 transition-all"
+                <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-4">
+                  <div class="flex items-start gap-3">
+                    <div class="w-10 h-10 rounded-2xl bg-cyan-500/10 border border-cyan-400/15 flex items-center justify-center shrink-0">
+                      <i class="fas fa-lightbulb text-cyan-300 text-sm"></i>
+                    </div>
+                    <div class="min-w-0">
+                      <div class="text-sm font-bold text-white">Best flow</div>
+                      <div class="mt-1 text-xs leading-6 text-slate-300">
+                        Create your first project, publish it live, then open its dashboard to turn monetization on for that project.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onclick="switchTool('history'); closeMore(); launchStudio();"
+                  class="w-full inline-flex items-center justify-between gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-4 hover:bg-amber-500/15 transition-all"
                 >
-                  <div class="flex items-center gap-3 min-w-0">
+                  <div class="flex items-center gap-3 min-w-0 text-left">
                     <div
                       class="w-11 h-11 rounded-2xl bg-white/10 border border-white/10 flex items-center justify-center shrink-0"
                     >
-                      <i class="fab fa-google text-amber-300 text-lg"></i>
+                      <i class="fas fa-layer-group text-amber-300 text-lg"></i>
                     </div>
                     <div class="min-w-0">
                       <div class="text-sm font-bold text-white">
-                        Google AdSense
+                        Go to Projects
                       </div>
                       <div class="text-xs text-amber-100/80 mt-1">
-                        Open AdSense. Monetize your work.
+                        Open your live project library and monetize from each dashboard.
                       </div>
                     </div>
                   </div>
                   <i
-                    class="fas fa-arrow-up-right-from-square text-amber-300 text-sm shrink-0"
+                    class="fas fa-arrow-right text-amber-300 text-sm shrink-0"
                   ></i>
-                </a>
+                </button>
               </div>
             </div>
           </div>
@@ -6868,36 +6879,36 @@
                           <i class="fab fa-google"></i>
                         </div>
                       </div>
-                      ${
-                        adsenseReport?.connected && adsenseReport?.stats
-                          ? `<div class="mt-5 grid grid-cols-2 gap-3">
-                              <div class="rounded-[1.4rem] border border-white/10 bg-slate-950/70 p-4">
-                                <p class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Estimated Earnings</p>
-                                <p class="mt-2 text-2xl font-black text-white">$${Number(adsenseReport.stats.estimatedEarnings || 0).toFixed(2)}</p>
+                        ${
+                          adsenseReport?.connected && adsenseReport?.stats
+                            ? `<div class="mt-5 grid grid-cols-2 gap-3">
+                                <div class="rounded-[1.4rem] border border-white/10 bg-slate-950/70 p-4">
+                                  <p class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Estimated Earnings</p>
+                                  <p class="mt-2 text-2xl font-black text-white">$${Number(adsenseReport.stats.estimatedEarnings || 0).toFixed(2)}</p>
+                                </div>
+                                <div class="rounded-[1.4rem] border border-white/10 bg-slate-950/70 p-4">
+                                  <p class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Impressions</p>
+                                  <p class="mt-2 text-2xl font-black text-white">${formatCompactNumber(adsenseReport.stats.impressions || 0)}</p>
+                                </div>
+                                <div class="rounded-[1.4rem] border border-white/10 bg-slate-950/70 p-4">
+                                  <p class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Page RPM</p>
+                                  <p class="mt-2 text-2xl font-black text-white">$${Number(adsenseReport.stats.pageViewsRpm || 0).toFixed(2)}</p>
+                                </div>
+                                <div class="rounded-[1.4rem] border border-white/10 bg-slate-950/70 p-4">
+                                  <p class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Clicks</p>
+                                  <p class="mt-2 text-2xl font-black text-white">${formatCompactNumber(adsenseReport.stats.clicks || 0)}</p>
+                                </div>
                               </div>
-                              <div class="rounded-[1.4rem] border border-white/10 bg-slate-950/70 p-4">
-                                <p class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Impressions</p>
-                                <p class="mt-2 text-2xl font-black text-white">${formatCompactNumber(adsenseReport.stats.impressions || 0)}</p>
-                              </div>
-                              <div class="rounded-[1.4rem] border border-white/10 bg-slate-950/70 p-4">
-                                <p class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Page RPM</p>
-                                <p class="mt-2 text-2xl font-black text-white">$${Number(adsenseReport.stats.pageViewsRpm || 0).toFixed(2)}</p>
-                              </div>
-                              <div class="rounded-[1.4rem] border border-white/10 bg-slate-950/70 p-4">
-                                <p class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Clicks</p>
-                                <p class="mt-2 text-2xl font-black text-white">${formatCompactNumber(adsenseReport.stats.clicks || 0)}</p>
-                              </div>
-                            </div>
-                            <p class="mt-4 text-xs leading-6 text-slate-400">${adsenseReport.message || ""}</p>`
-                          : `<div class="mt-5 rounded-[1.5rem] border border-dashed border-amber-400/20 bg-amber-500/5 p-5">
-                              <p class="text-sm font-semibold text-white">Connect AdSense for Real-Time Stats</p>
-                              <p class="mt-2 text-sm leading-6 text-slate-400">MediaLab will reuse your Google sign-in, request AdSense read access, and then pull your actual earnings and traffic metrics into the Console.</p>
-                              <button onclick="openAdsenseLinkModal()" class="mt-4 inline-flex items-center gap-2 rounded-2xl bg-white text-slate-950 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] hover:bg-amber-50 transition-all shadow-[0_18px_35px_rgba(255,255,255,0.12)]">
-                                <i class="fas fa-link"></i>
-                                Connect AdSense
-                              </button>
-                            </div>`
-                      }
+                              <p class="mt-4 text-xs leading-6 text-slate-400">${adsenseReport.message || ""}</p>`
+                            : `<div class="mt-5 rounded-[1.5rem] border border-dashed border-amber-400/20 bg-amber-500/5 p-5">
+                                <p class="text-sm font-semibold text-white">Connect AdSense for Real-Time Stats</p>
+                                <p class="mt-2 text-sm leading-6 text-slate-400">MediaLab will reuse your Google sign-in, request AdSense read access, and then pull your actual earnings and traffic metrics into the Console.</p>
+                                <button onclick="openAdsenseLinkModal()" class="mt-4 inline-flex items-center gap-2 rounded-2xl bg-white text-slate-950 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] hover:bg-amber-50 transition-all shadow-[0_18px_35px_rgba(255,255,255,0.12)]">
+                                  <i class="fas fa-link"></i>
+                                  Connect AdSense
+                                </button>
+                              </div>`
+                        }
                     </div>
                     ${buildGithubStorageStatusMarkup("console")}
                   </div>

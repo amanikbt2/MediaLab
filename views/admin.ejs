@@ -330,10 +330,7 @@
         time: "",
       };
       let logFilters = {
-        name: "",
-        email: "",
-        tool: "",
-        date: "",
+        query: "",
       };
       const ADMIN_PASSWORD = "spiderman";
       const ADMIN_ACCESS_KEY = "medialab_admin_access";
@@ -392,8 +389,8 @@
         return item.summary || item.action || "activity";
       }
 
-      function updateLogFilter(key, value) {
-        logFilters[key] = value;
+      function updateLogFilter(value) {
+        logFilters.query = String(value || "");
         renderLogs();
       }
 
@@ -423,19 +420,99 @@
         });
       }
 
-      function getFilteredLogs() {
-        return adminUsageLogs.filter((item) => {
-          const name = String(item.name || "").toLowerCase();
-          const email = String(item.email || "").toLowerCase();
-          const tool = String(item.source || item.metadata?.toolType || item.metadata?.toolId || "").toLowerCase();
-          const created = formatDate(item.createdAt).toLowerCase();
-          return (
-            (!logFilters.name || name.includes(logFilters.name.toLowerCase())) &&
-            (!logFilters.email || email.includes(logFilters.email.toLowerCase())) &&
-            (!logFilters.tool || tool.includes(logFilters.tool.toLowerCase())) &&
-            (!logFilters.date || created.includes(logFilters.date.toLowerCase()))
-          );
+      function getLogSearchFields(item) {
+        const action = String(item.action || "").toLowerCase();
+        const summary = String(item.summary || "").toLowerCase();
+        const source = String(
+          item.source || item.metadata?.toolType || item.metadata?.toolId || "",
+        ).toLowerCase();
+        const metadataText = JSON.stringify(item.metadata || {}).toLowerCase();
+        const created = formatDate(item.createdAt).toLowerCase();
+        const name = String(item.name || "").toLowerCase();
+        const email = String(item.email || "").toLowerCase();
+        const location = String(item.location || item.metadata?.location || "").toLowerCase();
+        const ip = String(item.ip || item.metadata?.ip || "").toLowerCase();
+        const activity = [action, summary, source, metadataText].filter(Boolean).join(" ");
+        const full = [
+          name,
+          email,
+          source,
+          action,
+          summary,
+          created,
+          location,
+          ip,
+          metadataText,
+        ]
+          .filter(Boolean)
+          .join(" ");
+        return {
+          username: name,
+          name,
+          user: name,
+          email,
+          activity,
+          action,
+          summary,
+          tool: source,
+          source,
+          date: created,
+          time: created,
+          location,
+          ip,
+          text: full,
+          any: full,
+          full,
+        };
+      }
+
+      function splitSmartQuery(query, operator) {
+        return String(query || "")
+          .split(new RegExp(`\\s+${operator}\\s+`, "i"))
+          .map((part) => part.trim())
+          .filter(Boolean);
+      }
+
+      function parseSmartLogClause(clause) {
+        const normalized = String(clause || "").trim();
+        if (!normalized) return null;
+        const match = normalized.match(
+          /^(username|name|user|email|activity|action|summary|tool|source|date|time|location|ip|text|any)\s*(=|:|~)\s*(.+)$/i,
+        );
+        if (match) {
+          return {
+            field: match[1].toLowerCase(),
+            value: match[3].trim().replace(/^["']|["']$/g, "").toLowerCase(),
+          };
+        }
+        return {
+          field: "full",
+          value: normalized.replace(/^["']|["']$/g, "").toLowerCase(),
+        };
+      }
+
+      function matchesSmartLogClause(item, clause) {
+        const parsed = parseSmartLogClause(clause);
+        if (!parsed || !parsed.value) return true;
+        const fields = getLogSearchFields(item);
+        const haystack = String(fields[parsed.field] || fields.full || "").toLowerCase();
+        return haystack.includes(parsed.value);
+      }
+
+      function matchesSmartLogQuery(item, query) {
+        const trimmedQuery = String(query || "").trim();
+        if (!trimmedQuery) return true;
+        const orGroups = splitSmartQuery(trimmedQuery, "or");
+        return orGroups.some((group) => {
+          const andClauses = splitSmartQuery(group, "and");
+          return andClauses.every((clause) => matchesSmartLogClause(item, clause));
         });
+      }
+
+      function getFilteredLogs() {
+        return adminUsageLogs.filter((item) =>
+          matchesSmartLogQuery(item, logFilters.query),
+        );
       }
 
       function animateCountValue(target, nextValue) {
@@ -1000,11 +1077,20 @@
               </div>
             </button>
             <div class="border-b border-white/8 px-4 py-3">
-              <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
-                <input data-log-filter="name" value="${escapeHtml(logFilters.name)}" oninput="updateLogFilter('name', this.value)" placeholder="Filter by name" class="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none focus:border-cyan-400" />
-                <input data-log-filter="email" value="${escapeHtml(logFilters.email)}" oninput="updateLogFilter('email', this.value)" placeholder="Filter by email" class="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none focus:border-cyan-400" />
-                <input data-log-filter="tool" value="${escapeHtml(logFilters.tool)}" oninput="updateLogFilter('tool', this.value)" placeholder="Filter by tool/source" class="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none focus:border-cyan-400" />
-                <input data-log-filter="date" value="${escapeHtml(logFilters.date)}" oninput="updateLogFilter('date', this.value)" placeholder="Filter by date" class="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none focus:border-cyan-400" />
+              <div class="space-y-2">
+                <input data-log-filter="query" value="${escapeHtml(logFilters.query)}" oninput="updateLogFilter(this.value)" placeholder="Try: username=charles and activity=login or email=gmail.com and tool=builder" class="w-full rounded-xl border border-cyan-500/20 bg-white/5 px-3 py-2.5 text-xs text-white outline-none focus:border-cyan-400" />
+                <div class="text-[11px] text-slate-400 leading-relaxed">
+                  Smart query:
+                  <span class="text-slate-300">username=</span>,
+                  <span class="text-slate-300">email=</span>,
+                  <span class="text-slate-300">activity=</span>,
+                  <span class="text-slate-300">tool=</span>,
+                  <span class="text-slate-300">date=</span>
+                  with
+                  <span class="text-cyan-300 font-semibold">and</span>
+                  /
+                  <span class="text-cyan-300 font-semibold">or</span>.
+                </div>
               </div>
             </div>
             <div class="terminal-body overflow-y-auto px-4 py-4" style="max-height:min(62vh, calc(100vh - 320px));">

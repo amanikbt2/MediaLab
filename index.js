@@ -646,6 +646,7 @@ function buildProjectLiveUrl(user, project = {}) {
   return `https://${user.githubUsername}.github.io/medialab/${routePath}`;
 }
 
+
 function buildAdsTxtCandidateUrls(user) {
   if (!user?.githubUsername) return [];
   return [
@@ -1452,12 +1453,11 @@ app.get("/api/github/projects", async (req, res) => {
         }),
       );
       const nextProjects = verified.filter(Boolean);
-      if (nextProjects.length !== user.liveProjects.length) {
-        user.liveProjects = nextProjects;
-        await user.save();
+        if (nextProjects.length !== user.liveProjects.length) {
+          user.liveProjects = nextProjects;
+          await user.save();
+        }
       }
-    }
-
     req.user.liveProjects = user.liveProjects;
     return res.json({
       success: true,
