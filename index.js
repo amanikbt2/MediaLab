@@ -131,6 +131,102 @@ function slugifyProjectName(value = "medialab-page") {
   return `${slug || "medialab-page"}.html`;
 }
 
+function slugifyProjectFolderName(value = "medialab-project") {
+  return (
+    String(value || "")
+      .toLowerCase()
+      .trim()
+      .replace(/\.html?$/i, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "medialab-project"
+  );
+}
+
+function normalizeRepoFilePath(value = "") {
+  return String(value || "")
+    .replace(/\\/g, "/")
+    .replace(/^\/+/, "")
+    .replace(/\/{2,}/g, "/")
+    .trim();
+}
+
+function normalizeImportedEntryPath(value = "index.html") {
+  const normalized = normalizeRepoFilePath(value);
+  return normalized || "index.html";
+}
+
+function buildFolderProjectLiveUrl(owner, repo, folderPath, entryPath) {
+  const cleanFolder = normalizeRepoFilePath(folderPath);
+  const cleanEntry = normalizeImportedEntryPath(entryPath);
+  if (!cleanFolder) {
+    return `https://${owner}.github.io/${repo}/${cleanEntry}`;
+  }
+  if (/\/index\.html?$/i.test(`${cleanFolder}/${cleanEntry}`) || /^index\.html?$/i.test(cleanEntry)) {
+    return `https://${owner}.github.io/${repo}/${cleanFolder}/`;
+  }
+  return `https://${owner}.github.io/${repo}/${cleanFolder}/${cleanEntry}`;
+}
+
+async function getGithubFileSha(octokit, owner, repo, path) {
+  try {
+    const existing = await octokit.rest.repos.getContent({
+      owner,
+      repo,
+      path,
+    });
+    if (!Array.isArray(existing.data) && existing.data?.sha) {
+      return existing.data.sha;
+    }
+  } catch (error) {
+    if ((error?.status || error?.response?.status) !== 404) {
+      throw error;
+    }
+  }
+  return "";
+}
+
+async function upsertGithubFile({
+  octokit,
+  owner,
+  repo,
+  path,
+  message,
+  contentBase64,
+}) {
+  const sha = await getGithubFileSha(octokit, owner, repo, path);
+  await octokit.rest.repos.createOrUpdateFileContents({
+    owner,
+    repo,
+    path,
+    message,
+    content: contentBase64,
+    ...(sha ? { sha } : {}),
+  });
+  return sha;
+}
+
+async function deleteGithubPathRecursive(octokit, owner, repo, path) {
+  const response = await octokit.rest.repos.getContent({
+    owner,
+    repo,
+    path,
+  });
+  if (Array.isArray(response.data)) {
+    for (const item of response.data) {
+      await deleteGithubPathRecursive(octokit, owner, repo, item.path);
+    }
+    return;
+  }
+  if (!response.data?.sha) return;
+  await octokit.rest.repos.deleteFile({
+    owner,
+    repo,
+    path: response.data.path,
+    sha: response.data.sha,
+    message: `Delete ${response.data.path} from MediaLab`,
+  });
+}
+
 function escapeMetaContent(value = "") {
   return String(value || "")
     .replace(/&/g, "&amp;")
@@ -143,6 +239,7 @@ function buildPublishedHtmlDocument({
   projectName = "MediaLab Project",
   htmlContent = "",
   cssContent = "",
+  interactionScript = "",
   adsenseId = "",
   adsenseAdCode = "",
   description = "",
@@ -152,6 +249,7 @@ function buildPublishedHtmlDocument({
   const safeTitle = String(projectName || "MediaLab Project").trim() || "MediaLab Project";
   const styleBlock = String(cssContent || "").trim();
   const bodyMarkup = String(htmlContent || "").trim();
+  const interactionBlock = String(interactionScript || "").trim();
   const safeDescription = escapeMetaContent(
     description || `${safeTitle} published with MediaLab.`,
   );
@@ -185,7 +283,7 @@ ${styleBlock}
     </style>
   </head>
   <body>
-${bodyMarkup}
+${bodyMarkup}${interactionBlock ? `\n${interactionBlock}` : ""}
   </body>
 </html>`;
 }
@@ -505,6 +603,7 @@ app.get("/admin", (_req, res) => {
   res.render("admin");
 });
 const WEBSITE_TEMPLATE_VIEWS = {
+  candycrush: "templates/candycrush",
   portfolio: "templates/portfolio",
   arcade: "templates/arcade",
   studio: "templates/studio",
@@ -604,6 +703,7 @@ app.post("/api/github/publish", express.json({ limit: "10mb" }), async (req, res
     const projectName = String(req.body?.projectName || "").trim();
     const htmlContent = String(req.body?.htmlContent || "").trim();
     const cssContent = String(req.body?.cssContent || "").trim();
+    const interactionScript = String(req.body?.interactionScript || "").trim();
     const description = String(req.body?.description || "").trim();
     const keywords = String(req.body?.keywords || "").trim();
 
@@ -628,6 +728,7 @@ app.post("/api/github/publish", express.json({ limit: "10mb" }), async (req, res
       projectName,
       htmlContent,
       cssContent,
+      interactionScript,
       adsenseId: user.adsenseId || "",
       adsenseAdCode: user.adsenseAdCode || "",
       description,
@@ -642,29 +743,14 @@ app.post("/api/github/publish", express.json({ limit: "10mb" }), async (req, res
       );
     }
 
-    let existingSha = "";
-    try {
-      const existing = await octokit.rest.repos.getContent({
-        owner,
-        repo,
-        path: filename,
-      });
-      if (!Array.isArray(existing.data) && existing.data?.sha) {
-        existingSha = existing.data.sha;
-      }
-    } catch (error) {
-      if ((error?.status || error?.response?.status) !== 404) {
-        throw error;
-      }
-    }
-
-    await octokit.rest.repos.createOrUpdateFileContents({
+    const existingSha = await getGithubFileSha(octokit, owner, repo, filename);
+    await upsertGithubFile({
+      octokit,
       owner,
       repo,
       path: filename,
       message: `${existingSha ? "Update" : "Publish"} ${filename} from MediaLab`,
-      content: Buffer.from(fullHtml).toString("base64"),
-      ...(existingSha ? { sha: existingSha } : {}),
+      contentBase64: Buffer.from(fullHtml).toString("base64"),
     });
 
     const liveUrl = `https://${owner}.github.io/${repo}/${filename}`;
@@ -675,6 +761,9 @@ app.post("/api/github/publish", express.json({ limit: "10mb" }), async (req, res
       name: projectName,
       fileName: filename,
       filename,
+      entryPath: filename,
+      repoPath: "",
+      projectType: "single",
       repo,
       url: liveUrl,
       liveUrl,
@@ -724,6 +813,148 @@ app.post("/api/github/publish", express.json({ limit: "10mb" }), async (req, res
       error?.response?.data?.message ||
       error?.message ||
       "Could not publish this project to GitHub right now.";
+    return res.status(error?.status || error?.response?.status || 500).json({
+      success: false,
+      message: apiMessage,
+    });
+  }
+});
+
+app.post("/api/github/publish-folder", express.json({ limit: "50mb" }), async (req, res) => {
+  if (!req.isAuthenticated() || !req.user) {
+    return res
+      .status(401)
+      .json({ success: false, message: "You need to sign in first." });
+  }
+
+  try {
+    const user = await User.findById(req.user._id).select("+githubToken");
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found." });
+    }
+    if (!user.githubUsername || !user.githubToken) {
+      return res.status(400).json({
+        success: false,
+        message: "Connect GitHub first before publishing to the web.",
+      });
+    }
+    if (!user.githubRepoCreated) {
+      return res.status(400).json({
+        success: false,
+        message: "Set up GitHub hosting first before publishing.",
+      });
+    }
+
+    const projectName = String(req.body?.projectName || "").trim();
+    const entryPath = normalizeImportedEntryPath(req.body?.entryPath || "index.html");
+    const uploadedFiles = Array.isArray(req.body?.files) ? req.body.files : [];
+    if (!projectName) {
+      return res.status(400).json({
+        success: false,
+        message: "Enter a project name before publishing.",
+      });
+    }
+    if (!uploadedFiles.length) {
+      return res.status(400).json({
+        success: false,
+        message: "Import a project folder first before publishing it.",
+      });
+    }
+
+    const safeFiles = uploadedFiles
+      .map((file) => ({
+        path: normalizeRepoFilePath(file?.path || ""),
+        contentBase64: String(file?.contentBase64 || "").trim(),
+      }))
+      .filter((file) => file.path && file.contentBase64)
+      .filter((file) => !file.path.startsWith("..") && !file.path.includes("/../"));
+
+    if (!safeFiles.length) {
+      return res.status(400).json({
+        success: false,
+        message: "That project folder did not contain any publishable files.",
+      });
+    }
+
+    const folderSlug = slugifyProjectFolderName(projectName);
+    const owner = user.githubUsername;
+    const repo = "medialab";
+    const octokit = buildGithubClient(user);
+
+    for (const file of safeFiles) {
+      const repoPath = normalizeRepoFilePath(`${folderSlug}/${file.path}`);
+      const exists = await getGithubFileSha(octokit, owner, repo, repoPath);
+      await upsertGithubFile({
+        octokit,
+        owner,
+        repo,
+        path: repoPath,
+        message: `${exists ? "Update" : "Publish"} ${repoPath} from MediaLab`,
+        contentBase64: file.contentBase64,
+      });
+    }
+
+    const repoEntryPath = normalizeRepoFilePath(`${folderSlug}/${entryPath}`);
+    const liveUrl = buildFolderProjectLiveUrl(owner, repo, folderSlug, entryPath);
+    const existingProject = (Array.isArray(user.liveProjects) ? user.liveProjects : []).find(
+      (project) => String(project?.fileName || project?.filename || "").trim() === repoEntryPath,
+    );
+    const nextProject = {
+      name: projectName,
+      fileName: repoEntryPath,
+      filename: repoEntryPath,
+      entryPath,
+      repoPath: folderSlug,
+      projectType: "folder",
+      repo,
+      url: liveUrl,
+      liveUrl,
+      status: "live",
+      renderUrl: existingProject?.renderUrl || "",
+      renderHostedConfirmed: Boolean(existingProject?.renderHostedConfirmed),
+      renderVerifiedAt: existingProject?.renderVerifiedAt || null,
+      adsensePublisherId: user.adsenseId || "",
+      lastSyncedAt: new Date(),
+      updatedAt: new Date(),
+      createdAt: existingProject?.createdAt || new Date(),
+    };
+
+    user.liveProjects = Array.isArray(user.liveProjects) ? user.liveProjects : [];
+    user.liveProjects = user.liveProjects.filter(
+      (project) => String(project?.fileName || project?.filename || "").trim() !== repoEntryPath,
+    );
+    user.liveProjects.push(nextProject);
+    await user.save();
+    req.user.liveProjects = user.liveProjects;
+
+    await createUsageLog({
+      user,
+      email: user.email,
+      name: user.name,
+      isPro: Boolean(user.isPro),
+      action: "github-publish-folder",
+      summary: `published ${safeFiles.length} files to ${folderSlug}`,
+      source: "github",
+      metadata: { projectName, folderSlug, entryPath: repoEntryPath, liveUrl },
+    });
+
+    return res.json({
+      success: true,
+      message: "Project folder published successfully.",
+      liveProject: nextProject,
+      liveUrl,
+      needsHostingOnboarding: !nextProject.renderHostedConfirmed,
+      fileCount: safeFiles.length,
+      user: toSafeUser(user),
+    });
+  } catch (error) {
+    console.error("GitHub folder publish failed:", error);
+    const apiMessage =
+      error?.response?.data?.message ||
+      error?.message ||
+      "Could not publish this project folder right now.";
     return res.status(error?.status || error?.response?.status || 500).json({
       success: false,
       message: apiMessage,
@@ -863,27 +1094,40 @@ app.delete("/api/github/project", async (req, res) => {
     }
 
     const octokit = buildGithubClient(user);
-    const contentResponse = await octokit.rest.repos.getContent({
-      owner: user.githubUsername,
-      repo: "medialab",
-      path: filename,
-    });
-    if (Array.isArray(contentResponse.data) || !contentResponse.data?.sha) {
-      return res.status(400).json({
-        success: false,
-        message: "That published file could not be deleted cleanly.",
+    user.liveProjects = Array.isArray(user.liveProjects) ? user.liveProjects : [];
+    const projectToDelete = user.liveProjects.find(
+      (project) => String(project?.fileName || project?.filename || "").trim() === filename,
+    );
+
+    if (projectToDelete?.repoPath) {
+      await deleteGithubPathRecursive(
+        octokit,
+        user.githubUsername,
+        "medialab",
+        projectToDelete.repoPath,
+      );
+    } else {
+      const contentResponse = await octokit.rest.repos.getContent({
+        owner: user.githubUsername,
+        repo: "medialab",
+        path: filename,
+      });
+      if (Array.isArray(contentResponse.data) || !contentResponse.data?.sha) {
+        return res.status(400).json({
+          success: false,
+          message: "That published file could not be deleted cleanly.",
+        });
+      }
+
+      await octokit.rest.repos.deleteFile({
+        owner: user.githubUsername,
+        repo: "medialab",
+        path: filename,
+        sha: contentResponse.data.sha,
+        message: `Delete ${filename} from MediaLab`,
       });
     }
 
-    await octokit.rest.repos.deleteFile({
-      owner: user.githubUsername,
-      repo: "medialab",
-      path: filename,
-      sha: contentResponse.data.sha,
-      message: `Delete ${filename} from MediaLab`,
-    });
-
-    user.liveProjects = Array.isArray(user.liveProjects) ? user.liveProjects : [];
     user.liveProjects = user.liveProjects.filter(
       (project) => String(project?.fileName || project?.filename || "").trim() !== filename,
     );
@@ -1463,15 +1707,6 @@ app.get("/api/adsense/report", async (req, res) => {
       return res.status(404).json({ success: false, message: "User not found." });
     }
 
-    const refreshToken = decryptGoogleRefreshToken(user.googleRefreshToken || "");
-    if (!refreshToken) {
-      return res.json({
-        success: true,
-        connected: false,
-        message: "Connect AdSense for real-time stats.",
-      });
-    }
-
     const targetUrl =
       String(req.query?.url || "").trim() ||
       String(
@@ -1482,96 +1717,6 @@ app.get("/api/adsense/report", async (req, res) => {
           "",
       ).trim();
     const domainName = extractDomainNameFromUrl(targetUrl);
-    if (!domainName) {
-      return res.json({
-        success: true,
-        connected: true,
-        hasDomain: false,
-        message: "Publish and host a project first to fetch domain-based AdSense stats.",
-      });
-    }
-
-    const oauth2Client = new google.auth.OAuth2(
-      process.env.GOOGLE_CLIENT_ID,
-      process.env.GOOGLE_CLIENT_SECRET,
-      process.env.GOOGLE_CALLBACK_URL,
-    );
-    oauth2Client.setCredentials({ refresh_token: refreshToken });
-
-    const adsense = google.adsense({
-      version: "v2",
-      auth: oauth2Client,
-    });
-
-    const accountsResponse = await adsense.accounts.list();
-    const accountName = accountsResponse.data?.accounts?.[0]?.name;
-    if (!accountName) {
-      return res.status(400).json({
-        success: false,
-        message: "No AdSense account was found for this Google profile.",
-      });
-    }
-
-    const reportResponse = await adsense.accounts.reports.generate({
-      account: accountName,
-      dateRange: "LAST_7_DAYS",
-      metrics: [
-        "ESTIMATED_EARNINGS",
-        "IMPRESSIONS",
-        "PAGE_VIEWS_RPM",
-        "CLICKS",
-      ],
-      dimensions: ["DOMAIN_NAME"],
-      filters: [`DOMAIN_NAME==${domainName}`],
-      languageCode: "en",
-    });
-
-    const headers = reportResponse.data?.headers || [];
-    const row = reportResponse.data?.rows?.[0]?.cells || [];
-    const readMetric = (name) => {
-      const index = headers.findIndex(
-        (header) => String(header?.name || "").toUpperCase() === name,
-      );
-      return index >= 0 ? row[index]?.value || row[index] || "0" : "0";
-    };
-
-    return res.json({
-      success: true,
-      connected: true,
-      hasDomain: true,
-      domainName,
-      report: {
-        estimatedEarnings: readMetric("ESTIMATED_EARNINGS"),
-        impressions: readMetric("IMPRESSIONS"),
-        pageViewsRpm: readMetric("PAGE_VIEWS_RPM"),
-        clicks: readMetric("CLICKS"),
-      },
-    });
-  } catch (error) {
-    console.error("AdSense report failed:", error);
-    return res.status(500).json({
-      success: false,
-      message:
-        error?.response?.data?.error?.message ||
-        error?.message ||
-        "Could not load AdSense report right now.",
-    });
-  }
-});
-
-app.get("/api/adsense/report", async (req, res) => {
-  if (!req.isAuthenticated() || !req.user) {
-    return res
-      .status(401)
-      .json({ success: false, message: "You need to sign in first." });
-  }
-
-  try {
-    const user = await User.findById(req.user._id).select("+googleRefreshToken");
-    if (!user) {
-      return res.status(404).json({ success: false, message: "User not found." });
-    }
-
     if (!user.googleRefreshToken) {
       return res.json({
         success: true,
@@ -1632,7 +1777,9 @@ app.get("/api/adsense/report", async (req, res) => {
     };
     let rpmSamples = 0;
 
-    for (const domain of domains.slice(0, 10)) {
+    const requestedDomains = domainName ? [domainName] : domains.slice(0, 10);
+
+    for (const domain of requestedDomains) {
       const report = await adsense.accounts.reports.generate({
         account: accountName,
         dateRange: "LAST_7_DAYS",
@@ -1661,13 +1808,21 @@ app.get("/api/adsense/report", async (req, res) => {
     return res.json({
       success: true,
       connected: true,
+      hasDomain: Boolean(domainName),
+      domainName: domainName || "",
       stats: {
         estimatedEarnings: Number(aggregate.estimatedEarnings.toFixed(2)),
         impressions: Math.round(aggregate.impressions),
         pageViewsRpm: Number(aggregate.pageViewsRpm.toFixed(2)),
         clicks: Math.round(aggregate.clicks),
       },
-      domains,
+      report: {
+        estimatedEarnings: Number(aggregate.estimatedEarnings.toFixed(2)),
+        impressions: Math.round(aggregate.impressions),
+        pageViewsRpm: Number(aggregate.pageViewsRpm.toFixed(2)),
+        clicks: Math.round(aggregate.clicks),
+      },
+      domains: requestedDomains,
       accountName,
       message: "Real-time AdSense stats loaded.",
     });

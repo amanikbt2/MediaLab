@@ -2920,7 +2920,7 @@
               onclick="openBuilderRunModeInNewTab()"
               class="px-3 py-2 rounded-xl border border-white/10 bg-white/5 text-[10px] sm:text-[11px] font-black uppercase tracking-[0.18em] text-slate-200 hover:bg-white/10 transition-all"
             >
-              Open Tab
+              Open Window
             </button>
             <button
               type="button"
@@ -2941,6 +2941,40 @@
             class="w-full h-full bg-white"
             sandbox="allow-scripts allow-forms allow-modals allow-popups allow-downloads allow-same-origin"
           ></iframe>
+        </div>
+      </div>
+    </div>
+    <div
+      id="builder-interaction-modal"
+      class="hidden fixed inset-0 z-[1950000] bg-slate-950/80 backdrop-blur-xl p-4 flex items-center justify-center"
+      onclick="if (event.target === this) closeBuilderInteractionModal();"
+    >
+      <div class="w-full max-w-lg rounded-[2rem] border border-white/10 bg-[#060b14] shadow-[0_35px_120px_rgba(2,6,23,0.72)] overflow-hidden">
+        <div class="px-5 py-4 border-b border-white/10 flex items-start justify-between gap-4">
+          <div>
+            <p class="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-400">Interaction Action</p>
+            <h4 id="builder-interaction-title" class="mt-2 text-xl font-black text-white">Configure action</h4>
+            <p id="builder-interaction-subtitle" class="mt-2 text-sm text-slate-400">Choose what should happen when this event is triggered.</p>
+          </div>
+          <button onclick="closeBuilderInteractionModal()" class="w-10 h-10 rounded-2xl border border-white/10 text-slate-300 hover:text-white hover:bg-white/5 transition-all">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="p-5 space-y-4 max-h-[78vh] overflow-y-auto">
+          <label class="block">
+            <span class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Action</span>
+            <select id="interaction-action-type" onchange="handleInteractionActionTypeChange(this.value)" class="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none focus:border-cyan-400">
+              <option value="alert">Alert</option>
+              <option value="redirect">Redirect</option>
+              <option value="toggle">Toggle Visibility</option>
+              <option value="playSound">Play Sound</option>
+            </select>
+          </label>
+          <div id="interaction-action-fields" class="space-y-4"></div>
+        </div>
+        <div class="px-5 py-4 border-t border-white/10 flex items-center justify-end gap-3">
+          <button onclick="closeBuilderInteractionModal()" class="px-4 py-3 rounded-2xl bg-white/5 text-sm font-black text-slate-300 hover:bg-white/10 transition-all">Cancel</button>
+          <button onclick="confirmBuilderInteractionAction()" class="px-4 py-3 rounded-2xl bg-cyan-500 text-sm font-black text-slate-950 hover:bg-cyan-400 transition-all">Save Action</button>
         </div>
       </div>
     </div>
@@ -3290,6 +3324,7 @@
       let monetizeWizardStep = 1;
       let pendingAdsTxtFile = null;
       let builderRunPreviewUrl = null;
+      let customUpgradeFeatureLabel = "";
       let selectedWithdrawalMethod = "";
       let withdrawalStep = "form";
       let withdrawalSubmissionInFlight = false;
@@ -3695,7 +3730,7 @@
         }
       });
       // ====================== HISTORY LOGIC (SIDEBAR & TOOL) ======================
-      function updateSidebarHistory(projects) {
+      function legacyUpdateSidebarHistory(projects) {
         const list = document.getElementById("project-history-list");
         if (!list) return;
         // Pull from provided data or guest cache
@@ -5118,7 +5153,9 @@
         });
       }
       function getUpgradeFeatureLabel() {
+        if (customUpgradeFeatureLabel) return customUpgradeFeatureLabel;
         const labels = {
+          "candycrush-template": "Candy Crush Premium Template",
           "voice-clone": "AI Voice Clone Pro",
           "text-to-speech": "Text to Speech Pro",
           "image-pdf": "Image to PDF Pro",
@@ -5151,6 +5188,7 @@
         document.getElementById("upgrade-modal")?.classList.remove("hidden");
       }
       function closeUpgradeModal() {
+        customUpgradeFeatureLabel = "";
         document.getElementById("upgrade-modal")?.classList.add("hidden");
       }
       async function submitUpgradeRequest(prefill = null) {
@@ -6050,7 +6088,7 @@
         if (countSpan) countSpan.textContent = `${words} Words`;
       }
       // Updated Converter to handle HTML and Success State
-      async function convertTextToDoc() {
+      async function legacyConvertTextToDoc() {
         const editor = document.getElementById("text-input");
         const formatType = document.getElementById("format-select").value;
         const btn = document.getElementById("convert-btn");
@@ -6698,6 +6736,9 @@
                                 </div>
                             </div>
                         </div>
+                        <button id="builder-quick-run" onclick="openBuilderRunMode(); hideBuilderPanels();" class="w-9 h-9 shrink-0 flex items-center justify-center text-emerald-300 hover:text-white border border-emerald-400/20 rounded-xl bg-emerald-500/10 transition-colors shadow-[0_0_0_1px_rgba(16,185,129,0.06)]">
+                            <i class="fas fa-play text-sm"></i>
+                        </button>
                         <div class="builder-tabbar">
                         <button id="tab-insert" onclick="toggleBuilderTab('insert', event)" class="builder-tab">Insert</button>
                         <button id="tab-file" onclick="toggleBuilderTab('file', event)" class="builder-tab">File</button>
@@ -6728,6 +6769,8 @@
                             <button onclick="requestNewBuilderProject(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-file-circle-plus text-cyan-400"></i><span>New Project<small>Reset current canvas</small></span></button>
                             <button onclick="saveBuilderDraft(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-floppy-disk text-cyan-400"></i><span>Save Draft<small>Keep work locally</small></span></button>
                             <button onclick="openBuilderFilePicker('builder-file-input'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-file-import text-cyan-400"></i><span>Import HTML<small>Open local project code</small></span></button>
+                            <button onclick="openBuilderFilePicker('builder-folder-input'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-folder-tree text-emerald-400"></i><span>Import Folder<small>Preview a full website project</small></span></button>
+                            <button onclick="openBuilderRunMode(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-play text-emerald-400"></i><span>Run Site<small>Open a clean live preview</small></span></button>
                             <button onclick="downloadBuilderHtmlFile(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-file-export text-cyan-400"></i><span>Export HTML<small>Download polished page file</small></span></button>
                             <button onclick="openBuilderPublishModal(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-rocket text-emerald-400"></i><span>Publish To Web<small>Push live HTML to GitHub Pages</small></span></button>
                             <button onclick="downloadBuilderStylesTxt(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-file-lines text-cyan-400"></i><span>Export TXT<small>Download full code as text</small></span></button>
@@ -6762,10 +6805,11 @@
                     </div>
                     <div id="builder-panel-templates" class="builder-popover hidden">
                         <div class="builder-popover-grid">
+                            <button onclick="handleCandyCrushTemplateSelection(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-candy-cane text-pink-400"></i><span>Candy Crush Game<small>Playable free game template</small></span></button>
+                            <button id="builder-template-login" onclick="insertStarterBlock('login'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-right-to-bracket text-cyan-400"></i><span>Login Form<small>Auth page starter</small></span></button>
                             <button onclick="loadBuilderSiteTemplate('portfolio'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-user-astronaut text-cyan-400"></i><span>Portfolio Site<small>Personal brand website</small></span></button>
                             <button onclick="loadBuilderSiteTemplate('arcade'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-gamepad text-cyan-400"></i><span>Game Launch<small>Arcade landing page</small></span></button>
                             <button onclick="loadBuilderSiteTemplate('studio'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-bezier-curve text-cyan-400"></i><span>Creative Studio<small>Agency homepage starter</small></span></button>
-                            <button id="builder-template-login" onclick="insertStarterBlock('login'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-right-to-bracket text-cyan-400"></i><span>Login Form<small>Auth page starter</small></span></button>
                             <button onclick="insertStarterBlock('hero'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-panorama text-cyan-400"></i><span>Landing Hero<small>Marketing homepage</small></span></button>
                             <button onclick="insertStarterBlock('feature'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-th-large text-cyan-400"></i><span>Features Section<small>Service showcase</small></span></button>
                             <button onclick="insertStarterBlock('contact'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-envelope text-cyan-400"></i><span>Contact Form<small>Lead capture layout</small></span></button>
@@ -6871,6 +6915,7 @@
                 <input type="file" id="local-img-input" accept="image/*" class="hidden" onchange="handleLocalImage(this.files[0])">
                 <input type="file" id="inspector-bg-img-input" accept="image/*" class="hidden" onchange="handleInspectorBackgroundImage(this.files[0])">
                 <input type="file" id="builder-file-input" accept=".html,.htm,.txt" class="hidden" onchange="handleBuilderFileImport(this.files[0])">
+                <input type="file" id="builder-folder-input" webkitdirectory directory multiple class="hidden" onchange="handleBuilderFolderImport(this.files)">
             </div>
             <div id="smart-inspector" class="hidden fixed inset-0 bg-black/60 backdrop-blur-md z-[150] flex items-center justify-center p-4">
                 <div onclick="event.stopPropagation()" class="bg-[#0b0c10] border border-white/10 w-full max-w-[360px] sm:max-w-[392px] min-h-[560px] sm:min-h-[590px] max-h-[min(84vh,640px)] rounded-[2rem] sm:rounded-[2.4rem] overflow-hidden shadow-[0_40px_100px_rgba(0,0,0,0.9)] ring-1 ring-white/10 scale-in flex flex-col">
@@ -7269,12 +7314,6 @@
         e.currentTarget.classList.remove("dragover");
         const files = e.dataTransfer.files;
         if (files.length > 0) handleVoiceUpload(files[0]);
-      }
-      function handleVideoDrop(e) {
-        e.preventDefault();
-        e.currentTarget.classList.remove("dragover");
-        const files = e.dataTransfer.files;
-        if (files.length > 0) convertVideoToAudio(files[0]);
       }
       function handleEditDrop(e) {
         e.preventDefault();
@@ -7699,24 +7738,8 @@
           reader.readAsDataURL(file);
         });
       }
-      function getImageDimensions(dataUrl) {
-        return new Promise((resolve) => {
-          const img = new Image();
-          img.onload = () => resolve({ width: img.width, height: img.height });
-          img.src = dataUrl;
-        });
-      }
       /** * HELPER: Reset the tool state
        */
-      // Helper Function: Reads the file as a string for jsPDF
-      function readFileAsDataURL(file) {
-        return new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result);
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
-      }
       function resetImageTool() {
         // 1. Memory Cleanup: Reset image array and revoke the previous PDF URL to save memory
         if (finalPdfBlob) {
@@ -7913,7 +7936,7 @@
           pendingDocumentExport = null;
         }
       }
-      async function createPDFFromEditor(editor) {
+      async function legacyCreatePDFFromEditor(editor) {
         const { jsPDF } = window.jspdf;
         // Clone and optimize for PDF
         const clone = editor.cloneNode(true);
@@ -7954,7 +7977,7 @@
         }
       }
       // ====================== OTHER FORMATS (TXT, HTML) ======================
-      function createOtherFormatBlob(editor, formatType) {
+      function legacyCreateOtherFormatBlob(editor, formatType) {
         let content = "";
         let mimeType = "text/plain";
         switch (formatType) {
@@ -7982,7 +8005,7 @@
         return new Blob([content], { type: mimeType });
       }
       // ====================== DOWNLOAD HELPERS ======================
-      function downloadBlob(blob, filename) {
+      function legacyDownloadBlob(blob, filename) {
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
@@ -7992,7 +8015,7 @@
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
       }
-      function downloadExportedFile() {
+      function legacyDownloadExportedFile() {
         if (!finalExportBlob || !currentExportFormat) {
           alert("No file available. Please export again.");
           return;
@@ -8502,7 +8525,42 @@
         "Effects",
         "Transform",
         "Position",
+        "Events",
+        "Interactions",
         "Custom CSS",
+      ];
+      const BUILDER_INTERACTION_TRIGGERS = [
+        { key: "click", label: "On Click", domEvent: "click" },
+        { key: "mouseenter", label: "On Hover", domEvent: "mouseenter" },
+        { key: "dblclick", label: "On Double Click", domEvent: "dblclick" },
+        { key: "mouseleave", label: "On Mouse Leave", domEvent: "mouseleave" },
+        { key: "focus", label: "On Focus", domEvent: "focus" },
+        { key: "blur", label: "On Blur", domEvent: "blur" },
+        { key: "input", label: "On Input", domEvent: "input" },
+        { key: "change", label: "On Change", domEvent: "change" },
+        { key: "submit", label: "On Submit", domEvent: "submit" },
+        { key: "keydown", label: "On Key Down", domEvent: "keydown" },
+        { key: "keyup", label: "On Key Up", domEvent: "keyup" },
+      ];
+      const BUILDER_EVENT_CATALOG = [
+        "click",
+        "dblclick",
+        "mousedown",
+        "mouseup",
+        "mouseenter",
+        "mouseleave",
+        "mousemove",
+        "focus",
+        "blur",
+        "input",
+        "change",
+        "submit",
+        "keydown",
+        "keyup",
+        "touchstart",
+        "touchend",
+        "scroll",
+        "resize",
       ];
       let inspectorPageIndex = 0;
       let historyStack = [];
@@ -8513,6 +8571,8 @@
       let builderSnapEnabled = true;
       let multiSelectMode = false;
       let builderCodeMode = false;
+      let builderRawImportDocument = "";
+      let builderImportedProject = null;
       let activeBuilderPanel = null;
       let codeApplyTimer = null;
       let builderPanelIdleTimer = null;
@@ -8532,6 +8592,8 @@
         styles: {},
         attributes: {},
       };
+      let builderInteractionDraft = null;
+      let builderInteractionPickMode = false;
       // ====================== 2. STUDIO LIFE-CYCLE ======================
       function launchBossMode() {
         const doc = document.documentElement;
@@ -8566,7 +8628,7 @@
       }
       function builderHasCanvasContent() {
         const canvas = document.getElementById("web-canvas");
-        return Boolean(canvas?.querySelector(".canvas-element"));
+        return Boolean(canvas?.querySelector(".canvas-element")) || Boolean(builderRawImportDocument);
       }
       function initCanvasLogic() {
         const canvas = document.getElementById("web-canvas");
@@ -9151,30 +9213,36 @@
           case "div":
             return {
               text: "",
+              interactions: {},
             };
           case "text":
             return {
               text: "Add Text",
+              interactions: {},
             };
           case "button":
             return {
               text: "Get Started",
+              interactions: {},
             };
           case "a":
             return {
               text: "Learn More",
               href: "#",
+              interactions: {},
             };
           case "input":
             return {
               placeholder: "Type your message",
+              interactions: {},
             };
           case "textarea":
             return {
               placeholder: "Write something beautiful",
+              interactions: {},
             };
           default:
-            return {};
+            return { interactions: {} };
         }
       }
       function populateElementBody(body, type, attrs) {
@@ -9221,6 +9289,56 @@
             body.innerHTML = `<div class="w-full h-full block"></div>`;
         }
       }
+      function normalizeElementInteractions(interactions = {}) {
+        const normalized = {};
+        if (!interactions || typeof interactions !== "object") return normalized;
+        Object.entries(interactions).forEach(([eventName, config]) => {
+          if (!config || typeof config !== "object") return;
+          const actionType = String(config.actionType || "").trim();
+          if (!actionType) return;
+          normalized[String(eventName || "").trim()] = {
+            actionType,
+            targetId: String(config.targetId || "").trim(),
+            value: String(config.value || "").trim(),
+            url: String(config.url || "").trim(),
+            soundUrl: String(config.soundUrl || "").trim(),
+          };
+        });
+        return normalized;
+      }
+      function getBuilderInteractionLabel(eventName) {
+        return (
+          BUILDER_INTERACTION_TRIGGERS.find((item) => item.key === eventName)?.label ||
+          eventName
+        );
+      }
+      function getCanvasElementTargetOptions() {
+        return Array.from(
+          document.querySelectorAll("#web-canvas > .canvas-element"),
+        )
+          .filter((item) => item.id)
+          .map((item) => ({
+            id: item.id,
+            label:
+              item.id +
+              (item === currentInspectorState.targetEl ? " (Current Element)" : ""),
+          }));
+      }
+      function renderInteractionBadgeHtml() {
+        return `<div class="interaction-badge hidden absolute -top-10 right-0 w-7 h-7 rounded-lg border border-amber-400/30 bg-amber-500/15 text-amber-300 items-center justify-center pointer-events-none"><i class="fas fa-bolt text-[10px]"></i></div>`;
+      }
+      function refreshElementInteractionBadge(el) {
+        if (!el) return;
+        const badge = el.querySelector(".interaction-badge");
+        const interactions = normalizeElementInteractions(
+          JSON.parse(el.dataset.interactions || "{}"),
+        );
+        const hasInteractions = Object.keys(interactions).length > 0;
+        if (badge) {
+          badge.classList.toggle("hidden", !hasInteractions);
+          badge.classList.toggle("flex", hasInteractions);
+        }
+      }
       function addObject(type, styles, attrs) {
         const canvas = document.getElementById("web-canvas");
         ensureBuilderGuides(canvas);
@@ -9244,6 +9362,7 @@
             <button onclick="openSmartInspector('${type}', this.closest('.canvas-element'))" class="w-7 h-7 bg-gray-950 text-cyan-400 rounded-lg border border-white/10 flex items-center justify-center pointer-events-auto"><i class="fas fa-sliders-h text-[10px]"></i></button>
             <button onclick="this.closest('.canvas-element').remove(); saveToHistory();" class="w-7 h-7 bg-gray-950 text-red-500 rounded-lg border border-white/10 flex items-center justify-center pointer-events-auto"><i class="fas fa-trash-alt text-[10px]"></i></button>
         </div>
+        ${renderInteractionBadgeHtml()}
         <div class="element-body w-full h-full overflow-visible"></div>
     `;
         const body = wrap.querySelector(".element-body");
@@ -9252,6 +9371,9 @@
           ...getDefaultElementAttributes(type),
           ...attrs,
         };
+        mergedAttrs.interactions = normalizeElementInteractions(
+          mergedAttrs.interactions,
+        );
         populateElementBody(body, type, mergedAttrs);
         Object.assign(wrap.style, {
           width: normalizedStyles.width || "260px",
@@ -9265,7 +9387,9 @@
         });
         applyElementContentStyles(wrap, type, normalizedStyles, mergedAttrs);
         applyCustomCssRulesToElement(wrap, mergedAttrs.customCssRules);
+        wrap.dataset.interactions = JSON.stringify(mergedAttrs.interactions || {});
         hydrateCanvasElement(wrap);
+        refreshElementInteractionBadge(wrap);
         canvas.appendChild(wrap);
         handleBuilderTutorialEvent("element-created", {
           type,
@@ -9351,6 +9475,8 @@
         const draft = drafts[index];
         const canvas = document.getElementById("web-canvas");
         if (!draft || !canvas) return;
+        builderImportedProject = null;
+        builderRawImportDocument = "";
         canvas.innerHTML = draft.canvasHtml || draft.canvasState?.html || "";
         applyCanvasPageBackground(
           draft.pageBackground ||
@@ -9367,6 +9493,8 @@
       function newBuilderProject() {
         const canvas = document.getElementById("web-canvas");
         if (!canvas) return;
+        builderImportedProject = null;
+        builderRawImportDocument = "";
         canvas.innerHTML = "";
         applyCanvasDesignPreset("clean", true);
         ensureBuilderGuides(canvas);
@@ -9447,17 +9575,245 @@
           const text = e.target?.result;
           const editor = document.getElementById("builder-code-editor");
           if (typeof text !== "string" || !editor) return;
+          builderImportedProject = null;
           builderCodeMode = true;
           updateBuilderUI();
           editor.value = text;
           handleBuilderCodeInput();
-          applyCodeModeToCanvas();
+          try {
+            applyCodeModeToCanvas();
+          } catch (_error) {
+            renderRawImportedHtmlPreview(text);
+          }
           preserveBuilderFullscreenAfterUpload();
+          showBuilderSnackbar("HTML imported into the editor and rendered visually.", "success");
         };
         reader.readAsText(file);
       }
+      function normalizeImportedProjectPath(value = "") {
+        return String(value || "")
+          .replace(/\\/g, "/")
+          .replace(/^\/+/, "")
+          .replace(/^\.\//, "");
+      }
+      function rewriteCssAssetUrls(cssText = "", assetMap = {}) {
+        return String(cssText || "").replace(
+          /url\((['"]?)(.*?)\1\)/gi,
+          (match, quote, rawUrl) => {
+            const clean = String(rawUrl || "").trim();
+            if (
+              !clean ||
+              /^data:|^blob:|^https?:|^\/\//i.test(clean)
+            ) {
+              return match;
+            }
+            const resolved = assetMap[normalizeImportedProjectPath(clean)];
+            return resolved ? `url("${resolved}")` : match;
+          },
+        );
+      }
+      function buildImportedProjectPreviewDocument(
+        htmlText = "",
+        rootFolder = "",
+        assetMap = {},
+        resolvedCssMap = {},
+      ) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(String(htmlText || ""), "text/html");
+        doc.querySelectorAll("base").forEach((node) => node.remove());
+        const rewriteLookup = {
+          ...assetMap,
+          ...resolvedCssMap,
+        };
+        const rewritePath = (value = "") => {
+          const raw = normalizeImportedProjectPath(value || "");
+          if (!raw || /^data:|^blob:|^https?:|^\/\//i.test(raw)) return value;
+          return (
+            rewriteLookup[raw] ||
+            rewriteLookup[normalizeImportedProjectPath(`${rootFolder}${raw}`)] ||
+            value
+          );
+        };
+        const rewriteAttribute = (selector, attribute) => {
+          doc.querySelectorAll(selector).forEach((node) => {
+            const current = node.getAttribute(attribute) || "";
+            const next = rewritePath(current);
+            if (next && next !== current) node.setAttribute(attribute, next);
+          });
+        };
+        rewriteAttribute(
+          "img[src],script[src],iframe[src],audio[src],video[src],source[src]",
+          "src",
+        );
+        rewriteAttribute('link[rel="stylesheet"][href],a[href]', "href");
+        doc.querySelectorAll("style").forEach((styleNode) => {
+          styleNode.textContent = rewriteCssAssetUrls(styleNode.textContent || "", rewriteLookup);
+        });
+        doc.querySelectorAll("[style]").forEach((node) => {
+          node.setAttribute(
+            "style",
+            rewriteCssAssetUrls(node.getAttribute("style") || "", rewriteLookup),
+          );
+        });
+        return "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
+      }
+      function getBuilderEditorDocument() {
+        if (builderImportedProject?.sourceHtml) return builderImportedProject.sourceHtml;
+        return builderRawImportDocument || buildCodeModeDocument();
+      }
+      async function buildImportedProjectPreview(files) {
+        const normalizedFiles = Array.from(files || []).map((file) => ({
+          file,
+          path: normalizeImportedProjectPath(
+            file.webkitRelativePath || file.name || "",
+          ),
+        }));
+        if (!normalizedFiles.length) {
+          throw new Error("No project files were selected.");
+        }
+        const htmlEntries = normalizedFiles.filter(({ path }) =>
+          /\.html?$/i.test(path),
+        );
+        if (!htmlEntries.length) {
+          throw new Error("The selected folder does not contain an HTML entry file.");
+        }
+        const preferredHtml =
+          htmlEntries.find(({ path }) => /(^|\/)index\.html?$/i.test(path)) ||
+          htmlEntries[0];
+        const rootFolder =
+          preferredHtml.path.includes("/")
+            ? preferredHtml.path.slice(0, preferredHtml.path.lastIndexOf("/") + 1)
+            : "";
+        const makeProjectRelative = (path) =>
+          normalizeImportedProjectPath(
+            rootFolder && path.startsWith(rootFolder)
+              ? path.slice(rootFolder.length)
+              : path,
+          );
+        const progressDiv = document.getElementById("universal-progress");
+        const statusText = document.getElementById("universal-status-text");
+        const bar = document.getElementById("universal-bar");
+        const percentLabel = document.getElementById("universal-percent");
+        if (progressDiv && statusText && bar && percentLabel) {
+          progressDiv.classList.remove("hidden");
+          statusText.innerText = "Scanning project files...";
+          bar.classList.remove("bg-green-500", "bg-rose-500");
+          bar.classList.add("bg-cyan-400");
+          bar.style.width = "10%";
+          percentLabel.innerText = "10%";
+        }
+        const assetMap = {};
+        const cssContentMap = {};
+        for (let index = 0; index < normalizedFiles.length; index += 1) {
+          const { file, path } = normalizedFiles[index];
+          const relativePath = makeProjectRelative(path);
+          if (!relativePath) continue;
+          const lower = relativePath.toLowerCase();
+          if (progressDiv && statusText && bar && percentLabel) {
+            const progress = 10 + Math.floor(((index + 1) / normalizedFiles.length) * 55);
+            statusText.innerText = `Loading ${relativePath}...`;
+            bar.style.width = `${progress}%`;
+            percentLabel.innerText = `${progress}%`;
+          }
+          if (lower.endsWith(".css")) {
+            cssContentMap[relativePath] = await file.text();
+            continue;
+          }
+          assetMap[relativePath] = URL.createObjectURL(file);
+        }
+        const resolvedCssMap = {};
+        Object.entries(cssContentMap).forEach(([relativePath, cssText]) => {
+          const cssBlob = new Blob([rewriteCssAssetUrls(cssText, assetMap)], {
+            type: "text/css",
+          });
+          resolvedCssMap[relativePath] = URL.createObjectURL(cssBlob);
+        });
+        const htmlText = await preferredHtml.file.text();
+        if (progressDiv && statusText && bar && percentLabel) {
+          statusText.innerText = "Rendering hosted preview...";
+          bar.style.width = "82%";
+          percentLabel.innerText = "82%";
+        }
+        const rewrittenHtml = buildImportedProjectPreviewDocument(
+          htmlText,
+          rootFolder,
+          assetMap,
+          resolvedCssMap,
+        );
+        const projectName =
+          rootFolder.replace(/\/$/, "").split("/").pop() ||
+          preferredHtml.file.name.replace(/\.html?$/i, "") ||
+          "Imported Project";
+        const filesForPublish = await Promise.all(
+          normalizedFiles.map(async ({ file, path }) => {
+            const relativePath = makeProjectRelative(path);
+            return {
+              path: relativePath,
+              contentBase64: await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () =>
+                  resolve(String(reader.result || "").split(",").pop() || "");
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+              }),
+              mimeType: file.type || "",
+            };
+          }),
+        );
+        if (progressDiv && statusText && bar && percentLabel) {
+          statusText.innerText = "Project ready.";
+          bar.classList.remove("bg-cyan-400");
+          bar.classList.add("bg-green-500");
+          bar.style.width = "100%";
+          percentLabel.innerText = "100%";
+          setTimeout(() => {
+            progressDiv.classList.add("hidden");
+            bar.style.width = "0%";
+            bar.classList.remove("bg-green-500");
+            bar.classList.add("bg-cyan-400");
+            percentLabel.innerText = "0%";
+          }, 1800);
+        }
+        return {
+          projectName,
+          sourceHtml: htmlText,
+          rootHtml: rewrittenHtml,
+          entryPath: makeProjectRelative(preferredHtml.path) || "index.html",
+          files: filesForPublish,
+          rootFolder,
+          assetMap,
+          resolvedCssMap,
+        };
+      }
+      async function handleBuilderFolderImport(fileList) {
+        if (!fileList?.length) return;
+        const editor = document.getElementById("builder-code-editor");
+        if (!editor) return;
+        try {
+          const project = await buildImportedProjectPreview(fileList);
+          builderImportedProject = project;
+          builderRawImportDocument = project.rootHtml;
+          builderCodeMode = true;
+          updateBuilderUI();
+          editor.value = project.sourceHtml;
+          handleBuilderCodeInput();
+          renderRawImportedHtmlPreview(project.rootHtml);
+          preserveBuilderFullscreenAfterUpload();
+          showBuilderSnackbar(
+            `${project.projectName} loaded as a full hosted preview.`,
+            "success",
+          );
+        } catch (error) {
+          console.error("Project folder import failed:", error);
+          showBuilderSnackbar(
+            error.message || "Could not import that project folder.",
+            "error",
+          );
+        }
+      }
       async function loadBuilderSiteTemplate(slug) {
         const labels = {
+          candycrush: "Candy Crush Game",
           portfolio: "Portfolio Site",
           arcade: "Game Launch",
           studio: "Creative Studio",
@@ -9472,6 +9828,8 @@
             throw new Error(`Template request failed: ${res.status}`);
           }
           const html = await res.text();
+          builderImportedProject = null;
+          builderRawImportDocument = "";
           builderCodeMode = true;
           updateBuilderUI();
           editor.value = html;
@@ -9491,6 +9849,9 @@
             "error",
           );
         }
+      }
+      async function handleCandyCrushTemplateSelection() {
+        await loadBuilderSiteTemplate("candycrush");
       }
       function insertStarterBlock(kind) {
         const canvas = document.getElementById("web-canvas");
@@ -10025,6 +10386,9 @@
                 customCssRules: normalizeCustomCssRules(
                   JSON.parse(existingEl.dataset.customCssRules || "[]"),
                 ),
+                interactions: normalizeElementInteractions(
+                  JSON.parse(existingEl.dataset.interactions || "{}"),
+                ),
               }
             : {
                 id: `el_${Date.now()}`,
@@ -10036,6 +10400,7 @@
                 src: "",
                 className: "",
                 customCssRules: normalizeCustomCssRules(),
+                interactions: normalizeElementInteractions(),
               },
         };
         syncInspectorUI();
@@ -10305,6 +10670,48 @@
             </div>`;
             break;
           case 11:
+            h += `<div class="rounded-2xl border border-white/5 bg-white/[0.03] p-3">
+              <div class="text-[8px] font-black uppercase tracking-[0.24em] text-cyan-400 mb-3">Available DOM Events</div>
+              <div class="max-h-[290px] overflow-y-auto space-y-2 pr-1">
+                ${BUILDER_EVENT_CATALOG.map(
+                  (eventName) => `
+                    <div class="rounded-xl border border-white/5 bg-white/[0.03] px-3 py-2 text-[11px] text-slate-300 flex items-center justify-between gap-2">
+                      <span>${eventName}</span>
+                      <span class="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">${Object.prototype.hasOwnProperty.call(a.interactions || {}, eventName) ? "Mapped" : "Free"}</span>
+                    </div>`,
+                ).join("")}
+              </div>
+            </div>`;
+            break;
+          case 12:
+            h += `<div class="rounded-2xl border border-white/5 bg-white/[0.03] p-3 space-y-3">
+              <div class="flex items-center justify-between gap-3">
+                <div>
+                  <div class="text-[8px] font-black uppercase tracking-[0.24em] text-cyan-400">Trigger Mapping</div>
+                  <div class="mt-1 text-[11px] text-slate-400">Choose an event, then attach a low-code action.</div>
+                </div>
+              </div>
+              <div class="max-h-[300px] overflow-y-auto space-y-2 pr-1">
+                ${BUILDER_INTERACTION_TRIGGERS.map((trigger) => {
+                  const mapped = a.interactions?.[trigger.key];
+                  return `
+                    <div class="rounded-2xl border ${mapped ? "border-amber-400/25 bg-amber-500/10" : "border-white/5 bg-white/[0.02]"} px-3 py-3">
+                      <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                          <div class="text-[11px] font-black text-white">${trigger.label}</div>
+                          <div class="mt-1 text-[10px] text-slate-400">${mapped ? `${mapped.actionType}${mapped.targetId ? ` -> ${mapped.targetId}` : mapped.url ? ` -> ${mapped.url}` : mapped.value ? ` -> ${mapped.value}` : ""}` : "No action attached yet."}</div>
+                        </div>
+                        <div class="flex items-center gap-2 shrink-0">
+                          <button type="button" onclick="openBuilderInteractionModal('${trigger.key}')" class="px-3 py-2 rounded-xl bg-cyan-500 text-[10px] font-black uppercase tracking-[0.16em] text-slate-950 hover:bg-cyan-400 transition-all">${mapped ? "Edit" : "+ Add Action"}</button>
+                          ${mapped ? `<button type="button" onclick="removeBuilderInteraction('${trigger.key}')" class="px-3 py-2 rounded-xl bg-white/5 text-[10px] font-black uppercase tracking-[0.16em] text-rose-300 hover:bg-white/10 transition-all">Clear</button>` : ""}
+                        </div>
+                      </div>
+                    </div>`;
+                }).join("")}
+              </div>
+            </div>`;
+            break;
+          case 13:
             const customCssRules = normalizeCustomCssRules(a.customCssRules);
             h += renderBuilderInput(
               "Custom CSS Class",
@@ -10348,6 +10755,25 @@
         if (e.button !== undefined && e.button !== 0) return;
         if (el.classList.contains("locked")) return;
         if (e.target.isContentEditable) return;
+        if (builderInteractionPickMode && builderInteractionDraft) {
+          e.stopPropagation();
+          e.preventDefault();
+          currentInspectorState.attributes.interactions =
+            currentInspectorState.attributes.interactions || {};
+          const interaction =
+            currentInspectorState.attributes.interactions[
+              builderInteractionDraft.eventName
+            ] || {};
+          interaction.targetId = el.id;
+          currentInspectorState.attributes.interactions[
+            builderInteractionDraft.eventName
+          ] = interaction;
+          builderInteractionDraft.targetId = el.id;
+          builderInteractionPickMode = false;
+          renderBuilderInteractionFields();
+          showBuilderSnackbar(`Target selected: ${el.id}`, "success");
+          return;
+        }
         e.stopPropagation();
         e.preventDefault();
         const isResizer = e.target.classList.contains("resizer");
@@ -10849,6 +11275,7 @@
           "multi-select-toggle",
         );
         const codeToggleButton = document.getElementById("builder-code-toggle");
+        const quickRunButton = document.getElementById("builder-quick-run");
         const canvasContainer = document.getElementById("canvas-container");
         const codePanel = document.getElementById("code-mode-panel");
         if (snapButton) {
@@ -10872,6 +11299,9 @@
             : builderSnapEnabled
               ? "Grid Snap Enabled"
               : "Freeform Builder Ready";
+        }
+        if (quickRunButton) {
+          quickRunButton.title = "Run site";
         }
         if (canvas) {
           canvas.classList.toggle("builder-grid", builderSnapEnabled);
@@ -11866,7 +12296,48 @@
           type,
           wrapperStyle: cleanNode.getAttribute("style") || "",
           contentStyle,
+          interactions: normalizeElementInteractions(
+            JSON.parse(sourceNode.dataset.interactions || "{}"),
+          ),
         };
+      }
+      function escapeJsString(value = "") {
+        return String(value || "")
+          .replace(/\\/g, "\\\\")
+          .replace(/`/g, "\\`")
+          .replace(/\$\{/g, "\\${");
+      }
+      function buildInteractionScriptForExport(interactionEntries = []) {
+        const lines = [];
+        interactionEntries.forEach((entry) => {
+          const sourceId = String(entry?.sourceId || "").trim();
+          const eventName = String(entry?.eventName || "").trim();
+          const action = entry?.action || {};
+          if (!sourceId || !eventName || !action.actionType) return;
+          const sourceRef = `document.getElementById(${JSON.stringify(sourceId)})`;
+          let body = "";
+          if (action.actionType === "alert" && action.value) {
+            body = `window.alert(${JSON.stringify(action.value)});`;
+          } else if (action.actionType === "redirect" && action.url) {
+            body = `window.location.href = ${JSON.stringify(action.url)};`;
+          } else if (
+            action.actionType === "toggle" &&
+            action.targetId &&
+            (action.value || "hidden")
+          ) {
+            body = `const target = document.getElementById(${JSON.stringify(action.targetId)}); if (target) target.classList.toggle(${JSON.stringify(action.value || "hidden")});`;
+          } else if (action.actionType === "playSound" && action.soundUrl) {
+            body = `const audio = new Audio(${JSON.stringify(action.soundUrl)}); audio.play().catch(() => {});`;
+          }
+          if (!body) return;
+          lines.push(`(() => { const source = ${sourceRef}; if (!source) return; source.addEventListener(${JSON.stringify(eventName)}, (event) => { ${body} }); })();`);
+        });
+        if (!lines.length) return "";
+        return `<script>
+document.addEventListener("DOMContentLoaded", () => {
+${lines.map((line) => `  ${line}`).join("\n")}
+});
+<\/script>`;
       }
       function buildExportPayload(baseName = "medialab-page") {
         const canvas = document.getElementById("web-canvas");
@@ -11877,6 +12348,7 @@
             "body",
             `margin: 0; min-height: 100vh; background: ${pageBackground}; font-family: Inter, system-ui, sans-serif; position: relative; overflow-x: hidden;`,
           ),
+          formatCssRule(".hidden", "display: none !important;"),
           formatCssRule(
             ".ml-container",
             "position: absolute; box-sizing: border-box;",
@@ -11887,6 +12359,7 @@
           ),
         ];
         const exportNodes = [];
+        const interactionEntries = [];
         canvas
           .querySelectorAll(":scope > .canvas-element")
           .forEach((sourceNode, index) => {
@@ -11903,11 +12376,21 @@
               );
             }
             exportNodes.push(clean.node.outerHTML);
+            Object.entries(clean.interactions || {}).forEach(([eventName, action]) => {
+              interactionEntries.push({
+                sourceId: clean.node.id,
+                eventName,
+                action,
+              });
+            });
           });
         const css = cssBlocks.join("\n\n");
         const body = exportNodes
           .map((markup) => formatHtmlFragment(markup, "  "))
           .join("\n\n");
+        const interactionScript = buildInteractionScriptForExport(
+          interactionEntries,
+        );
         const html = `<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -11918,11 +12401,13 @@
   </head>
   <body>
 ${body}
+${interactionScript ? `\n  ${interactionScript}` : ""}
   </body>
 </html>`;
-        return { html, css, body };
+        return { html, css, body, interactionScript };
       }
       function buildCodeModeDocument() {
+        if (builderRawImportDocument) return builderRawImportDocument;
         const payload = buildExportPayload("medialab-page");
         if (!payload) return "";
         return `<!DOCTYPE html>
@@ -11940,6 +12425,7 @@ ${payload.css
   </head>
   <body>
 ${payload.body || "  "}
+${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
   </body>
 </html>`;
       }
@@ -12001,8 +12487,9 @@ ${payload.body || "  "}
           showLogin();
           return;
         }
-        const payload = buildExportPayload("medialab-page");
-        if (!payload?.body?.trim()) {
+        const isFolderProject = Boolean(builderImportedProject?.files?.length);
+        const payload = isFolderProject ? null : buildExportPayload("medialab-page");
+        if (!isFolderProject && !payload?.body?.trim()) {
           showBuilderSnackbar("Add content to the canvas before publishing.", "error");
           return;
         }
@@ -12012,22 +12499,59 @@ ${payload.body || "  "}
         const percentLabel = document.getElementById("universal-percent");
         if (progressDiv && statusText && bar && percentLabel) {
           progressDiv.classList.remove("hidden");
-          statusText.innerText = "Publishing project to GitHub Pages...";
+          statusText.innerText = isFolderProject
+            ? "Uploading full project folder to GitHub Pages..."
+            : "Publishing project to GitHub Pages...";
           bar.classList.remove("bg-green-500");
           bar.classList.add("bg-cyan-400");
           bar.style.width = "18%";
           percentLabel.innerText = "18%";
         }
         try {
-          const res = await fetch("/api/github/publish", {
+          if (isFolderProject && statusText && bar && percentLabel) {
+            statusText.innerText = "Preparing project files...";
+            bar.style.width = "38%";
+            percentLabel.innerText = "38%";
+          }
+          const folderFiles = isFolderProject
+            ? (builderImportedProject.files || []).map((file) => {
+                const normalizedPath = normalizeImportedProjectPath(file?.path || "");
+                const isEntry = normalizedPath === builderImportedProject.entryPath;
+                const base64Content = isEntry
+                  ? btoa(unescape(encodeURIComponent(getBuilderEditorDocument())))
+                  : String(file?.contentBase64 || "");
+                return {
+                  path: normalizedPath,
+                  contentBase64: base64Content,
+                  mimeType: file?.mimeType || "",
+                };
+              })
+            : [];
+          const endpoint = isFolderProject
+            ? "/api/github/publish-folder"
+            : "/api/github/publish";
+          const requestBody = isFolderProject
+            ? {
+                projectName,
+                entryPath: builderImportedProject.entryPath || "index.html",
+                files: folderFiles,
+              }
+            : {
+                projectName,
+                htmlContent: payload.body || "",
+                cssContent: payload.css || "",
+                interactionScript: payload.interactionScript || "",
+              };
+          if (isFolderProject && statusText && bar && percentLabel) {
+            statusText.innerText = "Pushing project files to GitHub...";
+            bar.style.width = "62%";
+            percentLabel.innerText = "62%";
+          }
+          const res = await fetch(endpoint, {
             method: "POST",
             credentials: "include",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              projectName,
-              htmlContent: payload.body || "",
-              cssContent: payload.css || "",
-            }),
+            body: JSON.stringify(requestBody),
           });
           const data = await res.json();
           if (!res.ok || !data.success) {
@@ -12036,7 +12560,9 @@ ${payload.body || "  "}
           currentUser = { ...(currentUser || {}), ...(data.user || {}) };
           updateUserProfileUi();
           if (statusText && bar && percentLabel) {
-            statusText.innerText = "Project published successfully.";
+            statusText.innerText = isFolderProject
+              ? "Hosted project published successfully."
+              : "Project published successfully.";
             bar.classList.remove("bg-cyan-400");
             bar.classList.add("bg-green-500");
             bar.style.width = "100%";
@@ -12095,7 +12621,7 @@ ${payload.body || "  "}
         const highlight = document.getElementById("builder-code-highlight");
         const lineGutter = document.getElementById("builder-code-lines");
         if (!editor) return;
-        editor.value = buildCodeModeDocument();
+        editor.value = getBuilderEditorDocument();
         if (highlight) highlight.innerHTML = highlightBuilderCode(editor.value);
         if (lineGutter)
           lineGutter.textContent = buildCodeLineNumbers(editor.value);
@@ -12162,10 +12688,22 @@ ${payload.body || "  "}
         if (lineGutter) lineGutter.scrollTop = editor.scrollTop;
         clearTimeout(codeApplyTimer);
         codeApplyTimer = setTimeout(() => {
+          if (builderImportedProject) {
+            builderImportedProject.sourceHtml = editor.value;
+            builderImportedProject.rootHtml = buildImportedProjectPreviewDocument(
+              editor.value,
+              builderImportedProject.rootFolder || "",
+              builderImportedProject.assetMap || {},
+              builderImportedProject.resolvedCssMap || {},
+            );
+            builderRawImportDocument = builderImportedProject.rootHtml;
+            renderRawImportedHtmlPreview(builderImportedProject.rootHtml, false);
+            return;
+          }
           try {
             tryApplyCodeModeToCanvas(true);
           } catch (error) {
-            return;
+            renderRawImportedHtmlPreview(editor.value);
           }
         }, 500);
       }
@@ -12265,6 +12803,8 @@ ${payload.body || "  "}
       function importCodeNodesToCanvas(nodes) {
         const canvas = document.getElementById("web-canvas");
         if (!canvas) return;
+        builderImportedProject = null;
+        builderRawImportDocument = "";
         canvas.innerHTML = "";
         ensureBuilderGuides(canvas);
         initCanvasSelection(canvas);
@@ -12298,6 +12838,26 @@ ${payload.body || "  "}
           saveToHistory();
         });
       }
+      function renderRawImportedHtmlPreview(documentHtml = "", persistHistory = true) {
+        const canvas = document.getElementById("web-canvas");
+        if (!canvas) return;
+        builderRawImportDocument = String(documentHtml || "");
+        canvas.innerHTML = `
+          <div class="raw-import-shell absolute inset-0 bg-white">
+            <iframe
+              id="builder-import-frame"
+              title="Imported HTML Preview"
+              class="w-full h-full border-0 bg-white"
+              sandbox="allow-scripts allow-forms allow-modals allow-popups allow-downloads allow-same-origin"
+            ></iframe>
+          </div>
+        `;
+        const frame = document.getElementById("builder-import-frame");
+        if (frame) frame.srcdoc = builderRawImportDocument;
+        deselectAll();
+        if (persistHistory) saveToHistory();
+        updateBuilderUI();
+      }
       function tryApplyCodeModeToCanvas(silent = false) {
         const editor = document.getElementById("builder-code-editor");
         if (!editor) return;
@@ -12310,8 +12870,8 @@ ${payload.body || "  "}
             node.classList.contains("canvas-element"),
         );
         if (!bodyChildren.length) {
-          if (!silent) return;
-          throw new Error("No builder nodes found");
+          renderRawImportedHtmlPreview(editor.value);
+          return;
         }
         bodyChildren.forEach((node) => {
           if (node.classList.contains("ml-container")) {
@@ -12339,16 +12899,27 @@ ${payload.body || "  "}
         exportCanvasToHTML();
       }
       function openBuilderRunMode() {
+        if (builderImportedProject?.rootHtml) {
+          openBuilderRunModeWithHtml(builderImportedProject.rootHtml);
+          return;
+        }
+        if (builderRawImportDocument) {
+          openBuilderRunModeWithHtml(builderRawImportDocument);
+          return;
+        }
         const payload = buildExportPayload("medialab-page");
         if (!payload?.body?.trim()) {
           showBuilderSnackbar("Add content to the canvas before running the site.", "error");
           return;
         }
+        openBuilderRunModeWithHtml(buildCodeModeDocument());
+      }
+      function openBuilderRunModeWithHtml(documentHtml = "") {
         const modal = document.getElementById("builder-run-modal");
         const frame = document.getElementById("builder-run-frame");
         if (!modal || !frame) return;
         modal.classList.remove("hidden");
-        frame.srcdoc = buildCodeModeDocument();
+        frame.srcdoc = documentHtml;
       }
       function closeBuilderRunMode() {
         const modal = document.getElementById("builder-run-modal");
@@ -12364,9 +12935,25 @@ ${payload.body || "  "}
         }
       }
       function openBuilderRunModeInNewTab() {
-        const payload = buildExportPayload("medialab-page");
-        if (!payload?.body?.trim()) {
+        const runDocument =
+          builderImportedProject?.rootHtml || builderRawImportDocument || buildCodeModeDocument();
+        if (!String(runDocument || "").trim()) {
           showBuilderSnackbar("Add content to the canvas before running the site.", "error");
+          return;
+        }
+        const previewWindow = window.open(
+          "",
+          "medialab_run_preview",
+          "popup=yes,width=1280,height=900,resizable=yes,scrollbars=yes",
+        );
+        if (previewWindow) {
+          try {
+            previewWindow.opener = null;
+          } catch (_error) {}
+          previewWindow.document.open();
+          previewWindow.document.write(runDocument);
+          previewWindow.document.close();
+          previewWindow.focus();
           return;
         }
         if (builderRunPreviewUrl) {
@@ -12374,7 +12961,7 @@ ${payload.body || "  "}
           builderRunPreviewUrl = null;
         }
         builderRunPreviewUrl = URL.createObjectURL(
-          new Blob([buildCodeModeDocument()], { type: "text/html" }),
+          new Blob([runDocument], { type: "text/html" }),
         );
         window.open(builderRunPreviewUrl, "_blank", "noopener,noreferrer");
       }
@@ -12634,6 +13221,7 @@ ${payload.body || "  "}
       }
       function resetSmartInspectorState() {
         inspectorPageIndex = 0;
+        closeBuilderInteractionModal();
         currentInspectorState = {
           type: null,
           targetEl: null,
@@ -12691,6 +13279,10 @@ ${payload.body || "  "}
             el,
             currentInspectorState.attributes.customCssRules,
           );
+          el.dataset.interactions = JSON.stringify(
+            normalizeElementInteractions(currentInspectorState.attributes.interactions),
+          );
+          refreshElementInteractionBadge(el);
           saveToHistory();
         }
       }
@@ -12723,6 +13315,120 @@ ${payload.body || "  "}
           page: inspectorPages[inspectorPageIndex] || "",
           index: inspectorPageIndex,
         });
+      }
+      function openBuilderInteractionModal(eventName) {
+        currentInspectorState.attributes.interactions =
+          currentInspectorState.attributes.interactions || {};
+        const existing =
+          currentInspectorState.attributes.interactions[eventName] || {};
+        builderInteractionDraft = {
+          eventName,
+          actionType: existing.actionType || "alert",
+          targetId: existing.targetId || "",
+          value: existing.value || "",
+          url: existing.url || "",
+          soundUrl: existing.soundUrl || "",
+        };
+        builderInteractionPickMode = false;
+        const modal = document.getElementById("builder-interaction-modal");
+        const title = document.getElementById("builder-interaction-title");
+        const subtitle = document.getElementById("builder-interaction-subtitle");
+        const select = document.getElementById("interaction-action-type");
+        if (title) title.textContent = `${getBuilderInteractionLabel(eventName)} Action`;
+        if (subtitle) subtitle.textContent = "Map this trigger to a simple visual action.";
+        if (select) select.value = builderInteractionDraft.actionType;
+        modal?.classList.remove("hidden");
+        renderBuilderInteractionFields();
+      }
+      function closeBuilderInteractionModal() {
+        builderInteractionDraft = null;
+        builderInteractionPickMode = false;
+        document.getElementById("builder-interaction-modal")?.classList.add("hidden");
+      }
+      function handleInteractionActionTypeChange(value) {
+        if (!builderInteractionDraft) return;
+        builderInteractionDraft.actionType = value || "alert";
+        if (builderInteractionDraft.actionType !== "toggle") {
+          builderInteractionDraft.targetId = "";
+        }
+        renderBuilderInteractionFields();
+      }
+      function renderBuilderInteractionFields() {
+        const container = document.getElementById("interaction-action-fields");
+        if (!container || !builderInteractionDraft) return;
+        const draft = builderInteractionDraft;
+        const targets = getCanvasElementTargetOptions().filter(
+          (item) => item.id !== currentInspectorState.attributes.id,
+        );
+        let html = "";
+        if (draft.actionType === "alert") {
+          html = `<label class="block"><span class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Alert Message</span><input value="${escapeAttr(draft.value || "")}" oninput="builderInteractionDraft.value = this.value" class="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none focus:border-cyan-400" placeholder="Hello from MediaLab!" /></label>`;
+        } else if (draft.actionType === "redirect") {
+          html = `<label class="block"><span class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Destination URL</span><input value="${escapeAttr(draft.url || "")}" oninput="builderInteractionDraft.url = this.value" class="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none focus:border-cyan-400" placeholder="https://example.com" /></label>`;
+        } else if (draft.actionType === "toggle") {
+          html = `<div class="space-y-3">
+            <label class="block">
+              <span class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Target Element</span>
+              <select onchange="builderInteractionDraft.targetId = this.value" class="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none focus:border-cyan-400">
+                <option value="">Select target</option>
+                ${targets.map((item) => `<option value="${escapeAttr(item.id)}" ${item.id === draft.targetId ? "selected" : ""}>${item.label}</option>`).join("")}
+              </select>
+            </label>
+            <div class="flex items-center gap-3">
+              <button type="button" onclick="startBuilderInteractionTargetPick()" class="px-4 py-3 rounded-2xl bg-white/5 border border-white/10 text-sm font-black text-cyan-200 hover:bg-white/10 transition-all">Pick Element</button>
+              <p class="text-xs text-slate-400">${draft.targetId ? `Current target: ${draft.targetId}` : "Pick directly on the canvas to save time."}</p>
+            </div>
+            <label class="block"><span class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">CSS Class To Toggle</span><input value="${escapeAttr(draft.value || "hidden")}" oninput="builderInteractionDraft.value = this.value" class="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none focus:border-cyan-400" placeholder="hidden" /></label>
+          </div>`;
+        } else if (draft.actionType === "playSound") {
+          html = `<label class="block"><span class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Sound URL</span><input value="${escapeAttr(draft.soundUrl || "")}" oninput="builderInteractionDraft.soundUrl = this.value" class="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none focus:border-cyan-400" placeholder="https://..." /></label>`;
+        }
+        container.innerHTML = html;
+      }
+      function startBuilderInteractionTargetPick() {
+        builderInteractionPickMode = true;
+        showBuilderSnackbar("Click the target element on the canvas.", "info");
+      }
+      function confirmBuilderInteractionAction() {
+        if (!builderInteractionDraft) return;
+        const draft = builderInteractionDraft;
+        if (draft.actionType === "toggle" && !draft.targetId) {
+          showBuilderSnackbar("Select a target element first.", "error");
+          return;
+        }
+        if (draft.actionType === "alert" && !String(draft.value || "").trim()) {
+          showBuilderSnackbar("Enter an alert message first.", "error");
+          return;
+        }
+        if (draft.actionType === "redirect" && !String(draft.url || "").trim()) {
+          showBuilderSnackbar("Enter a destination URL first.", "error");
+          return;
+        }
+        if (
+          draft.actionType === "playSound" &&
+          !String(draft.soundUrl || "").trim()
+        ) {
+          showBuilderSnackbar("Enter a sound URL first.", "error");
+          return;
+        }
+        currentInspectorState.attributes.interactions =
+          currentInspectorState.attributes.interactions || {};
+        currentInspectorState.attributes.interactions[draft.eventName] = {
+          actionType: draft.actionType,
+          targetId: draft.targetId || "",
+          value: draft.value || "",
+          url: draft.url || "",
+          soundUrl: draft.soundUrl || "",
+        };
+        syncInspectorUI(true);
+        closeBuilderInteractionModal();
+        showBuilderSnackbar("Interaction saved.", "success");
+      }
+      function removeBuilderInteraction(eventName) {
+        if (!currentInspectorState.attributes.interactions) return;
+        delete currentInspectorState.attributes.interactions[eventName];
+        syncInspectorUI(true);
+        showBuilderSnackbar("Interaction removed.", "success");
       }
       function toggleElementPicker(event) {
         const picker = document.getElementById("element-picker");
