@@ -285,6 +285,13 @@
               >
                 Premium Requests
               </button>
+              <button
+                data-tab="downloads"
+                class="top-tab px-4 py-3 rounded-2xl text-sm font-bold transition-all"
+                onclick="showAdminTab('downloads', this)"
+              >
+                Downloads
+              </button>
             </div>
           </div>
         </div>
@@ -295,6 +302,7 @@
       <section id="tab-logs" class="mt-6 space-y-4 hidden"></section>
       <section id="tab-users" class="mt-6 space-y-4 hidden"></section>
       <section id="tab-premium" class="mt-6 space-y-4 hidden"></section>
+      <section id="tab-downloads" class="mt-6 space-y-4 hidden"></section>
     </main>
 
     <script>
@@ -302,6 +310,7 @@
       let adminAnalytics = null;
       let adminUsageLogs = [];
       let adminPremiumRequests = [];
+      let adminDownloads = [];
       let adminSocket = null;
       let adminCounterValues = {};
       let feedbackView = "all";
@@ -327,7 +336,7 @@
         document
           .querySelectorAll(`.top-tab[data-tab="${name}"]`)
           .forEach((tab) => tab.classList.add("active"));
-        ["analytics", "feedbacks", "logs", "users", "premium"].forEach((tabName) => {
+        ["analytics", "feedbacks", "logs", "users", "premium", "downloads"].forEach((tabName) => {
           document
             .getElementById(`tab-${tabName}`)
             ?.classList.toggle("hidden", tabName !== name);
@@ -620,6 +629,7 @@
           ["proUsers", "Pro Users", adminAnalytics.proUsers || 0],
           ["feedbacks", "Feedbacks", adminAnalytics.totalFeedbacks || 0],
           ["premiumRequests", "Premium Requests", adminAnalytics.totalUpgradeRequests || 0],
+          ["downloads", "Downloads", adminAnalytics.totalDownloads || 0],
           ["usageLogs", "Usage Logs", adminAnalytics.totalUsageLogs || 0],
         ];
         el.innerHTML = `
@@ -675,6 +685,10 @@
               <div class="rounded-2xl border border-white/8 bg-white/[0.02] px-4 py-4">
                 <div class="text-[10px] uppercase tracking-[0.18em] text-slate-500 font-bold">Logs</div>
                 <div class="text-xl font-bold mt-2">${adminAnalytics.last30Days?.usageLogs || 0}</div>
+              </div>
+              <div class="rounded-2xl border border-white/8 bg-white/[0.02] px-4 py-4">
+                <div class="text-[10px] uppercase tracking-[0.18em] text-slate-500 font-bold">Downloads</div>
+                <div class="text-xl font-bold mt-2">${adminAnalytics.last30Days?.downloads || 0}</div>
               </div>
               <div class="rounded-2xl border border-white/8 bg-white/[0.02] px-4 py-4">
                 <div class="text-[10px] uppercase tracking-[0.18em] text-slate-500 font-bold">Errors</div>
@@ -735,6 +749,43 @@
           </article>
         `;
           })
+          .join("");
+      }
+
+      function renderDownloads() {
+        const el = document.getElementById("tab-downloads");
+        if (!el) return;
+        if (!adminDownloads.length) {
+          el.innerHTML = `<div class="rounded-[1.5rem] border border-dashed border-white/10 p-8 text-center text-slate-400">No downloads recorded yet.</div>`;
+          return;
+        }
+        el.innerHTML = adminDownloads
+          .map(
+            (item) => `
+          <article class="rounded-[1.35rem] border border-white/10 bg-white/[0.03] overflow-hidden">
+            <div class="px-4 py-4 sm:px-5 sm:py-5">
+              <div class="flex items-center gap-4">
+                <div class="w-11 h-11 rounded-full border border-cyan-400/25 bg-cyan-500/10 text-cyan-300 flex items-center justify-center shrink-0">
+                  <i class="fas fa-download text-sm"></i>
+                </div>
+                <div class="min-w-0 flex-1">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <h3 class="text-sm sm:text-base font-bold text-white">${escapeHtml(item.name || "Anonymous")}</h3>
+                    <span class="px-2.5 py-1 rounded-full ${item.isAnonymous ? "bg-white/5 text-slate-300" : "bg-emerald-500/15 text-emerald-300"} text-[10px] font-bold uppercase tracking-[0.16em]">${item.isAnonymous ? "Guest" : "User"}</span>
+                    <span class="px-2.5 py-1 rounded-full bg-cyan-500/15 text-cyan-300 text-[10px] font-bold uppercase tracking-[0.16em]">${escapeHtml(item.type || "pwa")}</span>
+                  </div>
+                  <div class="mt-2 text-xs sm:text-sm text-slate-400 break-all">${escapeHtml(item.email || "No email")}</div>
+                </div>
+              </div>
+              <div class="mt-4 space-y-2 text-sm sm:text-[15px]">
+                <div class="text-slate-300"><span class="text-slate-500">Platform:</span> ${escapeHtml(item.platform || "Unknown")}</div>
+                <div class="text-slate-300"><span class="text-slate-500">Source:</span> ${escapeHtml(item.source || "web")}</div>
+                <div class="text-slate-300"><span class="text-slate-500">Downloaded:</span> ${formatDate(item.createdAt)}</div>
+              </div>
+            </div>
+          </article>
+        `,
+          )
           .join("");
       }
 
@@ -881,6 +932,8 @@
                   const actionText = String(item.action || "").toLowerCase();
                   const summaryText = String(item.summary || "").toLowerCase();
                   const isErrorLog = item.kind === "error";
+                  const isExitLog =
+                    actionText.includes("exit") || summaryText.includes("exit");
                   const isLoginLog =
                     actionText.includes("login") ||
                     summaryText.includes("login");
@@ -889,7 +942,7 @@
                     actionText.includes("pro") ||
                     summaryText.includes("upgrade") ||
                     summaryText.includes("pro");
-                  const lineTone = isErrorLog
+                  const lineTone = isErrorLog || isExitLog
                     ? "text-rose-300"
                     : isProLog
                       ? "text-amber-300"
@@ -898,7 +951,7 @@
                         : !item.isAnonymous
                           ? "text-emerald-200"
                           : "text-slate-200";
-                  const identityTone = isErrorLog
+                  const identityTone = isErrorLog || isExitLog
                     ? "text-rose-400/90"
                     : isProLog
                       ? "text-amber-300/90"
@@ -948,6 +1001,25 @@
         renderLogs();
       }
 
+      function upsertDownload(download) {
+        adminDownloads = [
+          download,
+          ...adminDownloads.filter((item) => item._id !== download._id),
+        ].slice(0, 300);
+        if (adminAnalytics) {
+          adminAnalytics.totalDownloads = Math.max(
+            adminAnalytics.totalDownloads || 0,
+            adminDownloads.length,
+          );
+          if (adminAnalytics.last30Days) {
+            adminAnalytics.last30Days.downloads =
+              (adminAnalytics.last30Days.downloads || 0) + 1;
+          }
+        }
+        renderAnalyticsDetails();
+        renderDownloads();
+      }
+
       function upsertPremiumRequest(request) {
         adminPremiumRequests = [
           request,
@@ -974,6 +1046,9 @@
         });
         adminSocket.on("admin:premium-request-updated", (payload) => {
           upsertPremiumRequest(payload);
+        });
+        adminSocket.on("admin:download", (payload) => {
+          upsertDownload(payload);
         });
       }
 
@@ -1008,25 +1083,29 @@
       async function loadAdminData() {
         if (localStorage.getItem(ADMIN_ACCESS_KEY) !== "granted") return;
         try {
-          const [feedbackRes, analyticsRes, usageLogRes, premiumRes] = await Promise.all([
+          const [feedbackRes, analyticsRes, usageLogRes, premiumRes, downloadsRes] = await Promise.all([
             fetch("/api/admin/feedbacks"),
             fetch("/api/admin/analytics"),
             fetch("/api/admin/usage-logs"),
             fetch("/api/admin/upgrade-requests"),
+            fetch("/api/admin/downloads"),
           ]);
           const feedbackData = await feedbackRes.json();
           const analyticsData = await analyticsRes.json();
           const usageLogData = await usageLogRes.json();
           const premiumData = await premiumRes.json();
+          const downloadsData = await downloadsRes.json();
           adminFeedbacks = feedbackData.feedbacks || [];
           adminAnalytics = analyticsData.analytics || {};
           adminUsageLogs = usageLogData.logs || [];
           adminPremiumRequests = premiumData.requests || [];
+          adminDownloads = downloadsData.downloads || [];
           renderAnalyticsDetails();
           renderFeedbacks();
           renderLogs();
           renderUsers();
           renderPremiumRequests();
+          renderDownloads();
           connectAdminLiveFeed();
           setLiveStatus(Boolean(adminSocket?.connected));
         } catch (error) {

@@ -13,6 +13,8 @@
   "license": "ISC",
   "dependencies": {
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@octokit/rest": "^22.0.0",
+    "axios": "^1.14.0",
     "connect-mongo": "^6.0.0",
     "cors": "^2.8.6",
     "docx": "^9.6.1",
