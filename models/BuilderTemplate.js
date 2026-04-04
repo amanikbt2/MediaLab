@@ -6,6 +6,9 @@ const BuilderTemplateSchema = new mongoose.Schema({
   description: { type: String, default: "", trim: true },
   category: { type: String, default: "General", trim: true },
   html: { type: String, default: "" },
+  htmlUrl: { type: String, default: "", trim: true },
+  htmlFileId: { type: String, default: "", trim: true },
+  storageProvider: { type: String, default: "mongo", trim: true },
   authorId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
   authorName: { type: String, default: "", trim: true },
   sourceMarketplaceItemId: {

@@ -61,38 +61,48 @@
           0 4px 6px -1px rgba(0, 0, 0, 0.3),
           inset 0 3px 4px rgba(0, 0, 0, 0.25);
       }
+
+      /* CSS Glow for candies */
+      .candy-glow {
+        filter: drop-shadow(0 0 12px currentColor);
+      }
     </style>
   </head>
   <body
     class="bg-gradient-to-br from-pink-500 via-purple-600 to-violet-700 min-h-screen text-white overflow-hidden"
   >
-    <!-- STARTUP -->
+    <!-- STARTUP SCREEN -->
     <div
       id="startup-screen"
       class="flex flex-col items-center justify-center min-h-screen"
     >
-      <div class="text-center">
+      <div class="text-center px-6">
         <div class="flex justify-center gap-8 mb-10">
-          <span class="text-8xl animate-bounce">🍭</span>
-          <span class="text-8xl animate-bounce delay-300">🍬</span>
+          <span class="text-2xl md:text-4xl">🍭</span>
+          <h1 class="text-2xl md:text-4xl font-semibold tracking-tight text-white/90">
+            Candy Crush
+          </h1>
+          <span class="text-2xl md:text-4xl">🍬</span>
         </div>
-        <h1 class="text-7xl font-bold tracking-tighter mb-3">CANDY CRUSH</h1>
-        <p class="text-2xl text-white/80">Super Boss Mode</p>
+        <h1 class="text-5xl md:text-7xl font-bold tracking-tighter mb-2">__MEDIALAB_OWNER_NAME__</h1>
+        <p class="text-xl md:text-2xl text-white/80">Candy Crush</p>
+        <p class="mt-3 text-lg md:text-2xl text-white/70">Super Boss Mode</p>
       </div>
     </div>
 
-    <!-- MENU -->
+    <!-- MENU SCREEN -->
     <div
       id="menu-screen"
       class="hidden flex flex-col items-center justify-center min-h-screen px-6"
     >
-      <div class="text-center mb-12">
+      <div class="text-center mb-12 px-4">
         <div class="flex justify-center gap-4 mb-6">
           <span class="text-6xl">🍭</span>
-          <h1 class="text-7xl font-bold tracking-tighter">CANDY CRUSH</h1>
+          <h1 class="text-4xl md:text-6xl font-bold tracking-tighter">__MEDIALAB_OWNER_NAME__</h1>
           <span class="text-6xl">🍬</span>
         </div>
-        <p class="text-2xl text-white/90">Super Boss Mode</p>
+        <p class="mt-3 text-xl md:text-3xl text-white/90">Candy Crush</p>
+        <p class="mt-2 text-lg md:text-2xl text-white/75">Super Boss Mode</p>
       </div>
       <div class="flex flex-col gap-4 w-full max-w-xs">
         <button
@@ -110,7 +120,7 @@
       </div>
     </div>
 
-    <!-- LEVELS -->
+    <!-- LEVELS SCREEN -->
     <div id="levels-screen" class="hidden flex flex-col min-h-screen">
       <div
         class="p-6 flex items-center justify-between bg-black/30 sticky top-0 z-10"
@@ -141,7 +151,7 @@
       </div>
     </div>
 
-    <!-- SETTINGS -->
+    <!-- SETTINGS SCREEN -->
     <div id="settings-screen" class="hidden flex flex-col min-h-screen p-8">
       <div class="max-w-md mx-auto w-full">
         <h2 class="text-4xl font-bold mb-8 text-center">Settings</h2>
@@ -185,17 +195,20 @@
         class="bg-gradient-to-b from-purple-900 to-transparent p-4 flex justify-between items-center"
       >
         <button onclick="exitLevel()" class="text-lg">← EXIT</button>
+
         <div class="flex gap-8 text-center">
           <div>
             <div class="text-xs opacity-70">LEVEL</div>
             <div id="level-num" class="text-4xl font-bold">1</div>
           </div>
+
           <div id="challenge-container" class="text-center">
             <div id="challenge-label" class="text-xs opacity-70">MOVES</div>
             <div id="challenge-value" class="text-4xl font-bold text-amber-300">
               25
             </div>
           </div>
+
           <div>
             <div class="text-xs opacity-70">SCORE</div>
             <div class="flex items-baseline">
@@ -204,6 +217,7 @@
             </div>
           </div>
         </div>
+
         <button onclick="pauseGame()" class="text-3xl">⏸</button>
       </div>
       <div class="flex-1 flex items-center justify-center p-4">
@@ -310,7 +324,6 @@
         isProcessing = false;
       let swipeStart = null;
       let fallingPieces = [];
-      let particles = [];
       let progress = {};
 
       let audioContext;
@@ -361,13 +374,13 @@
         gain.gain.value = (volume / 100) * 0.75;
 
         switch (type) {
-          case "match": // Classic pop sound
+          case "match": // Classic pop
             osc.type = "sine";
             osc.frequency.setValueAtTime(820, now);
             osc.frequency.linearRampToValueAtTime(1240, now + 0.12);
             gain.gain.linearRampToValueAtTime(0, now + 0.25);
             break;
-          case "powerup": // Higher swipe / special candy sound
+          case "powerup":
             osc.type = "triangle";
             osc.frequency.setValueAtTime(1100, now);
             osc.frequency.linearRampToValueAtTime(680, now + 0.35);
@@ -397,30 +410,7 @@
         playSound("match");
       }
 
-      // ================== TINY SPLASH PARTICLES ==================
-      class Particle {
-        constructor(x, y) {
-          this.x = x;
-          this.y = y;
-          this.vx = (Math.random() - 0.5) * 4.5;
-          this.vy = (Math.random() - 0.5) * 4.5 - 2;
-          this.life = 0.55 + Math.random() * 0.35;
-          this.emoji = "✨";
-        }
-        update() {
-          this.vy += 0.28;
-          this.x += this.vx;
-          this.y += this.vy;
-          this.life -= 0.038;
-        }
-        draw() {
-          ctx.globalAlpha = this.life;
-          ctx.font = "20px system-ui";
-          ctx.fillText(this.emoji, this.x, this.y);
-        }
-      }
-
-      // ================== CANVAS & GRAVITY ==================
+      // ================== RESIZE & GRAVITY ==================
       function resizeCanvas() {
         const container = document.getElementById("game-screen");
         const maxSize = Math.min(
@@ -446,22 +436,17 @@
               writePos--;
             }
           }
-          // Refill from top
           for (let r = writePos; r >= 0; r--) {
             grid[r][c] = Math.floor(Math.random() * 6) + 1;
             changed = true;
           }
         }
-
         if (changed) {
           animateFalling();
           setTimeout(() => {
             const matches = findMatches();
-            if (matches.length > 0) {
-              removeMatches(matches);
-            } else {
-              checkWinCondition();
-            }
+            if (matches.length > 0) removeMatches(matches);
+            else checkWinCondition();
           }, 280);
         } else {
           checkWinCondition();
@@ -473,7 +458,7 @@
         if (score >= targetScore) endGame(true);
       }
 
-      // ================== SMOOTH ANIMATIONS ==================
+      // ================== SMOOTH SWAP & FALLING ==================
       function animateSwap(r1, c1, r2, c2, callback) {
         const dx = (c2 - c1) * CELL;
         const dy = (r2 - r1) * CELL;
@@ -512,6 +497,7 @@
 
             const type = grid[r][c];
             if (!type) continue;
+
             ctx.font = `${CELL * 0.82}px system-ui`;
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
@@ -556,8 +542,7 @@
           else fallingPieces.splice(i, 1);
         }
         draw();
-        if (still || particles.length > 0)
-          animationFrame = requestAnimationFrame(animationLoop);
+        if (still) animationFrame = requestAnimationFrame(animationLoop);
         else animationFrame = null;
       }
 
@@ -570,6 +555,7 @@
             if (!type) continue;
             const x = c * CELL + CELL / 2;
             const y = r * CELL + CELL / 2;
+
             ctx.font = `${CELL * 0.82}px system-ui`;
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
@@ -592,13 +578,6 @@
             p.startCol * CELL + CELL / 2,
             y,
           );
-        }
-
-        for (let i = particles.length - 1; i >= 0; i--) {
-          const p = particles[i];
-          p.update();
-          p.draw();
-          if (p.life <= 0) particles.splice(i, 1);
         }
       }
 
@@ -674,7 +653,7 @@
         setTimeout(() => (canvas.style.transform = ""), 180);
       }
 
-      // ================== REMOVE & TINY SPLASH ==================
+      // ================== REMOVE & GRAVITY ==================
       function removeMatches(matches) {
         if (!matches.length) return;
         score += matches.length * 130;
@@ -688,21 +667,12 @@
 
         for (const { r, c } of matches) {
           if (grid[r][c] === JELLY) jellyLeft--;
-          if (grid[r][c] <= 6 || grid[r][c] === JELLY) {
-            createTinySplash(c * CELL + CELL / 2, r * CELL + CELL / 2);
-            grid[r][c] = 0;
-          }
+          grid[r][c] = 0;
         }
 
         updateHUD();
         animateFalling();
         setTimeout(applyGravityAndRefill, 260);
-      }
-
-      function createTinySplash(x, y) {
-        for (let i = 0; i < 8; i++) {
-          particles.push(new Particle(x, y));
-        }
       }
 
       function createPowerUp(r, c, count) {
@@ -732,7 +702,6 @@
           }
         }
 
-        // Remove initial matches
         while (findMatches().length > 0) {
           for (let r = 0; r < ROWS; r++)
             for (let c = 0; c < COLS; c++) {
@@ -744,7 +713,6 @@
 
       function findMatches() {
         let matches = [];
-        // Horizontal
         for (let r = 0; r < ROWS; r++) {
           for (let c = 0; c < COLS - 2; c++) {
             if (
@@ -757,7 +725,6 @@
             }
           }
         }
-        // Vertical
         for (let c = 0; c < COLS; c++) {
           for (let r = 0; r < ROWS - 2; r++) {
             if (
@@ -821,7 +788,6 @@
         targetScore = lvl.target;
         score = 0;
         gameOver = false;
-        particles = [];
         isTimerLevel = false;
         isCollectLevel = false;
         isClearLevel = false;
@@ -1021,7 +987,7 @@
 
         showStartup();
         console.log(
-          "%c🏆 SUPER BOSS MODE — Fully Fixed & Optimized!",
+          "%c🏆 SUPER BOSS MODE — Clean & Smooth with CSS Glows!",
           "color:#22c55e; font-weight:bold; font-size:16px",
         );
       }

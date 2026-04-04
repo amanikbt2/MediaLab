@@ -1159,6 +1159,48 @@ async function uploadImageToImageKit({
   };
 }
 
+async function uploadFileToImageKit({
+  fileBuffer,
+  fileName = "index.html",
+  folder = "/medialab/templates",
+  tags = [],
+} = {}) {
+  const publicKey = String(process.env.IMAGEKIT_PUBLIC_KEY || "").trim();
+  const privateKey = String(process.env.IMAGEKIT_PRIVATE_KEY || "").trim();
+  if (!publicKey || !privateKey) {
+    throw new Error("ImageKit keys are not configured yet.");
+  }
+  if (!fileBuffer || !Buffer.isBuffer(fileBuffer) || !fileBuffer.length) {
+    throw new Error("No file was provided for ImageKit upload.");
+  }
+  const form = new FormData();
+  form.append("file", new Blob([fileBuffer]), fileName);
+  form.append("fileName", fileName);
+  form.append("folder", folder);
+  if (Array.isArray(tags) && tags.length) {
+    form.append("tags", tags.filter(Boolean).join(","));
+  }
+  form.append("useUniqueFileName", "false");
+  const response = await fetch("https://upload.imagekit.io/api/v1/files/upload", {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${Buffer.from(`${privateKey}:`).toString("base64")}`,
+    },
+    body: form,
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload?.url) {
+    throw new Error(
+      payload?.message || payload?.error?.message || "Could not upload this file to ImageKit.",
+    );
+  }
+  return {
+    url: String(payload.url || "").trim(),
+    fileId: String(payload.fileId || "").trim(),
+    name: String(payload.name || fileName).trim(),
+  };
+}
+
 function buildMarketplacePublicItem(item = {}, viewerId = "") {
   const comments = Array.isArray(item.comments) ? item.comments : [];
   const purchases = Array.isArray(item.purchases) ? item.purchases : [];
@@ -1400,6 +1442,25 @@ async function syncMarketplaceItemAsBuilderTemplate(item) {
     slug = `${slugBase}-${suffix}`;
     suffix += 1;
   }
+  const templateHtml = String(item.sourceHtml || "").trim();
+  let htmlUrl = "";
+  let htmlFileId = "";
+  let storageProvider = "mongo";
+  if (templateHtml) {
+    try {
+      const uploadedTemplate = await uploadFileToImageKit({
+        fileBuffer: Buffer.from(templateHtml, "utf8"),
+        fileName: "index.html",
+        folder: `/medialab/templates/${slug}`,
+        tags: ["medialab", "builder-template", slug],
+      });
+      htmlUrl = uploadedTemplate.url;
+      htmlFileId = uploadedTemplate.fileId;
+      storageProvider = "imagekit";
+    } catch (uploadError) {
+      console.warn("Template ImageKit upload skipped:", uploadError.message);
+    }
+  }
   const template = await BuilderTemplate.findOneAndUpdate(
     { sourceMarketplaceItemId: item._id },
     {
@@ -1408,7 +1469,10 @@ async function syncMarketplaceItemAsBuilderTemplate(item) {
         title: item.title || "Official Template",
         description: item.description || item.purpose || "Official MediaLab builder template.",
         category: item.category || "General",
-        html: String(item.sourceHtml || "").trim(),
+        html: templateHtml,
+        htmlUrl,
+        htmlFileId,
+        storageProvider,
         authorId: item.authorId || null,
         authorName: item.authorName || "MediaLab Creator",
         isOfficial: true,
@@ -2307,6 +2371,19 @@ app.get("/templates/:slug", async (req, res) => {
     slug: String(req.params.slug || "").trim(),
     isActive: true,
   }).lean();
+  if (dynamicTemplate?.htmlUrl) {
+    try {
+      const response = await fetch(String(dynamicTemplate.htmlUrl || "").trim());
+      if (response.ok) {
+        const templateHtml = await response.text();
+        if (templateHtml) {
+          return res.type("html").send(String(templateHtml));
+        }
+      }
+    } catch (error) {
+      console.warn("Template ImageKit fetch skipped:", error.message);
+    }
+  }
   if (dynamicTemplate?.html) {
     return res.type("html").send(String(dynamicTemplate.html || ""));
   }

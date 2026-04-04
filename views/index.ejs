@@ -4803,33 +4803,66 @@
         }
         return issues;
       }
+      function getMarketplaceStepIssues(step = marketplaceCreateStep) {
+        const sourceType = String(marketplaceDraftListing.sourceType || "").trim();
+        const projectId = String(marketplaceDraftListing.projectId || "").trim();
+        const sourceFiles = Array.isArray(marketplaceDraftListing.sourceFiles)
+          ? marketplaceDraftListing.sourceFiles.filter(Boolean)
+          : [];
+        const sourceHtml =
+          sourceType === "draft"
+            ? resolveMarketplaceDraftHtml(
+                getMarketplaceDraftProjects().find(
+                  (item) => String(item?.name || "").trim() === projectId,
+                ) || marketplaceDraftListing,
+              )
+            : sourceType === "upload"
+              ? resolveMarketplaceUploadHtml(marketplaceDraftListing)
+              : String(marketplaceDraftListing.sourceHtml || "").trim();
+        const title = String(marketplaceDraftListing.title || "").trim();
+        const category = String(marketplaceDraftListing.category || "").trim();
+        const purpose = String(marketplaceDraftListing.purpose || "").trim();
+        const description = String(marketplaceDraftListing.description || "").trim();
+        const screenshots = Array.isArray(marketplaceDraftListing.screenshots)
+          ? marketplaceDraftListing.screenshots.filter(Boolean)
+          : [];
+        if (Number(step) === 1) {
+          const issues = [];
+          if (!sourceType) issues.push("Choose a project source type.");
+          if (!projectId) issues.push("Select a project source first.");
+          if (sourceType === "upload" && !sourceHtml && !sourceFiles.length) {
+            issues.push("Upload a project folder with an HTML entry file.");
+          }
+          if (sourceType === "draft" && !projectId) {
+            issues.push("Choose one of your MediaLab drafts.");
+          }
+          if (sourceType === "live" && !projectId) {
+            issues.push("Choose one of your live projects.");
+          }
+          return issues;
+        }
+        if (Number(step) === 2) {
+          const issues = [];
+          if (title.length < 3) issues.push("Enter a marketplace title with at least 3 characters.");
+          if (!category) issues.push("Enter a project category.");
+          if (purpose.length < 5) issues.push("Purpose is too short.");
+          if (description.length < 8) issues.push("Professional description is too short.");
+          if (Number(marketplaceDraftListing.price) < 0 || Number.isNaN(Number(marketplaceDraftListing.price))) {
+            issues.push("Price must be 0 or more.");
+          }
+          return issues;
+        }
+        if (Number(step) === 3) {
+          return screenshots.length < 4 ? ["Upload 4 preview images."] : [];
+        }
+        return [];
+      }
       function hasMarketplaceIssues(messages = []) {
         const issues = getMarketplaceValidationIssues();
         return messages.some((message) => issues.includes(message));
       }
       function canAdvanceMarketplaceStep(step = marketplaceCreateStep) {
-        if (Number(step) === 1) {
-          return !hasMarketplaceIssues([
-            "Choose a project source type.",
-            "Select a project source first.",
-            "Upload a project folder with an HTML entry file.",
-            "Choose one of your MediaLab drafts.",
-            "Choose one of your live projects.",
-          ]);
-        }
-        if (Number(step) === 2) {
-          return !hasMarketplaceIssues([
-            "Enter a marketplace title with at least 3 characters.",
-            "Enter a project category.",
-            "Purpose is too short.",
-            "Professional description is too short.",
-            "Price must be 0 or more.",
-          ]);
-        }
-        if (Number(step) === 3) {
-          return !hasMarketplaceIssues(["Upload 4 preview images."]);
-        }
-        return false;
+        return getMarketplaceStepIssues(step).length === 0;
       }
       function setMarketplaceSourceType(type = "") {
         marketplaceDraftListing = {
