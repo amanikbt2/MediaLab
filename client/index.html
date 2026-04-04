@@ -4785,33 +4785,31 @@
         }
         return issues;
       }
+      function hasMarketplaceIssues(messages = []) {
+        const issues = getMarketplaceValidationIssues();
+        return messages.some((message) => issues.includes(message));
+      }
       function canAdvanceMarketplaceStep(step = marketplaceCreateStep) {
         if (Number(step) === 1) {
-          return getMarketplaceValidationIssues().every(
-            (issue) =>
-              ![
-                "Choose a project source type.",
-                "Select a project source first.",
-                "Upload a project folder with an HTML entry file.",
-                "Choose one of your MediaLab drafts.",
-                "Terminate and package the live project before listing it.",
-              ].includes(issue),
-          );
+          return !hasMarketplaceIssues([
+            "Choose a project source type.",
+            "Select a project source first.",
+            "Upload a project folder with an HTML entry file.",
+            "Choose one of your MediaLab drafts.",
+            "Choose one of your live projects.",
+          ]);
         }
         if (Number(step) === 2) {
-          return getMarketplaceValidationIssues().every(
-            (issue) =>
-              ![
-                "Enter a marketplace title with at least 3 characters.",
-                "Enter a project category.",
-                "Purpose is too short.",
-                "Professional description is too short.",
-                "Price must be 0 or more.",
-              ].includes(issue),
-          );
+          return !hasMarketplaceIssues([
+            "Enter a marketplace title with at least 3 characters.",
+            "Enter a project category.",
+            "Purpose is too short.",
+            "Professional description is too short.",
+            "Price must be 0 or more.",
+          ]);
         }
         if (Number(step) === 3) {
-          return !getMarketplaceValidationIssues().includes("Upload 4 preview images.");
+          return !hasMarketplaceIssues(["Upload 4 preview images."]);
         }
         return false;
       }
