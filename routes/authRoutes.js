@@ -333,6 +333,15 @@ export const toSafeUser = (user) => {
   return source;
 };
 
+export const generateReferralCode = (user = {}) => {
+  const seed = String(user?.name || user?.email || "medialab")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "")
+    .slice(0, 8);
+  const suffix = Math.random().toString(36).slice(2, 7).toUpperCase();
+  return `${seed || "medialab"}-${suffix}`;
+};
+
 const extractClientIp = (req) => {
   const forwarded = req.headers["x-forwarded-for"];
   const rawIp = Array.isArray(forwarded)

@@ -1,394 +1,10 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>MediaLab Admin Studio</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="/socket.io/socket.io.js"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="icon" href="/favicon.png" type="image/png" />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap"
-      rel="stylesheet"
-    />
-    <style>
-      body {
-        font-family: "Space Grotesk", sans-serif;
-      }
-      .glass {
-        background: rgba(7, 12, 22, 0.8);
-        backdrop-filter: blur(18px);
-      }
-      .top-tab {
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        background: rgba(255, 255, 255, 0.03);
-        color: #cbd5e1;
-      }
-      .top-tab.active {
-        background: linear-gradient(135deg, #67e8f9, #22d3ee);
-        border-color: rgba(103, 232, 249, 0.45);
-        color: #052330;
-        box-shadow: 0 16px 36px rgba(34, 211, 238, 0.16);
-      }
-      .feedback-row.open .feedback-detail,
-      .audience-row.open .audience-detail,
-      .premium-row.open .premium-detail {
-        display: block;
-      }
-      .feedback-row.open .feedback-chevron,
-      .audience-row.open .audience-chevron,
-      .premium-row.open .premium-chevron {
-        transform: rotate(180deg);
-      }
-      .feedback-detail,
-      .audience-detail,
-      .premium-detail {
-        display: none;
-      }
-      .live-dot {
-        width: 10px;
-        height: 10px;
-        border-radius: 999px;
-        background: #22c55e;
-        box-shadow: 0 0 0 rgba(34, 197, 94, 0.5);
-        animation: pulseLive 1.8s infinite;
-      }
-      .live-dot.offline {
-        background: #f97316;
-        animation: none;
-      }
-      @keyframes pulseLive {
-        0% {
-          box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.55);
-        }
-        70% {
-          box-shadow: 0 0 0 12px rgba(34, 197, 94, 0);
-        }
-        100% {
-          box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
-        }
-      }
-      .terminal-shell {
-        background:
-          linear-gradient(180deg, rgba(2, 6, 23, 0.98), rgba(9, 13, 20, 0.98)),
-          radial-gradient(
-            circle at top,
-            rgba(34, 211, 238, 0.08),
-            transparent 35%
-          );
-      }
-      .terminal-shell-window {
-        max-height: min(72vh, calc(100vh - 240px));
-      }
-      .terminal-shell.collapsed .terminal-body {
-        display: none;
-      }
-      .terminal-shell.collapsed .terminal-chevron {
-        transform: rotate(-90deg);
-      }
-      .terminal-line {
-        display: grid;
-        grid-template-columns: 58px 1fr;
-        gap: 12px;
-        align-items: start;
-        font-family:
-          ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-          "Liberation Mono", "Courier New", monospace;
-      }
-      .terminal-body::-webkit-scrollbar {
-        width: 8px;
-      }
-      .terminal-body::-webkit-scrollbar-thumb {
-        background: rgba(71, 85, 105, 0.72);
-        border-radius: 999px;
-      }
-      .hide-scrollbar::-webkit-scrollbar {
-        display: none;
-      }
-      .mini-tab {
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        background: rgba(255, 255, 255, 0.03);
-        color: #cbd5e1;
-      }
-      .mini-tab.active {
-        background: rgba(34, 211, 238, 0.14);
-        border-color: rgba(34, 211, 238, 0.25);
-        color: #ecfeff;
-      }
-    </style>
-  </head>
-  <body class="min-h-screen bg-slate-950 text-slate-100">
-    <div
-      class="fixed inset-0 bg-[radial-gradient(circle_at_top,_rgba(34,211,238,0.14),_transparent_32%),linear-gradient(180deg,_#020617_0%,_#020617_48%,_#08111f_100%)]"
-    ></div>
 
-    <div
-      id="admin-auth-overlay"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/88 backdrop-blur-xl"
-    >
-      <div
-        class="w-full max-w-md glass border border-white/10 rounded-[2rem] p-6 sm:p-8 shadow-[0_30px_80px_rgba(0,0,0,0.55)]"
-      >
-        <p
-          class="text-[11px] uppercase tracking-[0.32em] text-cyan-400 font-bold"
-        >
-          Admin Access
-        </p>
-        <h2 class="text-3xl font-bold mt-3">Enter admin password</h2>
-        <p class="text-slate-400 mt-3 text-sm">Secure dashboard access.</p>
-        <label class="block mt-6">
-          <span
-            class="text-[11px] uppercase tracking-[0.22em] text-slate-500 font-bold"
-            >Password</span
-          >
-          <input
-            id="admin-password"
-            type="password"
-            class="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-cyan-400"
-            placeholder="Enter admin password"
-          />
-        </label>
-        <div class="flex gap-3 mt-6">
-          <button
-            onclick="unlockAdmin()"
-            class="flex-1 rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-bold text-slate-950 hover:bg-cyan-300 transition-all"
-          >
-            Unlock
-          </button>
-          <a
-            href="/index.html"
-            class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-slate-200 hover:bg-white/10 transition-all"
-            >Back</a
-          >
-        </div>
-        <p id="admin-auth-error" class="mt-4 text-sm text-rose-300 hidden">
-          Wrong password. Try again.
-        </p>
-      </div>
-    </div>
-
-    <div
-      id="clear-logs-modal"
-      class="hidden fixed inset-0 z-50 items-center justify-center p-4 bg-slate-950/82 backdrop-blur-xl"
-    >
-      <div
-        onclick="event.stopPropagation()"
-        class="w-full max-w-md glass border border-white/10 rounded-[2rem] p-6 sm:p-7 shadow-[0_30px_80px_rgba(0,0,0,0.55)]"
-      >
-        <div
-          class="text-[11px] uppercase tracking-[0.28em] text-rose-300 font-bold"
-        >
-          Clear Logs
-        </div>
-        <h3 class="text-2xl font-bold mt-3">Delete all usage logs?</h3>
-        <p class="text-slate-400 mt-3 text-sm">
-          This clears the live terminal history from the database. This action
-          cannot be undone.
-        </p>
-        <div class="flex gap-3 mt-6">
-          <button
-            onclick="closeClearLogsModal()"
-            class="flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-slate-200"
-          >
-            Cancel
-          </button>
-          <button
-            id="clear-logs-confirm-btn"
-            onclick="clearUsageLogs()"
-            class="flex-1 rounded-2xl bg-rose-500 px-4 py-3 text-sm font-bold text-white"
-          >
-            Clear Logs
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <div
-      id="withdrawal-failure-modal"
-      class="hidden fixed inset-0 z-50 items-center justify-center p-4 bg-slate-950/82 backdrop-blur-xl"
-      onclick="if (event.target === this) closeWithdrawalFailurePrompt();"
-    >
-      <div
-        onclick="event.stopPropagation()"
-        class="w-full max-w-lg glass border border-white/10 rounded-[2rem] p-6 sm:p-7 shadow-[0_30px_80px_rgba(0,0,0,0.55)]"
-      >
-        <div
-          class="text-[11px] uppercase tracking-[0.28em] text-rose-300 font-bold"
-        >
-          Deny Withdrawal
-        </div>
-        <h3 class="text-2xl font-bold mt-3">Add a reason for this decision</h3>
-        <p class="text-slate-400 mt-3 text-sm">
-          This note will appear in the user's withdrawal status so the outcome
-          stays clear and professional.
-        </p>
-        <label class="block mt-5">
-          <span
-            class="text-[11px] uppercase tracking-[0.22em] text-slate-500 font-bold"
-            >Reason</span
-          >
-          <textarea
-            id="withdrawal-failure-reason"
-            rows="4"
-            class="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none resize-none focus:border-rose-400"
-            placeholder="Explain why this withdrawal was denied..."
-          ></textarea>
-        </label>
-        <p
-          id="withdrawal-failure-error"
-          class="mt-3 hidden rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-100"
-        ></p>
-        <div class="flex gap-3 mt-6">
-          <button
-            onclick="closeWithdrawalFailurePrompt()"
-            class="flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-slate-200"
-          >
-            Cancel
-          </button>
-          <button
-            id="withdrawal-failure-submit-btn"
-            onclick="submitWithdrawalFailure()"
-            class="flex-1 rounded-2xl bg-rose-500 px-4 py-3 text-sm font-bold text-white"
-          >
-            Deny Request
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <main class="relative z-10 w-full px-2 py-3 sm:px-3 sm:py-4">
-      <header
-        class="glass border border-white/10 rounded-[1.4rem] sm:rounded-[1.8rem] p-3 sm:p-5 shadow-[0_30px_80px_rgba(0,0,0,0.45)]"
-      >
-        <div class="flex flex-col gap-5">
-          <div
-            class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"
-          >
-            <div>
-              <p
-                class="text-[11px] uppercase tracking-[0.32em] text-cyan-400 font-bold"
-              >
-                MediaLab Admin
-              </p>
-              <h1 class="text-2xl sm:text-4xl font-bold mt-2 tracking-tight">
-                Studio monitor
-              </h1>
-            </div>
-            <div class="flex flex-col sm:flex-row gap-3">
-              <div
-                class="flex items-center gap-3 rounded-2xl border border-emerald-500/15 bg-emerald-500/10 px-4 py-3"
-              >
-                <span id="live-update-dot" class="live-dot"></span>
-                <div>
-                  <div
-                    class="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-300"
-                  >
-                    Live Updates
-                  </div>
-                  <div id="live-update-label" class="text-xs text-slate-200">
-                    Connected
-                  </div>
-                </div>
-              </div>
-              <button
-                onclick="loadAdminData()"
-                class="px-4 py-3 rounded-2xl bg-cyan-400 text-slate-950 hover:bg-cyan-300 transition-all text-sm font-bold"
-              >
-                Refresh
-              </button>
-            </div>
-          </div>
-
-          <div class="overflow-x-auto hide-scrollbar">
-            <div class="flex min-w-max gap-2">
-              <button
-                data-tab="analytics"
-                class="top-tab active px-4 py-3 rounded-2xl text-sm font-bold transition-all"
-                onclick="showAdminTab('analytics', this)"
-              >
-                Analysis
-              </button>
-              <button
-                data-tab="feedbacks"
-                class="top-tab px-4 py-3 rounded-2xl text-sm font-bold transition-all"
-                onclick="showAdminTab('feedbacks', this)"
-              >
-                Feedbacks
-                <span id="badge-feedbacks" class="hidden ml-2 rounded-full bg-rose-500/20 px-2 py-0.5 text-[10px] font-black text-rose-200"></span>
-              </button>
-              <button
-                data-tab="logs"
-                class="top-tab px-4 py-3 rounded-2xl text-sm font-bold transition-all"
-                onclick="showAdminTab('logs', this)"
-              >
-                Live Logs
-                <span id="badge-logs" class="hidden ml-2 rounded-full bg-rose-500/20 px-2 py-0.5 text-[10px] font-black text-rose-200"></span>
-              </button>
-              <button
-                data-tab="users"
-                class="top-tab px-4 py-3 rounded-2xl text-sm font-bold transition-all"
-                onclick="showAdminTab('users', this)"
-              >
-                Audience
-                <span id="badge-users" class="hidden ml-2 rounded-full bg-rose-500/20 px-2 py-0.5 text-[10px] font-black text-rose-200"></span>
-              </button>
-              <button
-                data-tab="premium"
-                class="top-tab px-4 py-3 rounded-2xl text-sm font-bold transition-all"
-                onclick="showAdminTab('premium', this)"
-              >
-                Premium Requests
-                <span id="badge-premium" class="hidden ml-2 rounded-full bg-rose-500/20 px-2 py-0.5 text-[10px] font-black text-rose-200"></span>
-              </button>
-              <button
-                data-tab="downloads"
-                class="top-tab px-4 py-3 rounded-2xl text-sm font-bold transition-all"
-                onclick="showAdminTab('downloads', this)"
-              >
-                Downloads
-                <span id="badge-downloads" class="hidden ml-2 rounded-full bg-rose-500/20 px-2 py-0.5 text-[10px] font-black text-rose-200"></span>
-              </button>
-              <button
-                data-tab="withdrawals"
-                class="top-tab px-4 py-3 rounded-2xl text-sm font-bold transition-all"
-                onclick="showAdminTab('withdrawals', this)"
-              >
-                Withdrawals
-                <span id="badge-withdrawals" class="hidden ml-2 rounded-full bg-rose-500/20 px-2 py-0.5 text-[10px] font-black text-rose-200"></span>
-              </button>
-              <button
-                data-tab="payouts"
-                class="top-tab px-4 py-3 rounded-2xl text-sm font-bold transition-all"
-                onclick="showAdminTab('payouts', this)"
-              >
-                Payouts
-                <span id="badge-payouts" class="hidden ml-2 rounded-full bg-rose-500/20 px-2 py-0.5 text-[10px] font-black text-rose-200"></span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <section id="tab-analytics" class="mt-6 space-y-4"></section>
-      <section id="tab-feedbacks" class="mt-6 space-y-3 hidden"></section>
-      <section id="tab-logs" class="mt-6 space-y-4 hidden"></section>
-      <section id="tab-users" class="mt-6 space-y-4 hidden"></section>
-      <section id="tab-premium" class="mt-6 space-y-4 hidden"></section>
-      <section id="tab-downloads" class="mt-6 space-y-4 hidden"></section>
-      <section id="tab-withdrawals" class="mt-6 space-y-4 hidden"></section>
-      <section id="tab-payouts" class="mt-6 space-y-4 hidden"></section>
-    </main>
-
-    <script>
       let adminFeedbacks = [];
       let adminAnalytics = null;
       let adminUsageLogs = [];
       let adminPremiumRequests = [];
       let adminDownloads = [];
       let adminWithdrawals = [];
-      let adminPayoutUsers = [];
       let adminSocket = null;
       let adminCounterValues = {};
       let activeAdminTab = "analytics";
@@ -400,13 +16,8 @@
         premium: 0,
         downloads: 0,
         withdrawals: 0,
-        payouts: 0,
       };
       let feedbackView = "all";
-      let audienceQuery = "";
-      let payoutAmounts = {};
-      let withdrawalFilterTab = "pending";
-      let pendingWithdrawalFailureId = "";
       let feedbackFilters = {
         name: "",
         email: "",
@@ -480,7 +91,7 @@
         document
           .querySelectorAll(`.top-tab[data-tab="${name}"]`)
           .forEach((tab) => tab.classList.add("active"));
-        ["analytics", "feedbacks", "logs", "users", "premium", "downloads", "withdrawals", "payouts"].forEach((tabName) => {
+        ["analytics", "feedbacks", "logs", "users", "premium", "downloads", "withdrawals"].forEach((tabName) => {
           document
             .getElementById(`tab-${tabName}`)
             ?.classList.toggle("hidden", tabName !== name);
@@ -1103,40 +714,18 @@
           el.innerHTML = `<div class="rounded-[1.5rem] border border-dashed border-white/10 p-8 text-center text-slate-400">No withdrawal requests yet.</div>`;
           return;
         }
-        const pendingCount = adminWithdrawals.filter((item) =>
-          ["pending", "processing"].includes(String(item.status || "").toLowerCase()),
-        ).length;
-        const paidCount = adminWithdrawals.filter(
-          (item) => String(item.status || "").toLowerCase() === "paid",
-        ).length;
-        const failedCount = adminWithdrawals.filter(
-          (item) => String(item.status || "").toLowerCase() === "failed",
-        ).length;
-        const filtered = adminWithdrawals.filter((item) =>
-          withdrawalFilterTab === "pending"
-            ? ["pending", "processing"].includes(String(item.status || "").toLowerCase())
-            : String(item.status || "").toLowerCase() === withdrawalFilterTab,
-        );
-        el.innerHTML = `
-          <div class="flex gap-2 overflow-x-auto hide-scrollbar mb-4">
-            <button onclick="setWithdrawalFilterTab('pending')" class="mini-tab ${withdrawalFilterTab === "pending" ? "active" : ""} px-4 py-2 rounded-2xl text-xs font-bold uppercase tracking-[0.16em]">Pending (${pendingCount})</button>
-            <button onclick="setWithdrawalFilterTab('paid')" class="mini-tab ${withdrawalFilterTab === "paid" ? "active" : ""} px-4 py-2 rounded-2xl text-xs font-bold uppercase tracking-[0.16em]">Paid (${paidCount})</button>
-            <button onclick="setWithdrawalFilterTab('failed')" class="mini-tab ${withdrawalFilterTab === "failed" ? "active" : ""} px-4 py-2 rounded-2xl text-xs font-bold uppercase tracking-[0.16em]">Failed (${failedCount})</button>
-          </div>
-          ${
-            filtered.length
-              ? filtered
-                  .map(
-                    (item) => {
-                      const tone =
-                        item.status === "paid"
-                          ? "bg-emerald-500/15 text-emerald-300"
-                          : item.status === "failed"
-                            ? "bg-rose-500/15 text-rose-300"
-                            : item.status === "processing"
-                              ? "bg-amber-500/15 text-amber-300"
-                              : "bg-cyan-500/15 text-cyan-300";
-                      return `
+        el.innerHTML = adminWithdrawals
+          .map(
+            (item) => {
+              const tone =
+                item.status === "paid"
+                  ? "bg-emerald-500/15 text-emerald-300"
+                  : item.status === "failed"
+                    ? "bg-rose-500/15 text-rose-300"
+                    : item.status === "processing"
+                      ? "bg-amber-500/15 text-amber-300"
+                      : "bg-cyan-500/15 text-cyan-300";
+              return `
           <article class="rounded-[1.35rem] border border-white/10 bg-white/[0.03] overflow-hidden">
             <div class="px-4 py-4 sm:px-5 sm:py-5">
               <div class="flex items-start gap-4">
@@ -1154,32 +743,19 @@
                     <div><span class="text-slate-500">Method:</span> ${escapeHtml(item.method || "Unknown")}</div>
                     <div><span class="text-slate-500">Destination:</span> ${escapeHtml(item.destination || "Not set")}</div>
                     <div><span class="text-slate-500">Requested:</span> ${formatDate(item.createdAt)}</div>
-                    ${item.deniedReason ? `<div class="sm:col-span-2 text-rose-300"><span class="text-rose-200/70">Reason:</span> ${escapeHtml(item.deniedReason)}</div>` : ""}
                   </div>
-                  ${
-                    withdrawalFilterTab === "pending"
-                      ? `<div class="mt-4 flex flex-wrap gap-2">
-                          <button onclick="updateWithdrawalStatus('${item._id}', 'processing')" class="px-3.5 py-2 rounded-xl bg-white/5 border border-white/10 text-slate-200 text-xs sm:text-sm font-bold hover:bg-white/10 transition-all">Processing</button>
-                          <button onclick="updateWithdrawalStatus('${item._id}', 'paid')" class="px-3.5 py-2 rounded-xl bg-emerald-400 text-slate-950 text-xs sm:text-sm font-bold hover:bg-emerald-300 transition-all">Paid</button>
-                          <button onclick="openWithdrawalFailurePrompt('${item._id}')" class="px-3.5 py-2 rounded-xl bg-rose-500/90 text-white text-xs sm:text-sm font-bold hover:bg-rose-400 transition-all">Failed / Refund</button>
-                        </div>`
-                      : ""
-                  }
+                  <div class="mt-4 flex flex-wrap gap-2">
+                    <button onclick="updateWithdrawalStatus('${item._id}', 'processing')" class="px-3.5 py-2 rounded-xl bg-white/5 border border-white/10 text-slate-200 text-xs sm:text-sm font-bold hover:bg-white/10 transition-all">Processing</button>
+                    <button onclick="updateWithdrawalStatus('${item._id}', 'paid')" class="px-3.5 py-2 rounded-xl bg-emerald-400 text-slate-950 text-xs sm:text-sm font-bold hover:bg-emerald-300 transition-all">Paid</button>
+                    <button onclick="updateWithdrawalStatus('${item._id}', 'failed')" class="px-3.5 py-2 rounded-xl bg-rose-500/90 text-white text-xs sm:text-sm font-bold hover:bg-rose-400 transition-all">Failed / Refund</button>
+                  </div>
                 </div>
               </div>
             </div>
           </article>`;
-                    },
-                  )
-                  .join("")
-              : `<div class="rounded-[1.5rem] border border-dashed border-white/10 p-8 text-center text-slate-400">No ${withdrawalFilterTab} withdrawals right now.</div>`
-          }
-        `;
-      }
-
-      function setWithdrawalFilterTab(tab) {
-        withdrawalFilterTab = tab;
-        renderWithdrawals();
+            },
+          )
+          .join("");
       }
 
       function renderFeedbacks() {
@@ -1253,26 +829,12 @@
       function renderUsers() {
         const el = document.getElementById("tab-users");
         if (!el || !adminAnalytics) return;
-        const users = getFilteredAudienceUsers();
-        const queryStatus = getAudienceQueryStatus();
-        const queryTone = queryStatus.valid
-          ? "text-emerald-200 border-emerald-400/20 bg-emerald-500/10"
-          : "text-amber-200 border-amber-400/20 bg-amber-500/10";
+        const users = adminAnalytics.recentUsers || [];
         if (!users.length) {
-          el.innerHTML = `
-            <div class="rounded-[1.5rem] border border-white/10 bg-white/[0.03] p-4 mb-4 space-y-2">
-              <input value="${escapeHtml(audienceQuery)}" oninput="updateAudienceQuery(this.value)" placeholder="Try username=amani, email=gmail.com, or provider=/google/i" class="w-full rounded-xl border border-cyan-500/20 bg-white/5 px-3 py-2.5 text-xs text-white outline-none focus:border-cyan-400" />
-              <div class="rounded-xl border px-3 py-2 text-[11px] ${queryTone}">${escapeHtml(queryStatus.message)}</div>
-            </div>
-            <div class="rounded-[1.5rem] border border-dashed border-white/10 p-8 text-center text-slate-400">No users found yet.</div>`;
+          el.innerHTML = `<div class="rounded-[1.5rem] border border-dashed border-white/10 p-8 text-center text-slate-400">No users found yet.</div>`;
           return;
         }
-        el.innerHTML = `
-          <div class="rounded-[1.5rem] border border-white/10 bg-white/[0.03] p-4 mb-4 space-y-2">
-            <input value="${escapeHtml(audienceQuery)}" oninput="updateAudienceQuery(this.value)" placeholder="Try username=amani, email=gmail.com, or provider=/google/i" class="w-full rounded-xl border border-cyan-500/20 bg-white/5 px-3 py-2.5 text-xs text-white outline-none focus:border-cyan-400" />
-            <div class="rounded-xl border px-3 py-2 text-[11px] ${queryTone}">${escapeHtml(queryStatus.message)}</div>
-          </div>
-        ` + users
+        el.innerHTML = users
           .map(
             (user) => `
           <article id="audience-row-${user._id}" class="audience-row rounded-[1.35rem] border border-white/10 bg-white/[0.03] overflow-hidden">
@@ -1300,173 +862,6 @@
           </article>
         `,
           )
-          .join("");
-      }
-
-      function buildAudienceSearchFields(user = {}) {
-        return {
-          username: String(user.name || "").toLowerCase(),
-          name: String(user.name || "").toLowerCase(),
-          email: String(user.email || "").toLowerCase(),
-          location: String(user.location || "").toLowerCase(),
-          provider: String(user.provider || "").toLowerCase(),
-          plan: user.isPro ? "pro" : "free",
-          any: [
-            user.name,
-            user.email,
-            user.location,
-            user.provider,
-            user.isPro ? "pro" : "free",
-          ]
-            .filter(Boolean)
-            .join(" ")
-            .toLowerCase(),
-        };
-      }
-
-      function parseAudienceMatcher(value = "") {
-        const raw = String(value || "").trim();
-        if (!raw) return null;
-        if (raw.startsWith("/") && raw.lastIndexOf("/") > 0) {
-          const lastSlash = raw.lastIndexOf("/");
-          const pattern = raw.slice(1, lastSlash);
-          const flags = raw.slice(lastSlash + 1) || "i";
-          try {
-            return new RegExp(pattern, flags);
-          } catch {
-            return "__invalid_regex__";
-          }
-        }
-        return raw.toLowerCase();
-      }
-
-      function matchesAudienceClause(user, clause = "") {
-        const trimmed = String(clause || "").trim();
-        if (!trimmed) return true;
-        const fields = buildAudienceSearchFields(user);
-        const match = trimmed.match(/^(username|name|email|location|provider|plan|any)\s*(=|:|~)\s*(.+)$/i);
-        if (!match) {
-          return fields.any.includes(trimmed.toLowerCase());
-        }
-        const field = match[1].toLowerCase();
-        const matcher = parseAudienceMatcher(match[3]);
-        if (matcher === "__invalid_regex__") return false;
-        const target = String(fields[field] || "");
-        return matcher instanceof RegExp ? matcher.test(target) : target.includes(matcher);
-      }
-
-      function getFilteredAudienceUsers() {
-        const users = Array.isArray(adminAnalytics?.recentUsers) ? adminAnalytics.recentUsers : [];
-        const raw = String(audienceQuery || "").trim();
-        if (!raw) return users;
-        const orGroups = raw
-          .split(/\s+\bor\b\s+/i)
-          .map((group) => group.split(/\s+\band\b\s+/i).map((item) => item.trim()).filter(Boolean))
-          .filter((group) => group.length);
-        return users.filter((user) =>
-          orGroups.some((group) => group.every((clause) => matchesAudienceClause(user, clause))),
-        );
-      }
-
-      function getAudienceQueryStatus() {
-        const raw = String(audienceQuery || "").trim();
-        if (!raw) {
-          return {
-            valid: true,
-            message:
-              "Use username=, email=, location=, provider=, plan=, plus and/or. Regex works too, for example provider=/google/i.",
-          };
-        }
-        const invalidRegex = raw
-          .split(/\s+\bor\b\s+|\s+\band\b\s+/i)
-          .map((item) => item.trim())
-          .filter(Boolean)
-          .find((clause) => {
-            const match = clause.match(/^(username|name|email|location|provider|plan|any)\s*(=|:|~)\s*(.+)$/i);
-            return match && parseAudienceMatcher(match[3]) === "__invalid_regex__";
-          });
-        if (invalidRegex) {
-          return {
-            valid: false,
-            message: `Regex looks incomplete in "${invalidRegex}". Close the pattern like /google/i.`,
-          };
-        }
-        const users = getFilteredAudienceUsers();
-        return {
-          valid: true,
-          message: users.length
-            ? `${users.length} audience match${users.length === 1 ? "" : "es"} found.`
-            : "Query syntax looks good, but no audience matches were found yet.",
-        };
-      }
-
-      function updateAudienceQuery(value) {
-        audienceQuery = String(value || "");
-        renderUsers();
-      }
-
-      function updateRewardAmount(userId, value) {
-        payoutAmounts[userId] = String(value || "");
-        renderPayouts();
-      }
-
-      async function rewardUser(userId) {
-        const amount = Number(payoutAmounts[userId] || 0);
-        if (!Number.isFinite(amount) || amount <= 0) {
-          showAdminToast("Enter a valid reward amount.", "error");
-          return;
-        }
-        const res = await fetch(`/api/admin/users/${userId}/reward`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", ...getAdminHeaders() },
-          body: JSON.stringify({ amount }),
-        });
-        const data = await res.json();
-        if (!data.success) {
-          showAdminToast(data.message || "Could not reward this user.", "error");
-          return;
-        }
-        payoutAmounts[userId] = "";
-        await loadAdminData();
-        showAdminToast("User rewarded successfully.", "success");
-      }
-
-      function renderPayouts() {
-        const el = document.getElementById("tab-payouts");
-        if (!el) return;
-        if (!adminPayoutUsers.length) {
-          el.innerHTML = `<div class="rounded-[1.5rem] border border-dashed border-white/10 p-8 text-center text-slate-400">No payout candidates yet.</div>`;
-          return;
-        }
-        el.innerHTML = adminPayoutUsers
-          .map((user, index) => {
-            const rewardValue = payoutAmounts[user._id] || "";
-            return `
-              <article class="rounded-[1.35rem] border border-white/10 bg-white/[0.03] p-4 sm:p-5">
-                <div class="flex items-start gap-4">
-                  <img src="${user.profilePicture || "https://via.placeholder.com/40/0f172a/e2e8f0?text=U"}" alt="${escapeHtml(user.name || "User")}" class="w-11 h-11 rounded-full object-cover border border-white/10 bg-slate-900 shrink-0" />
-                  <div class="min-w-0 flex-1">
-                    <div class="flex flex-wrap items-center gap-2">
-                      <span class="px-2.5 py-1 rounded-full bg-violet-500/15 text-violet-200 text-[10px] font-bold uppercase tracking-[0.16em]">Rank ${index + 1}</span>
-                      <h3 class="text-sm sm:text-base font-bold text-white">${escapeHtml(user.name || "Unknown User")}</h3>
-                      <span class="px-2.5 py-1 rounded-full bg-cyan-500/15 text-cyan-300 text-[10px] font-bold uppercase tracking-[0.16em]">Weight ${Number(user.activityWeight || 0).toFixed(0)}</span>
-                      <span class="px-2.5 py-1 rounded-full bg-white/5 text-slate-300 text-[10px] font-bold uppercase tracking-[0.16em]">Current Balance $${Number(user.accountBalance || 0).toFixed(2)}</span>
-                    </div>
-                    <div class="mt-2 text-xs sm:text-sm text-slate-400 break-all">${escapeHtml(user.email || "")}</div>
-                    <div class="mt-3 text-xs text-slate-400">
-                      Logins ${Number(user.activityStats?.logins || 0)} · Tool opens ${Number(user.activityStats?.toolOpens || 0)} · Projects ${Number(user.activityStats?.projects || 0)} · Publishes ${Number(user.activityStats?.publishes || 0)}
-                    </div>
-                    <div class="mt-2 text-[11px] text-slate-500">
-                      Last weighted ${user.lastActivityWeightCalculatedAt ? escapeHtml(formatDate(user.lastActivityWeightCalculatedAt)) : "Not calculated yet"}
-                    </div>
-                    <div class="mt-4 flex flex-col sm:flex-row gap-3">
-                      <input value="${escapeHtml(rewardValue)}" oninput="updateRewardAmount('${user._id}', this.value)" type="number" min="0.01" step="0.01" placeholder="Reward amount" class="w-full sm:max-w-[180px] rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none focus:border-cyan-400" />
-                      ${rewardValue && Number(rewardValue) > 0 ? `<button onclick="rewardUser('${user._id}')" class="rounded-xl bg-emerald-400 px-4 py-2.5 text-sm font-black text-slate-950 hover:bg-emerald-300 transition-all">Reward</button>` : ""}
-                    </div>
-                  </div>
-                </div>
-              </article>`;
-          })
           .join("");
       }
 
@@ -1700,69 +1095,6 @@
         await loadAdminData();
       }
 
-      function openWithdrawalFailurePrompt(id) {
-        pendingWithdrawalFailureId = String(id || "");
-        document.getElementById("withdrawal-failure-reason").value = "";
-        document.getElementById("withdrawal-failure-error")?.classList.add("hidden");
-        document.getElementById("withdrawal-failure-modal")?.classList.remove("hidden");
-        document.getElementById("withdrawal-failure-modal")?.classList.add("flex");
-      }
-
-      function closeWithdrawalFailurePrompt() {
-        pendingWithdrawalFailureId = "";
-        document.getElementById("withdrawal-failure-modal")?.classList.add("hidden");
-        document.getElementById("withdrawal-failure-modal")?.classList.remove("flex");
-      }
-
-      async function submitWithdrawalFailure() {
-        const id = String(pendingWithdrawalFailureId || "").trim();
-        const reason = String(
-          document.getElementById("withdrawal-failure-reason")?.value || "",
-        ).trim();
-        const errorNode = document.getElementById("withdrawal-failure-error");
-        const submitBtn = document.getElementById("withdrawal-failure-submit-btn");
-        if (!id) {
-          showAdminToast("No withdrawal request is selected.", "error");
-          return;
-        }
-        if (!reason) {
-          if (errorNode) {
-            errorNode.textContent = "Add a short reason so the user understands the denial.";
-            errorNode.classList.remove("hidden");
-          }
-          return;
-        }
-        if (errorNode) errorNode.classList.add("hidden");
-        if (submitBtn) {
-          submitBtn.disabled = true;
-          submitBtn.textContent = "Saving...";
-        }
-        try {
-          const res = await fetch(`/api/admin/withdrawals/${id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json", ...getAdminHeaders() },
-            body: JSON.stringify({ status: "failed", deniedReason: reason }),
-          });
-          const data = await res.json();
-          if (!data.success) {
-            throw new Error(data.message || "Could not deny this withdrawal.");
-          }
-          closeWithdrawalFailurePrompt();
-          await loadAdminData();
-          showAdminToast("Withdrawal marked as failed with a saved reason.", "success");
-        } catch (error) {
-          if (errorNode) {
-            errorNode.textContent = error.message || "Could not deny this withdrawal.";
-            errorNode.classList.remove("hidden");
-          }
-        } finally {
-          if (submitBtn) {
-            submitBtn.disabled = false;
-            submitBtn.textContent = "Deny Request";
-          }
-        }
-      }
-
       async function loadAdminData() {
         if (localStorage.getItem(ADMIN_ACCESS_KEY) !== "granted") return;
         try {
@@ -1770,16 +1102,14 @@
           const previousUserIds = new Set(
             (adminAnalytics?.recentUsers || []).map((item) => item._id),
           );
-          const previousPayoutIds = new Set(adminPayoutUsers.map((item) => item._id));
           const headers = getAdminHeaders();
-          const [feedbackRes, analyticsRes, usageLogRes, premiumRes, downloadsRes, withdrawalsRes, payoutUsersRes] = await Promise.all([
+          const [feedbackRes, analyticsRes, usageLogRes, premiumRes, downloadsRes, withdrawalsRes] = await Promise.all([
             fetch("/api/admin/feedbacks", { headers }),
             fetch("/api/admin/analytics", { headers }),
             fetch("/api/admin/usage-logs", { headers }),
             fetch("/api/admin/upgrade-requests", { headers }),
             fetch("/api/admin/downloads", { headers }),
             fetch("/api/admin/withdrawals", { headers }),
-            fetch("/api/admin/payout-users", { headers }),
           ]);
           const feedbackData = await feedbackRes.json();
           const analyticsData = await analyticsRes.json();
@@ -1787,29 +1117,21 @@
           const premiumData = await premiumRes.json();
           const downloadsData = await downloadsRes.json();
           const withdrawalsData = await withdrawalsRes.json();
-          const payoutUsersData = await payoutUsersRes.json();
           adminFeedbacks = feedbackData.feedbacks || [];
           adminAnalytics = analyticsData.analytics || {};
           adminUsageLogs = usageLogData.logs || [];
           adminPremiumRequests = premiumData.requests || [];
           adminDownloads = downloadsData.downloads || [];
           adminWithdrawals = withdrawalsData.withdrawals || [];
-          adminPayoutUsers = payoutUsersData.users || [];
           const nextFeedbacks = adminFeedbacks.filter((item) => !previousFeedbackIds.has(item._id));
           const nextUsers = (adminAnalytics?.recentUsers || []).filter(
             (item) => !previousUserIds.has(item._id),
-          );
-          const nextPayoutUsers = adminPayoutUsers.filter(
-            (item) => !previousPayoutIds.has(item._id),
           );
           if (hasLoadedAdminData && nextFeedbacks.length && activeAdminTab !== "feedbacks") {
             adminUnreadCounts.feedbacks += nextFeedbacks.length;
           }
           if (hasLoadedAdminData && nextUsers.length && activeAdminTab !== "users") {
             adminUnreadCounts.users += nextUsers.length;
-          }
-          if (hasLoadedAdminData && nextPayoutUsers.length && activeAdminTab !== "payouts") {
-            adminUnreadCounts.payouts += nextPayoutUsers.length;
           }
           hasLoadedAdminData = true;
           renderAdminTabBadges();
@@ -1820,7 +1142,6 @@
           renderPremiumRequests();
           renderDownloads();
           renderWithdrawals();
-          renderPayouts();
           connectAdminLiveFeed();
           setLiveStatus(Boolean(adminSocket?.connected));
         } catch (error) {
@@ -1838,6 +1159,4 @@
 
       ensureAdminAccess();
       setLiveStatus(localStorage.getItem(ADMIN_ACCESS_KEY) === "granted");
-    </script>
-  </body>
-</html>
+    

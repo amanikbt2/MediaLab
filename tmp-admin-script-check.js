@@ -5,9 +5,25 @@
       let adminPremiumRequests = [];
       let adminDownloads = [];
       let adminWithdrawals = [];
+      let adminPayoutUsers = [];
       let adminSocket = null;
       let adminCounterValues = {};
+      let activeAdminTab = "analytics";
+      let hasLoadedAdminData = false;
+      let adminUnreadCounts = {
+        feedbacks: 0,
+        logs: 0,
+        users: 0,
+        premium: 0,
+        downloads: 0,
+        withdrawals: 0,
+        payouts: 0,
+      };
       let feedbackView = "all";
+      let audienceQuery = "";
+      let payoutAmounts = {};
+      let withdrawalFilterTab = "pending";
+      let pendingWithdrawalFailureId = "";
       let feedbackFilters = {
         name: "",
         email: "",
@@ -15,13 +31,55 @@
         time: "",
       };
       let logFilters = {
-        name: "",
-        email: "",
-        tool: "",
-        date: "",
+        query: "",
       };
       const ADMIN_PASSWORD = "spiderman";
       const ADMIN_ACCESS_KEY = "medialab_admin_access";
+      function showAdminToast(message, tone = "info") {
+        const colors =
+          tone === "error"
+            ? "bg-rose-500/90 text-white"
+            : tone === "success"
+              ? "bg-emerald-500/90 text-slate-950"
+              : "bg-cyan-500/90 text-slate-950";
+        let node = document.getElementById("admin-toast");
+        if (!node) {
+          node = document.createElement("div");
+          node.id = "admin-toast";
+          node.className =
+            "fixed right-4 top-4 z-[5000] rounded-2xl px-4 py-3 text-sm font-bold shadow-[0_24px_60px_rgba(2,6,23,0.45)]";
+          document.body.appendChild(node);
+        }
+        node.className = `fixed right-4 top-4 z-[5000] rounded-2xl px-4 py-3 text-sm font-bold shadow-[0_24px_60px_rgba(2,6,23,0.45)] ${colors}`;
+        node.textContent = message;
+        node.classList.remove("hidden");
+        clearTimeout(node._timer);
+        node._timer = setTimeout(() => node.classList.add("hidden"), 2600);
+      }
+      function renderAdminTabBadges() {
+        Object.entries(adminUnreadCounts).forEach(([tab, count]) => {
+          const badge = document.getElementById(`badge-${tab}`);
+          if (!badge) return;
+          if (count > 0) {
+            badge.textContent = count > 99 ? "99+" : String(count);
+            badge.classList.remove("hidden");
+          } else {
+            badge.classList.add("hidden");
+            badge.textContent = "";
+          }
+        });
+      }
+      function markAdminTabRead(name) {
+        if (name in adminUnreadCounts) {
+          adminUnreadCounts[name] = 0;
+          renderAdminTabBadges();
+        }
+      }
+      function bumpAdminUnread(name) {
+        if (!(name in adminUnreadCounts) || activeAdminTab === name) return;
+        adminUnreadCounts[name] += 1;
+        renderAdminTabBadges();
+      }
 
       function getAdminHeaders() {
         const password = localStorage.getItem(ADMIN_ACCESS_KEY) === "granted"
@@ -31,13 +89,15 @@
       }
 
       function showAdminTab(name, button) {
+        activeAdminTab = name;
+        markAdminTabRead(name);
         document
           .querySelectorAll(".top-tab")
           .forEach((tab) => tab.classList.remove("active"));
         document
           .querySelectorAll(`.top-tab[data-tab="${name}"]`)
           .forEach((tab) => tab.classList.add("active"));
-        ["analytics", "feedbacks", "logs", "users", "premium", "downloads", "withdrawals"].forEach((tabName) => {
+        ["analytics", "feedbacks", "logs", "users", "premium", "downloads", "withdrawals", "payouts"].forEach((tabName) => {
           document
             .getElementById(`tab-${tabName}`)
             ?.classList.toggle("hidden", tabName !== name);
@@ -77,8 +137,8 @@
         return item.summary || item.action || "activity";
       }
 
-      function updateLogFilter(key, value) {
-        logFilters[key] = value;
+      function updateLogFilter(value) {
+        logFilters.query = String(value || "");
         renderLogs();
       }
 
@@ -108,19 +168,168 @@
         });
       }
 
-      function getFilteredLogs() {
-        return adminUsageLogs.filter((item) => {
-          const name = String(item.name || "").toLowerCase();
-          const email = String(item.email || "").toLowerCase();
-          const tool = String(item.source || item.metadata?.toolType || item.metadata?.toolId || "").toLowerCase();
-          const created = formatDate(item.createdAt).toLowerCase();
-          return (
-            (!logFilters.name || name.includes(logFilters.name.toLowerCase())) &&
-            (!logFilters.email || email.includes(logFilters.email.toLowerCase())) &&
-            (!logFilters.tool || tool.includes(logFilters.tool.toLowerCase())) &&
-            (!logFilters.date || created.includes(logFilters.date.toLowerCase()))
-          );
+      function getLogSearchFields(item) {
+        const action = String(item.action || "").toLowerCase();
+        const summary = String(item.summary || "").toLowerCase();
+        const source = String(
+          item.source || item.metadata?.toolType || item.metadata?.toolId || "",
+        ).toLowerCase();
+        const metadataText = JSON.stringify(item.metadata || {}).toLowerCase();
+        const created = formatDate(item.createdAt).toLowerCase();
+        const name = String(item.name || "").toLowerCase();
+        const email = String(item.email || "").toLowerCase();
+        const location = String(item.location || item.metadata?.location || "").toLowerCase();
+        const ip = String(item.ip || item.metadata?.ip || "").toLowerCase();
+        const activity = [action, summary, source, metadataText].filter(Boolean).join(" ");
+        const full = [
+          name,
+          email,
+          source,
+          action,
+          summary,
+          created,
+          location,
+          ip,
+          metadataText,
+        ]
+          .filter(Boolean)
+          .join(" ");
+        return {
+          username: name,
+          name,
+          user: name,
+          email,
+          activity,
+          action,
+          summary,
+          tool: source,
+          source,
+          date: created,
+          time: created,
+          location,
+          ip,
+          text: full,
+          any: full,
+          full,
+        };
+      }
+
+      function splitSmartQuery(query, operator) {
+        return String(query || "")
+          .split(new RegExp(`\\s+${operator}\\s+`, "i"))
+          .map((part) => part.trim())
+          .filter(Boolean);
+      }
+
+      const SMART_LOG_FIELDS = [
+        "username",
+        "name",
+        "user",
+        "email",
+        "activity",
+        "action",
+        "summary",
+        "tool",
+        "source",
+        "date",
+        "time",
+        "location",
+        "ip",
+        "text",
+        "any",
+      ];
+
+      function parseSmartLogClause(clause) {
+        const normalized = String(clause || "").trim();
+        if (!normalized) return null;
+        const match = normalized.match(
+          /^(username|name|user|email|activity|action|summary|tool|source|date|time|location|ip|text|any)\s*(=|:|~)\s*(.+)$/i,
+        );
+        if (match) {
+          return {
+            field: match[1].toLowerCase(),
+            value: match[3].trim().replace(/^["']|["']$/g, "").toLowerCase(),
+          };
+        }
+        return {
+          field: "full",
+          value: normalized.replace(/^["']|["']$/g, "").toLowerCase(),
+        };
+      }
+      function analyzeSmartLogClause(clause) {
+        const normalized = String(clause || "").trim();
+        if (!normalized) {
+          return { status: "empty", message: "Type a query to filter logs." };
+        }
+        const parsed = parseSmartLogClause(normalized);
+        if (parsed?.field !== "full") {
+          return parsed.value
+            ? { status: "valid", message: `Filtering by ${parsed.field}.` }
+            : {
+                status: "partial",
+                message: `Add a value after ${parsed.field}= to finish this filter.`,
+              };
+        }
+        const partialFieldMatch = normalized.match(/^([a-z]+)\s*(=|:|~)?\s*$/i);
+        if (partialFieldMatch) {
+          const fragment = partialFieldMatch[1].toLowerCase();
+          const suggestions = SMART_LOG_FIELDS.filter((field) =>
+            field.startsWith(fragment),
+          ).slice(0, 3);
+          if (suggestions.length) {
+            return {
+              status: "partial",
+              message: `Smart query ready. Try ${suggestions
+                .map((field) => `${field}=...`)
+                .join(", ")}.`,
+            };
+          }
+        }
+        return {
+          status: "valid",
+          message: "Searching logs with flexible text matching.",
+        };
+      }
+      function analyzeSmartLogQuery(query) {
+        const trimmedQuery = String(query || "").trim();
+        if (!trimmedQuery) {
+          return { status: "empty", message: "Use smart filters or plain text search." };
+        }
+        const orGroups = splitSmartQuery(trimmedQuery, "or");
+        const clauseStatuses = orGroups.flatMap((group) =>
+          splitSmartQuery(group, "and").map((clause) => analyzeSmartLogClause(clause)),
+        );
+        if (clauseStatuses.some((item) => item.status === "partial")) {
+          return clauseStatuses.find((item) => item.status === "partial");
+        }
+        return clauseStatuses.find((item) => item.status === "valid") || {
+          status: "valid",
+          message: "Searching logs.",
+        };
+      }
+
+      function matchesSmartLogClause(item, clause) {
+        const parsed = parseSmartLogClause(clause);
+        if (!parsed || !parsed.value) return true;
+        const fields = getLogSearchFields(item);
+        const haystack = String(fields[parsed.field] || fields.full || "").toLowerCase();
+        return haystack.includes(parsed.value);
+      }
+
+      function matchesSmartLogQuery(item, query) {
+        const trimmedQuery = String(query || "").trim();
+        if (!trimmedQuery) return true;
+        const orGroups = splitSmartQuery(trimmedQuery, "or");
+        return orGroups.some((group) => {
+          const andClauses = splitSmartQuery(group, "and");
+          return andClauses.every((clause) => matchesSmartLogClause(item, clause));
         });
+      }
+
+      function getFilteredLogs() {
+        return adminUsageLogs.filter((item) =>
+          matchesSmartLogQuery(item, logFilters.query),
+        );
       }
 
       function animateCountValue(target, nextValue) {
@@ -277,7 +486,7 @@
           renderLogs();
           closeClearLogsModal();
         } catch (error) {
-          alert(error.message || "Could not clear logs.");
+          showAdminToast(error.message || "Could not clear logs.", "error");
         } finally {
           if (btn) {
             btn.disabled = false;
@@ -511,18 +720,40 @@
           el.innerHTML = `<div class="rounded-[1.5rem] border border-dashed border-white/10 p-8 text-center text-slate-400">No withdrawal requests yet.</div>`;
           return;
         }
-        el.innerHTML = adminWithdrawals
-          .map(
-            (item) => {
-              const tone =
-                item.status === "paid"
-                  ? "bg-emerald-500/15 text-emerald-300"
-                  : item.status === "failed"
-                    ? "bg-rose-500/15 text-rose-300"
-                    : item.status === "processing"
-                      ? "bg-amber-500/15 text-amber-300"
-                      : "bg-cyan-500/15 text-cyan-300";
-              return `
+        const pendingCount = adminWithdrawals.filter((item) =>
+          ["pending", "processing"].includes(String(item.status || "").toLowerCase()),
+        ).length;
+        const paidCount = adminWithdrawals.filter(
+          (item) => String(item.status || "").toLowerCase() === "paid",
+        ).length;
+        const failedCount = adminWithdrawals.filter(
+          (item) => String(item.status || "").toLowerCase() === "failed",
+        ).length;
+        const filtered = adminWithdrawals.filter((item) =>
+          withdrawalFilterTab === "pending"
+            ? ["pending", "processing"].includes(String(item.status || "").toLowerCase())
+            : String(item.status || "").toLowerCase() === withdrawalFilterTab,
+        );
+        el.innerHTML = `
+          <div class="flex gap-2 overflow-x-auto hide-scrollbar mb-4">
+            <button onclick="setWithdrawalFilterTab('pending')" class="mini-tab ${withdrawalFilterTab === "pending" ? "active" : ""} px-4 py-2 rounded-2xl text-xs font-bold uppercase tracking-[0.16em]">Pending (${pendingCount})</button>
+            <button onclick="setWithdrawalFilterTab('paid')" class="mini-tab ${withdrawalFilterTab === "paid" ? "active" : ""} px-4 py-2 rounded-2xl text-xs font-bold uppercase tracking-[0.16em]">Paid (${paidCount})</button>
+            <button onclick="setWithdrawalFilterTab('failed')" class="mini-tab ${withdrawalFilterTab === "failed" ? "active" : ""} px-4 py-2 rounded-2xl text-xs font-bold uppercase tracking-[0.16em]">Failed (${failedCount})</button>
+          </div>
+          ${
+            filtered.length
+              ? filtered
+                  .map(
+                    (item) => {
+                      const tone =
+                        item.status === "paid"
+                          ? "bg-emerald-500/15 text-emerald-300"
+                          : item.status === "failed"
+                            ? "bg-rose-500/15 text-rose-300"
+                            : item.status === "processing"
+                              ? "bg-amber-500/15 text-amber-300"
+                              : "bg-cyan-500/15 text-cyan-300";
+                      return `
           <article class="rounded-[1.35rem] border border-white/10 bg-white/[0.03] overflow-hidden">
             <div class="px-4 py-4 sm:px-5 sm:py-5">
               <div class="flex items-start gap-4">
@@ -540,19 +771,32 @@
                     <div><span class="text-slate-500">Method:</span> ${escapeHtml(item.method || "Unknown")}</div>
                     <div><span class="text-slate-500">Destination:</span> ${escapeHtml(item.destination || "Not set")}</div>
                     <div><span class="text-slate-500">Requested:</span> ${formatDate(item.createdAt)}</div>
+                    ${item.deniedReason ? `<div class="sm:col-span-2 text-rose-300"><span class="text-rose-200/70">Reason:</span> ${escapeHtml(item.deniedReason)}</div>` : ""}
                   </div>
-                  <div class="mt-4 flex flex-wrap gap-2">
-                    <button onclick="updateWithdrawalStatus('${item._id}', 'processing')" class="px-3.5 py-2 rounded-xl bg-white/5 border border-white/10 text-slate-200 text-xs sm:text-sm font-bold hover:bg-white/10 transition-all">Processing</button>
-                    <button onclick="updateWithdrawalStatus('${item._id}', 'paid')" class="px-3.5 py-2 rounded-xl bg-emerald-400 text-slate-950 text-xs sm:text-sm font-bold hover:bg-emerald-300 transition-all">Paid</button>
-                    <button onclick="updateWithdrawalStatus('${item._id}', 'failed')" class="px-3.5 py-2 rounded-xl bg-rose-500/90 text-white text-xs sm:text-sm font-bold hover:bg-rose-400 transition-all">Failed / Refund</button>
-                  </div>
+                  ${
+                    withdrawalFilterTab === "pending"
+                      ? `<div class="mt-4 flex flex-wrap gap-2">
+                          <button onclick="updateWithdrawalStatus('${item._id}', 'processing')" class="px-3.5 py-2 rounded-xl bg-white/5 border border-white/10 text-slate-200 text-xs sm:text-sm font-bold hover:bg-white/10 transition-all">Processing</button>
+                          <button onclick="updateWithdrawalStatus('${item._id}', 'paid')" class="px-3.5 py-2 rounded-xl bg-emerald-400 text-slate-950 text-xs sm:text-sm font-bold hover:bg-emerald-300 transition-all">Paid</button>
+                          <button onclick="openWithdrawalFailurePrompt('${item._id}')" class="px-3.5 py-2 rounded-xl bg-rose-500/90 text-white text-xs sm:text-sm font-bold hover:bg-rose-400 transition-all">Failed / Refund</button>
+                        </div>`
+                      : ""
+                  }
                 </div>
               </div>
             </div>
           </article>`;
-            },
-          )
-          .join("");
+                    },
+                  )
+                  .join("")
+              : `<div class="rounded-[1.5rem] border border-dashed border-white/10 p-8 text-center text-slate-400">No ${withdrawalFilterTab} withdrawals right now.</div>`
+          }
+        `;
+      }
+
+      function setWithdrawalFilterTab(tab) {
+        withdrawalFilterTab = tab;
+        renderWithdrawals();
       }
 
       function renderFeedbacks() {
@@ -626,12 +870,26 @@
       function renderUsers() {
         const el = document.getElementById("tab-users");
         if (!el || !adminAnalytics) return;
-        const users = adminAnalytics.recentUsers || [];
+        const users = getFilteredAudienceUsers();
+        const queryStatus = getAudienceQueryStatus();
+        const queryTone = queryStatus.valid
+          ? "text-emerald-200 border-emerald-400/20 bg-emerald-500/10"
+          : "text-amber-200 border-amber-400/20 bg-amber-500/10";
         if (!users.length) {
-          el.innerHTML = `<div class="rounded-[1.5rem] border border-dashed border-white/10 p-8 text-center text-slate-400">No users found yet.</div>`;
+          el.innerHTML = `
+            <div class="rounded-[1.5rem] border border-white/10 bg-white/[0.03] p-4 mb-4 space-y-2">
+              <input value="${escapeHtml(audienceQuery)}" oninput="updateAudienceQuery(this.value)" placeholder="Try username=amani, email=gmail.com, or provider=/google/i" class="w-full rounded-xl border border-cyan-500/20 bg-white/5 px-3 py-2.5 text-xs text-white outline-none focus:border-cyan-400" />
+              <div class="rounded-xl border px-3 py-2 text-[11px] ${queryTone}">${escapeHtml(queryStatus.message)}</div>
+            </div>
+            <div class="rounded-[1.5rem] border border-dashed border-white/10 p-8 text-center text-slate-400">No users found yet.</div>`;
           return;
         }
-        el.innerHTML = users
+        el.innerHTML = `
+          <div class="rounded-[1.5rem] border border-white/10 bg-white/[0.03] p-4 mb-4 space-y-2">
+            <input value="${escapeHtml(audienceQuery)}" oninput="updateAudienceQuery(this.value)" placeholder="Try username=amani, email=gmail.com, or provider=/google/i" class="w-full rounded-xl border border-cyan-500/20 bg-white/5 px-3 py-2.5 text-xs text-white outline-none focus:border-cyan-400" />
+            <div class="rounded-xl border px-3 py-2 text-[11px] ${queryTone}">${escapeHtml(queryStatus.message)}</div>
+          </div>
+        ` + users
           .map(
             (user) => `
           <article id="audience-row-${user._id}" class="audience-row rounded-[1.35rem] border border-white/10 bg-white/[0.03] overflow-hidden">
@@ -662,6 +920,173 @@
           .join("");
       }
 
+      function buildAudienceSearchFields(user = {}) {
+        return {
+          username: String(user.name || "").toLowerCase(),
+          name: String(user.name || "").toLowerCase(),
+          email: String(user.email || "").toLowerCase(),
+          location: String(user.location || "").toLowerCase(),
+          provider: String(user.provider || "").toLowerCase(),
+          plan: user.isPro ? "pro" : "free",
+          any: [
+            user.name,
+            user.email,
+            user.location,
+            user.provider,
+            user.isPro ? "pro" : "free",
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase(),
+        };
+      }
+
+      function parseAudienceMatcher(value = "") {
+        const raw = String(value || "").trim();
+        if (!raw) return null;
+        if (raw.startsWith("/") && raw.lastIndexOf("/") > 0) {
+          const lastSlash = raw.lastIndexOf("/");
+          const pattern = raw.slice(1, lastSlash);
+          const flags = raw.slice(lastSlash + 1) || "i";
+          try {
+            return new RegExp(pattern, flags);
+          } catch {
+            return "__invalid_regex__";
+          }
+        }
+        return raw.toLowerCase();
+      }
+
+      function matchesAudienceClause(user, clause = "") {
+        const trimmed = String(clause || "").trim();
+        if (!trimmed) return true;
+        const fields = buildAudienceSearchFields(user);
+        const match = trimmed.match(/^(username|name|email|location|provider|plan|any)\s*(=|:|~)\s*(.+)$/i);
+        if (!match) {
+          return fields.any.includes(trimmed.toLowerCase());
+        }
+        const field = match[1].toLowerCase();
+        const matcher = parseAudienceMatcher(match[3]);
+        if (matcher === "__invalid_regex__") return false;
+        const target = String(fields[field] || "");
+        return matcher instanceof RegExp ? matcher.test(target) : target.includes(matcher);
+      }
+
+      function getFilteredAudienceUsers() {
+        const users = Array.isArray(adminAnalytics?.recentUsers) ? adminAnalytics.recentUsers : [];
+        const raw = String(audienceQuery || "").trim();
+        if (!raw) return users;
+        const orGroups = raw
+          .split(/\s+\bor\b\s+/i)
+          .map((group) => group.split(/\s+\band\b\s+/i).map((item) => item.trim()).filter(Boolean))
+          .filter((group) => group.length);
+        return users.filter((user) =>
+          orGroups.some((group) => group.every((clause) => matchesAudienceClause(user, clause))),
+        );
+      }
+
+      function getAudienceQueryStatus() {
+        const raw = String(audienceQuery || "").trim();
+        if (!raw) {
+          return {
+            valid: true,
+            message:
+              "Use username=, email=, location=, provider=, plan=, plus and/or. Regex works too, for example provider=/google/i.",
+          };
+        }
+        const invalidRegex = raw
+          .split(/\s+\bor\b\s+|\s+\band\b\s+/i)
+          .map((item) => item.trim())
+          .filter(Boolean)
+          .find((clause) => {
+            const match = clause.match(/^(username|name|email|location|provider|plan|any)\s*(=|:|~)\s*(.+)$/i);
+            return match && parseAudienceMatcher(match[3]) === "__invalid_regex__";
+          });
+        if (invalidRegex) {
+          return {
+            valid: false,
+            message: `Regex looks incomplete in "${invalidRegex}". Close the pattern like /google/i.`,
+          };
+        }
+        const users = getFilteredAudienceUsers();
+        return {
+          valid: true,
+          message: users.length
+            ? `${users.length} audience match${users.length === 1 ? "" : "es"} found.`
+            : "Query syntax looks good, but no audience matches were found yet.",
+        };
+      }
+
+      function updateAudienceQuery(value) {
+        audienceQuery = String(value || "");
+        renderUsers();
+      }
+
+      function updateRewardAmount(userId, value) {
+        payoutAmounts[userId] = String(value || "");
+        renderPayouts();
+      }
+
+      async function rewardUser(userId) {
+        const amount = Number(payoutAmounts[userId] || 0);
+        if (!Number.isFinite(amount) || amount <= 0) {
+          showAdminToast("Enter a valid reward amount.", "error");
+          return;
+        }
+        const res = await fetch(`/api/admin/users/${userId}/reward`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...getAdminHeaders() },
+          body: JSON.stringify({ amount }),
+        });
+        const data = await res.json();
+        if (!data.success) {
+          showAdminToast(data.message || "Could not reward this user.", "error");
+          return;
+        }
+        payoutAmounts[userId] = "";
+        await loadAdminData();
+        showAdminToast("User rewarded successfully.", "success");
+      }
+
+      function renderPayouts() {
+        const el = document.getElementById("tab-payouts");
+        if (!el) return;
+        if (!adminPayoutUsers.length) {
+          el.innerHTML = `<div class="rounded-[1.5rem] border border-dashed border-white/10 p-8 text-center text-slate-400">No payout candidates yet.</div>`;
+          return;
+        }
+        el.innerHTML = adminPayoutUsers
+          .map((user, index) => {
+            const rewardValue = payoutAmounts[user._id] || "";
+            return `
+              <article class="rounded-[1.35rem] border border-white/10 bg-white/[0.03] p-4 sm:p-5">
+                <div class="flex items-start gap-4">
+                  <img src="${user.profilePicture || "https://via.placeholder.com/40/0f172a/e2e8f0?text=U"}" alt="${escapeHtml(user.name || "User")}" class="w-11 h-11 rounded-full object-cover border border-white/10 bg-slate-900 shrink-0" />
+                  <div class="min-w-0 flex-1">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <span class="px-2.5 py-1 rounded-full bg-violet-500/15 text-violet-200 text-[10px] font-bold uppercase tracking-[0.16em]">Rank ${index + 1}</span>
+                      <h3 class="text-sm sm:text-base font-bold text-white">${escapeHtml(user.name || "Unknown User")}</h3>
+                      <span class="px-2.5 py-1 rounded-full bg-cyan-500/15 text-cyan-300 text-[10px] font-bold uppercase tracking-[0.16em]">Weight ${Number(user.activityWeight || 0).toFixed(0)}</span>
+                      <span class="px-2.5 py-1 rounded-full bg-white/5 text-slate-300 text-[10px] font-bold uppercase tracking-[0.16em]">Current Balance $${Number(user.accountBalance || 0).toFixed(2)}</span>
+                    </div>
+                    <div class="mt-2 text-xs sm:text-sm text-slate-400 break-all">${escapeHtml(user.email || "")}</div>
+                    <div class="mt-3 text-xs text-slate-400">
+                      Logins ${Number(user.activityStats?.logins || 0)} · Tool opens ${Number(user.activityStats?.toolOpens || 0)} · Projects ${Number(user.activityStats?.projects || 0)} · Publishes ${Number(user.activityStats?.publishes || 0)}
+                    </div>
+                    <div class="mt-2 text-[11px] text-slate-500">
+                      Last weighted ${user.lastActivityWeightCalculatedAt ? escapeHtml(formatDate(user.lastActivityWeightCalculatedAt)) : "Not calculated yet"}
+                    </div>
+                    <div class="mt-4 flex flex-col sm:flex-row gap-3">
+                      <input value="${escapeHtml(rewardValue)}" oninput="updateRewardAmount('${user._id}', this.value)" type="number" min="0.01" step="0.01" placeholder="Reward amount" class="w-full sm:max-w-[180px] rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none focus:border-cyan-400" />
+                      ${rewardValue && Number(rewardValue) > 0 ? `<button onclick="rewardUser('${user._id}')" class="rounded-xl bg-emerald-400 px-4 py-2.5 text-sm font-black text-slate-950 hover:bg-emerald-300 transition-all">Reward</button>` : ""}
+                    </div>
+                  </div>
+                </div>
+              </article>`;
+          })
+          .join("");
+      }
+
       function renderLogs() {
         const el = document.getElementById("tab-logs");
         if (!el) return;
@@ -671,6 +1096,11 @@
           return;
         }
         const activities = [...getFilteredLogs()].reverse().slice(-140);
+        const queryStatus = analyzeSmartLogQuery(logFilters.query);
+        const queryTone =
+          queryStatus.status === "partial"
+            ? "border-amber-400/20 bg-amber-500/10 text-amber-200"
+            : "border-emerald-400/20 bg-emerald-500/10 text-emerald-200";
         el.innerHTML = `
           <div id="activity-terminal" class="terminal-shell terminal-shell-window rounded-[1.6rem] border border-cyan-500/12 shadow-[0_25px_80px_rgba(2,6,23,0.35)] overflow-hidden">
             <button onclick="toggleTerminalPane('activity-terminal')" class="w-full flex items-center justify-between gap-3 px-5 py-4 border-b border-white/8">
@@ -685,11 +1115,23 @@
               </div>
             </button>
             <div class="border-b border-white/8 px-4 py-3">
-              <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
-                <input data-log-filter="name" value="${escapeHtml(logFilters.name)}" oninput="updateLogFilter('name', this.value)" placeholder="Filter by name" class="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none focus:border-cyan-400" />
-                <input data-log-filter="email" value="${escapeHtml(logFilters.email)}" oninput="updateLogFilter('email', this.value)" placeholder="Filter by email" class="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none focus:border-cyan-400" />
-                <input data-log-filter="tool" value="${escapeHtml(logFilters.tool)}" oninput="updateLogFilter('tool', this.value)" placeholder="Filter by tool/source" class="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none focus:border-cyan-400" />
-                <input data-log-filter="date" value="${escapeHtml(logFilters.date)}" oninput="updateLogFilter('date', this.value)" placeholder="Filter by date" class="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none focus:border-cyan-400" />
+              <div class="space-y-2">
+                <input data-log-filter="query" value="${escapeHtml(logFilters.query)}" oninput="updateLogFilter(this.value)" placeholder="Try: username=charles and activity=login or email=gmail.com and tool=builder" class="w-full rounded-xl border border-cyan-500/20 bg-white/5 px-3 py-2.5 text-xs text-white outline-none focus:border-cyan-400" />
+                <div class="text-[11px] text-slate-400 leading-relaxed">
+                  Smart query:
+                  <span class="text-slate-300">username=</span>,
+                  <span class="text-slate-300">email=</span>,
+                  <span class="text-slate-300">activity=</span>,
+                  <span class="text-slate-300">tool=</span>,
+                  <span class="text-slate-300">date=</span>
+                  with
+                  <span class="text-cyan-300 font-semibold">and</span>
+                  /
+                  <span class="text-cyan-300 font-semibold">or</span>.
+                </div>
+                <div class="rounded-xl border px-3 py-2 text-[11px] leading-relaxed ${queryTone}">
+                  ${escapeHtml(queryStatus.message)}
+                </div>
               </div>
             </div>
             <div class="terminal-body overflow-y-auto px-4 py-4" style="max-height:min(62vh, calc(100vh - 320px));">
@@ -753,6 +1195,7 @@
           log,
           ...adminUsageLogs.filter((item) => item._id !== log._id),
         ].slice(0, 1000);
+        bumpAdminUnread("logs");
         if (adminAnalytics) {
           adminAnalytics.totalUsageLogs = Math.max(
             adminAnalytics.totalUsageLogs || 0,
@@ -772,6 +1215,7 @@
           download,
           ...adminDownloads.filter((item) => item._id !== download._id),
         ].slice(0, 300);
+        bumpAdminUnread("downloads");
         if (adminAnalytics) {
           adminAnalytics.totalDownloads = Math.max(
             adminAnalytics.totalDownloads || 0,
@@ -791,6 +1235,7 @@
           request,
           ...adminWithdrawals.filter((item) => item._id !== request._id),
         ].slice(0, 300);
+        bumpAdminUnread("withdrawals");
         renderWithdrawals();
       }
 
@@ -799,6 +1244,7 @@
           request,
           ...adminPremiumRequests.filter((item) => item._id !== request._id),
         ].slice(0, 300);
+        bumpAdminUnread("premium");
         loadAdminData();
       }
 
@@ -837,7 +1283,7 @@
         });
         const data = await res.json();
         if (!data.success) {
-          alert(data.message || "Could not update feedback.");
+          showAdminToast(data.message || "Could not update feedback.", "error");
           return;
         }
         await loadAdminData();
@@ -851,7 +1297,7 @@
         });
         const data = await res.json();
         if (!data.success) {
-          alert(data.message || "Could not update premium request.");
+          showAdminToast(data.message || "Could not update premium request.", "error");
           return;
         }
         await loadAdminData();
@@ -865,23 +1311,92 @@
         });
         const data = await res.json();
         if (!data.success) {
-          alert(data.message || "Could not update withdrawal.");
+          showAdminToast(data.message || "Could not update withdrawal.", "error");
           return;
         }
         await loadAdminData();
       }
 
+      function openWithdrawalFailurePrompt(id) {
+        pendingWithdrawalFailureId = String(id || "");
+        document.getElementById("withdrawal-failure-reason").value = "";
+        document.getElementById("withdrawal-failure-error")?.classList.add("hidden");
+        document.getElementById("withdrawal-failure-modal")?.classList.remove("hidden");
+        document.getElementById("withdrawal-failure-modal")?.classList.add("flex");
+      }
+
+      function closeWithdrawalFailurePrompt() {
+        pendingWithdrawalFailureId = "";
+        document.getElementById("withdrawal-failure-modal")?.classList.add("hidden");
+        document.getElementById("withdrawal-failure-modal")?.classList.remove("flex");
+      }
+
+      async function submitWithdrawalFailure() {
+        const id = String(pendingWithdrawalFailureId || "").trim();
+        const reason = String(
+          document.getElementById("withdrawal-failure-reason")?.value || "",
+        ).trim();
+        const errorNode = document.getElementById("withdrawal-failure-error");
+        const submitBtn = document.getElementById("withdrawal-failure-submit-btn");
+        if (!id) {
+          showAdminToast("No withdrawal request is selected.", "error");
+          return;
+        }
+        if (!reason) {
+          if (errorNode) {
+            errorNode.textContent = "Add a short reason so the user understands the denial.";
+            errorNode.classList.remove("hidden");
+          }
+          return;
+        }
+        if (errorNode) errorNode.classList.add("hidden");
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.textContent = "Saving...";
+        }
+        try {
+          const res = await fetch(`/api/admin/withdrawals/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json", ...getAdminHeaders() },
+            body: JSON.stringify({ status: "failed", deniedReason: reason }),
+          });
+          const data = await res.json();
+          if (!data.success) {
+            throw new Error(data.message || "Could not deny this withdrawal.");
+          }
+          closeWithdrawalFailurePrompt();
+          await loadAdminData();
+          showAdminToast("Withdrawal marked as failed with a saved reason.", "success");
+        } catch (error) {
+          if (errorNode) {
+            errorNode.textContent = error.message || "Could not deny this withdrawal.";
+            errorNode.classList.remove("hidden");
+          }
+        } finally {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = "Deny Request";
+          }
+        }
+      }
+
       async function loadAdminData() {
         if (localStorage.getItem(ADMIN_ACCESS_KEY) !== "granted") return;
         try {
+          const previousFeedbackIds = new Set(adminFeedbacks.map((item) => item._id));
+          const previousUserIds = new Set(
+            (adminAnalytics?.recentUsers || []).map((item) => item._id),
+          );
+          const previousPayoutIds = new Set(adminPayoutUsers.map((item) => item._id));
           const headers = getAdminHeaders();
-          const [feedbackRes, analyticsRes, usageLogRes, premiumRes, downloadsRes, withdrawalsRes] = await Promise.all([
+          const [feedbackRes, analyticsRes, usageLogRes, premiumRes, downloadsRes, withdrawalsRes, payoutUsersRes] = await Promise.all([
             fetch("/api/admin/feedbacks", { headers }),
             fetch("/api/admin/analytics", { headers }),
             fetch("/api/admin/usage-logs", { headers }),
             fetch("/api/admin/upgrade-requests", { headers }),
             fetch("/api/admin/downloads", { headers }),
             fetch("/api/admin/withdrawals", { headers }),
+            fetch("/api/admin/payout-users", { headers }),
           ]);
           const feedbackData = await feedbackRes.json();
           const analyticsData = await analyticsRes.json();
@@ -889,12 +1404,32 @@
           const premiumData = await premiumRes.json();
           const downloadsData = await downloadsRes.json();
           const withdrawalsData = await withdrawalsRes.json();
+          const payoutUsersData = await payoutUsersRes.json();
           adminFeedbacks = feedbackData.feedbacks || [];
           adminAnalytics = analyticsData.analytics || {};
           adminUsageLogs = usageLogData.logs || [];
           adminPremiumRequests = premiumData.requests || [];
           adminDownloads = downloadsData.downloads || [];
           adminWithdrawals = withdrawalsData.withdrawals || [];
+          adminPayoutUsers = payoutUsersData.users || [];
+          const nextFeedbacks = adminFeedbacks.filter((item) => !previousFeedbackIds.has(item._id));
+          const nextUsers = (adminAnalytics?.recentUsers || []).filter(
+            (item) => !previousUserIds.has(item._id),
+          );
+          const nextPayoutUsers = adminPayoutUsers.filter(
+            (item) => !previousPayoutIds.has(item._id),
+          );
+          if (hasLoadedAdminData && nextFeedbacks.length && activeAdminTab !== "feedbacks") {
+            adminUnreadCounts.feedbacks += nextFeedbacks.length;
+          }
+          if (hasLoadedAdminData && nextUsers.length && activeAdminTab !== "users") {
+            adminUnreadCounts.users += nextUsers.length;
+          }
+          if (hasLoadedAdminData && nextPayoutUsers.length && activeAdminTab !== "payouts") {
+            adminUnreadCounts.payouts += nextPayoutUsers.length;
+          }
+          hasLoadedAdminData = true;
+          renderAdminTabBadges();
           renderAnalyticsDetails();
           renderFeedbacks();
           renderLogs();
@@ -902,12 +1437,13 @@
           renderPremiumRequests();
           renderDownloads();
           renderWithdrawals();
+          renderPayouts();
           connectAdminLiveFeed();
           setLiveStatus(Boolean(adminSocket?.connected));
         } catch (error) {
           console.error(error);
           setLiveStatus(false);
-          alert("Admin data could not be loaded.");
+          showAdminToast("Admin data could not be loaded.", "error");
         }
       }
 

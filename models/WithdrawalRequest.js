@@ -17,8 +17,11 @@ const WithdrawalRequestSchema = new mongoose.Schema({
     enum: ["pending", "processing", "paid", "failed"],
     default: "pending",
   },
+  reviewedAt: { type: Date, default: null },
+  deniedReason: { type: String, default: "", trim: true },
   metadata: { type: mongoose.Schema.Types.Mixed, default: {} },
   createdAt: { type: Date, default: Date.now, index: true },
+  updatedAt: { type: Date, default: Date.now },
 });
 
 export default mongoose.model("WithdrawalRequest", WithdrawalRequestSchema);

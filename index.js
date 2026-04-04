@@ -19,6 +19,7 @@ import { google } from "googleapis";
 import authRoutes, {
   buildGithubClient,
   decryptGoogleRefreshToken,
+  generateReferralCode,
   initializeGithubStorageForUser,
   toSafeUser,
 } from "./routes/authRoutes.js";
@@ -167,6 +168,80 @@ async function createUsageLog({
   }
 }
 
+function scoreUsageLogWeight(log = {}) {
+  const action = String(log?.action || "").toLowerCase();
+  const source = String(log?.source || "").toLowerCase();
+  let weight = 1;
+  if (action.includes("login")) weight += 2;
+  if (action.includes("tool-open")) weight += 1;
+  if (action.includes("builder-save") || action.includes("builder-autosave")) weight += 2;
+  if (action.includes("github-publish")) weight += 8;
+  if (action.includes("github-publish-folder")) weight += 12;
+  if (action.includes("render-hosting") || action.includes("render-deploy")) weight += 5;
+  if (action.includes("withdrawal-request")) weight += 1;
+  if (action.includes("adsense")) weight += 2;
+  if (source.includes("web-builder")) weight += 2;
+  if (source.includes("tool-switch")) weight += 1;
+  return weight;
+}
+
+async function syncUserActivityWeights() {
+  const pendingLogs = await UsageLog.find({
+    kind: "activity",
+    userId: { $ne: null },
+    "metadata.weightProcessed": { $ne: true },
+  })
+    .sort({ createdAt: 1 })
+    .limit(3000);
+
+  if (!pendingLogs.length) return;
+
+  const grouped = new Map();
+  for (const log of pendingLogs) {
+    const userId = String(log.userId || "").trim();
+    if (!userId) continue;
+    const entry = grouped.get(userId) || {
+      weight: 0,
+      stats: {
+        logins: 0,
+        toolOpens: 0,
+        projects: 0,
+        publishes: 0,
+      },
+      ids: [],
+      lastAt: null,
+    };
+    const action = String(log.action || "").toLowerCase();
+    entry.weight += scoreUsageLogWeight(log);
+    if (action.includes("login")) entry.stats.logins += 1;
+    if (action.includes("tool-open")) entry.stats.toolOpens += 1;
+    if (action.includes("builder-save") || action.includes("builder-autosave")) entry.stats.projects += 1;
+    if (action.includes("github-publish")) entry.stats.publishes += 1;
+    entry.ids.push(log._id);
+    entry.lastAt = log.createdAt || entry.lastAt;
+    grouped.set(userId, entry);
+  }
+
+  for (const [userId, entry] of grouped.entries()) {
+    const user = await User.findById(userId);
+    if (!user) continue;
+    const previousStats = user.activityStats || {};
+    user.activityWeight = Number(user.activityWeight || 0) + Number(entry.weight || 0);
+    user.activityStats = {
+      logins: Number(previousStats.logins || 0) + Number(entry.stats.logins || 0),
+      toolOpens: Number(previousStats.toolOpens || 0) + Number(entry.stats.toolOpens || 0),
+      projects: Number(previousStats.projects || 0) + Number(entry.stats.projects || 0),
+      publishes: Number(previousStats.publishes || 0) + Number(entry.stats.publishes || 0),
+    };
+    user.lastActivityWeightCalculatedAt = entry.lastAt || new Date();
+    await user.save();
+  }
+
+  await UsageLog.deleteMany({
+    _id: { $in: pendingLogs.map((log) => log._id) },
+  });
+}
+
 function logServerIssue(summary, metadata = {}) {
   return createUsageLog({
     action: "server-error",
@@ -212,6 +287,41 @@ function normalizeRepoFilePath(value = "") {
 function normalizeImportedEntryPath(value = "index.html") {
   const normalized = normalizeRepoFilePath(value);
   return normalized || "index.html";
+}
+
+function prepareGitHubPush(projectName = "", filesArray = []) {
+  const folderSlug = slugifyProjectFolderName(projectName || "medialab-project");
+  const items = Array.isArray(filesArray) ? filesArray : [];
+  if (items.length === 1) {
+    const single = items[0] || {};
+    const normalizedSinglePath = normalizeRepoFilePath(single.path || single.name || "index.html");
+    const isHtmlFile = /\.html?$/i.test(normalizedSinglePath || "");
+    if (isHtmlFile) {
+      return {
+        folderSlug,
+        entryPath: "index.html",
+        projectType: "single",
+        files: [
+          {
+            ...single,
+            path: "index.html",
+          },
+        ],
+      };
+    }
+  }
+  const normalizedFiles = items.map((file) => ({
+    ...file,
+    path: normalizeRepoFilePath(file?.path || file?.name || ""),
+  }));
+  return {
+    folderSlug,
+    entryPath: normalizeImportedEntryPath(
+      normalizedFiles.find((file) => /(^|\/)index\.html?$/i.test(file.path))?.path || "index.html",
+    ),
+    projectType: "folder",
+    files: normalizedFiles,
+  };
 }
 
 function stripPublicRootFromUrlPath(value = "") {
@@ -483,6 +593,16 @@ function buildPublishedHtmlFromSource({
   return nextHtml;
 }
 
+function stripAdsenseFromHtml(html = "") {
+  return String(html || "")
+    .replace(
+      /<script[^>]*src=["']https:\/\/pagead2\.googlesyndication\.com\/pagead\/js\/adsbygoogle\.js[^>]*><\/script>\s*/gi,
+      "",
+    )
+    .replace(/<script[^>]*>[\s\S]*?adsbygoogle[\s\S]*?<\/script>\s*/gi, "")
+    .replace(/<ins[^>]*class=["'][^"']*adsbygoogle[^"']*["'][^>]*>[\s\S]*?<\/ins>\s*/gi, "");
+}
+
 async function getGithubFileSha(octokit, owner, repo, path) {
   try {
     const existing = await octokit.rest.repos.getContent({
@@ -686,6 +806,107 @@ function getAdsenseOAuthClient(user) {
   return client;
 }
 
+function normalizeAdsenseReviewState(status = "") {
+  const raw = String(status || "").trim().toUpperCase();
+  if (!raw) return "disconnected";
+  if (
+    [
+      "REQUIRES_REVIEW",
+      "GETTING_READY",
+      "PENDING",
+      "PENDING_REVIEW",
+      "REVIEWING",
+      "AWAITING_REVIEW",
+    ].includes(raw)
+  ) {
+    return "pending";
+  }
+  return "approved";
+}
+
+async function refreshAdsenseSiteStatusIfNeeded(user, { force = false } = {}) {
+  if (!user?.googleRefreshToken || !user?.adsenseAccountName || !user?.adsenseSiteUrl) {
+    return {
+      siteStatus: String(user?.adsenseSiteStatus || "").trim(),
+      reviewState: normalizeAdsenseReviewState(user?.adsenseSiteStatus || ""),
+      lastCheckedAt: user?.adsenseLastCheckedAt || null,
+      approvedAt: user?.adsenseApprovedAt || null,
+      changed: false,
+    };
+  }
+
+  const reviewState = normalizeAdsenseReviewState(user.adsenseSiteStatus || "");
+  const lastCheckedAt = user?.adsenseLastCheckedAt
+    ? new Date(user.adsenseLastCheckedAt)
+    : null;
+  const checkAgeMs = lastCheckedAt ? Date.now() - lastCheckedAt.getTime() : Number.POSITIVE_INFINITY;
+  const sixHoursMs = 6 * 60 * 60 * 1000;
+  if (!force && reviewState !== "pending" && checkAgeMs < sixHoursMs) {
+    return {
+      siteStatus: String(user.adsenseSiteStatus || "").trim(),
+      reviewState,
+      lastCheckedAt: user.adsenseLastCheckedAt || null,
+      approvedAt: user.adsenseApprovedAt || null,
+      changed: false,
+    };
+  }
+  if (!force && reviewState === "pending" && checkAgeMs < sixHoursMs) {
+    return {
+      siteStatus: String(user.adsenseSiteStatus || "").trim(),
+      reviewState,
+      lastCheckedAt: user.adsenseLastCheckedAt || null,
+      approvedAt: user.adsenseApprovedAt || null,
+      changed: false,
+    };
+  }
+
+  const auth = getAdsenseOAuthClient(user);
+  const adsense = google.adsense({ version: "v2", auth });
+  const targetDomain =
+    extractDomainNameFromUrl(user.adsenseSiteUrl) ||
+    String(user.adsenseSiteUrl || "").trim().toLowerCase();
+  const sitesResponse = await adsense.accounts.sites.list({
+    parent: user.adsenseAccountName,
+    pageSize: 200,
+  });
+  const sites = sitesResponse.data?.sites || [];
+  const matchedSite = sites.find((site) => {
+    const siteUrl = site.siteUrl || site.url || site.domain || site.reportingDimensionId || "";
+    const siteDomain = extractDomainNameFromUrl(siteUrl) || String(siteUrl).trim().toLowerCase();
+    return siteDomain === targetDomain;
+  });
+
+  const previousStatus = String(user.adsenseSiteStatus || "").trim();
+  const nextStatus = String(
+    matchedSite?.state || matchedSite?.status || matchedSite?.platformType || previousStatus,
+  ).trim();
+  const nextReviewState = normalizeAdsenseReviewState(nextStatus);
+
+  user.adsenseSiteStatus = nextStatus;
+  user.adsenseLastCheckedAt = new Date();
+  if (nextReviewState === "approved" && !user.adsenseApprovedAt) {
+    user.adsenseApprovedAt = new Date();
+  }
+  if (nextReviewState !== "approved") {
+    user.adsenseApprovedAt = null;
+  }
+  const changed =
+    previousStatus !== nextStatus ||
+    !lastCheckedAt ||
+    normalizeAdsenseReviewState(previousStatus) !== nextReviewState;
+  if (changed || force) {
+    await user.save();
+  }
+
+  return {
+    siteStatus: nextStatus,
+    reviewState: nextReviewState,
+    lastCheckedAt: user.adsenseLastCheckedAt,
+    approvedAt: user.adsenseApprovedAt || null,
+    changed,
+  };
+}
+
 function collectHostedDomains(projects = []) {
   const urls = projects.flatMap((project) => [
     project?.renderUrl || "",
@@ -808,6 +1029,28 @@ function buildUsageIdentity(req) {
   };
 }
 
+async function ensureUserReferralCode(user) {
+  if (!user) return user;
+  if (String(user.referralCode || "").trim()) return user;
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const candidate = generateReferralCode(user);
+    const existing = await User.findOne({ referralCode: candidate }).select("_id").lean();
+    if (existing) continue;
+    user.referralCode = candidate;
+    await user.save();
+    return user;
+  }
+  user.referralCode = `medialab-${String(user._id || "").slice(-6)}`;
+  await user.save();
+  return user;
+}
+
+function buildReferralLink(code = "") {
+  const normalizedCode = String(code || "").trim();
+  if (!normalizedCode) return "https://medialab-6b20.onrender.com/";
+  return `https://medialab-6b20.onrender.com/?ref=${encodeURIComponent(normalizedCode)}`;
+}
+
 // --- 2. FOLDER & STATIC SETUP ---
 const uploadDir = path.resolve(__dirname, "uploads");
 const exportDir = path.resolve(__dirname, "exports");
@@ -896,6 +1139,57 @@ app.post("/api/downloads", async (req, res) => {
       metadata: req.body?.metadata || {},
     });
 
+    if (req.user?._id && type === "pwa") {
+      const installedUser = await User.findById(req.user._id);
+      if (installedUser) {
+        await ensureUserReferralCode(installedUser);
+        const referredByCode = String(installedUser.referredByCode || "").trim();
+        const alreadyRewarded = Array.isArray(installedUser.referralRewards)
+          ? installedUser.referralRewards.some(
+              (entry) => String(entry?.downloadId || "") === String(record._id || ""),
+            )
+          : false;
+        if (referredByCode && !alreadyRewarded) {
+          const referrer = await User.findOne({ referralCode: referredByCode });
+          if (referrer && String(referrer._id) !== String(installedUser._id)) {
+            const priorReward = Array.isArray(referrer.referralRewards)
+              ? referrer.referralRewards.some(
+                  (entry) => String(entry?.referredUserId || "") === String(installedUser._id || ""),
+                )
+              : false;
+            if (!priorReward) {
+              referrer.accountBalance = Number((Number(referrer.accountBalance || 0) + 0.01).toFixed(2));
+              referrer.referralInstallCount = Number(referrer.referralInstallCount || 0) + 1;
+              referrer.referralEarnings = Number((Number(referrer.referralEarnings || 0) + 0.01).toFixed(2));
+              referrer.referralRewards = [
+                ...(Array.isArray(referrer.referralRewards) ? referrer.referralRewards : []),
+                {
+                  referredUserId: installedUser._id,
+                  referredEmail: installedUser.email || "",
+                  downloadId: record._id,
+                  amount: 0.01,
+                  rewardedAt: new Date(),
+                },
+              ].slice(-500);
+              await referrer.save();
+
+              await createUsageLog({
+                user: referrer,
+                email: referrer.email,
+                name: referrer.name,
+                isAnonymous: false,
+                isPro: Boolean(referrer.isPro),
+                action: "referral-install-reward",
+                summary: `earned 0.01 from referral install by ${installedUser.email || "a new user"}`,
+                source: "referral",
+                metadata: { referredUserId: installedUser._id, downloadId: record._id, amount: 0.01 },
+              });
+            }
+          }
+        }
+      }
+    }
+
     io.emit("admin:download", record.toObject());
 
     await createUsageLog({
@@ -914,6 +1208,85 @@ app.post("/api/downloads", async (req, res) => {
   } catch (error) {
     console.error("Download record endpoint failed:", error);
     res.status(500).json({ success: false, message: "Could not save download." });
+  }
+});
+
+app.get("/api/referrals/status", async (req, res) => {
+  try {
+    if (!req.user?._id) {
+      return res.status(401).json({ success: false, message: "Login required." });
+    }
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found." });
+    }
+    await ensureUserReferralCode(user);
+    return res.json({
+      success: true,
+      referralCode: user.referralCode,
+      referralLink: buildReferralLink(user.referralCode),
+      referralInstallCount: Number(user.referralInstallCount || 0),
+      referralEarnings: Number(user.referralEarnings || 0),
+      referredByCode: user.referredByCode || "",
+      user: toSafeUser(user),
+    });
+  } catch (error) {
+    console.error("Referral status failed:", error);
+    return res.status(500).json({ success: false, message: "Could not load referral info right now." });
+  }
+});
+
+app.post("/api/referrals/claim", async (req, res) => {
+  try {
+    if (!req.user?._id) {
+      return res.status(401).json({ success: false, message: "Login required." });
+    }
+    const referralCode = String(req.body?.referralCode || "").trim();
+    if (!referralCode) {
+      return res.status(400).json({ success: false, message: "Referral code is required." });
+    }
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found." });
+    }
+    await ensureUserReferralCode(user);
+    if (String(user.referralCode || "") === referralCode) {
+      return res.status(400).json({ success: false, message: "You cannot use your own referral link." });
+    }
+    if (String(user.referredByCode || "").trim()) {
+      return res.json({
+        success: true,
+        message: "Referral link already saved for this account.",
+        referralCode: user.referredByCode,
+        user: toSafeUser(user),
+      });
+    }
+    const referrer = await User.findOne({ referralCode });
+    if (!referrer) {
+      return res.status(404).json({ success: false, message: "Referral code was not found." });
+    }
+    user.referredByCode = referralCode;
+    await user.save();
+    await createUsageLog({
+      user,
+      email: user.email,
+      name: user.name,
+      isAnonymous: false,
+      isPro: Boolean(user.isPro),
+      action: "referral-linked",
+      summary: `joined via referral code ${referralCode}`,
+      source: "referral",
+      metadata: { referralCode, referrerUserId: referrer._id },
+    });
+    return res.json({
+      success: true,
+      message: "Referral link saved. Install the app to complete the reward.",
+      referralCode,
+      user: toSafeUser(user),
+    });
+  } catch (error) {
+    console.error("Referral claim failed:", error);
+    return res.status(500).json({ success: false, message: "Could not save referral link right now." });
   }
 });
 
@@ -938,7 +1311,7 @@ app.post("/api/history-projects", async (req, res) => {
       });
     }
 
-    const user = await User.findById(req.user._id);
+    const user = await User.findById(req.user._id).select("+googleRefreshToken");
     if (!user) {
       return res.status(404).json({ success: false, message: "User not found." });
     }
@@ -1135,13 +1508,23 @@ app.post("/api/github/publish", publishRateLimit, express.json({ limit: "10mb" }
     const folderSlug = filename.replace(/\.html$/i, "") || "medialab-page";
     const repoFolderPath = normalizeRepoFilePath(`${GITHUB_PUBLIC_ROOT}/${folderSlug}`);
     const repoFilePath = normalizeRepoFilePath(`${repoFolderPath}/index.html`);
+    user.liveProjects = Array.isArray(user.liveProjects) ? user.liveProjects : [];
+    const existingProject = user.liveProjects.find(
+      (project) => String(project?.fileName || project?.filename || "") === repoFilePath,
+    );
     await ensureGithubRepoScaffold(octokit, owner, repo);
     const fullHtml = documentHtml
       ? buildPublishedHtmlFromSource({
           documentHtml,
           projectName,
-          adsenseId: existingProject?.monetizationEnabled ? user.adsenseId || "" : "",
-          adsenseAdCode: existingProject?.monetizationEnabled ? user.adsenseAdCode || "" : "",
+          adsenseId:
+            existingProject?.monetizationEnabled && existingProject?.isMonetized
+              ? user.adsenseId || ""
+              : "",
+          adsenseAdCode:
+            existingProject?.monetizationEnabled && existingProject?.isMonetized
+              ? user.adsenseAdCode || ""
+              : "",
           description,
           keywords,
         })
@@ -1150,8 +1533,14 @@ app.post("/api/github/publish", publishRateLimit, express.json({ limit: "10mb" }
           htmlContent,
           cssContent,
           interactionScript,
-          adsenseId: existingProject?.monetizationEnabled ? user.adsenseId || "" : "",
-          adsenseAdCode: existingProject?.monetizationEnabled ? user.adsenseAdCode || "" : "",
+          adsenseId:
+            existingProject?.monetizationEnabled && existingProject?.isMonetized
+              ? user.adsenseId || ""
+              : "",
+          adsenseAdCode:
+            existingProject?.monetizationEnabled && existingProject?.isMonetized
+              ? user.adsenseAdCode || ""
+              : "",
           description,
           keywords,
         });
@@ -1175,9 +1564,6 @@ app.post("/api/github/publish", publishRateLimit, express.json({ limit: "10mb" }
     });
 
     const liveUrl = `https://${owner}.github.io/${repo}/${folderSlug}/`;
-    const existingProject = user.liveProjects.find(
-      (project) => String(project?.fileName || project?.filename || "") === repoFilePath,
-    );
     const nextProject = {
       name: projectName,
       fileName: repoFilePath,
@@ -1195,15 +1581,22 @@ app.post("/api/github/publish", publishRateLimit, express.json({ limit: "10mb" }
       renderUrl: existingProject?.renderUrl || "",
       renderHostedConfirmed: Boolean(existingProject?.renderHostedConfirmed),
       renderVerifiedAt: existingProject?.renderVerifiedAt || null,
-      adsensePublisherId: existingProject?.monetizationEnabled ? user.adsenseId || "" : "",
+      adsensePublisherId:
+        existingProject?.monetizationEnabled && existingProject?.isMonetized
+          ? user.adsenseId || ""
+          : "",
       monetizationEnabled: Boolean(existingProject?.monetizationEnabled),
+      isMonetized: Boolean(existingProject?.isMonetized),
+      adDisabledPages: Array.isArray(existingProject?.adDisabledPages)
+        ? existingProject.adDisabledPages
+        : [],
+      monetizationDisabledAt: existingProject?.monetizationDisabledAt || null,
       monetizationVerifiedAt: existingProject?.monetizationVerifiedAt || null,
       lastSyncedAt: new Date(),
       updatedAt: new Date(),
       createdAt: existingProject?.createdAt || new Date(),
     };
 
-    user.liveProjects = Array.isArray(user.liveProjects) ? user.liveProjects : [];
     user.liveProjects = user.liveProjects.filter(
       (project) => String(project?.fileName || project?.filename || "") !== repoFilePath,
     );
@@ -1276,7 +1669,6 @@ app.post("/api/github/publish-folder", publishRateLimit, express.json({ limit: "
     }
 
     const projectName = String(req.body?.projectName || "").trim();
-    const entryPath = normalizeImportedEntryPath(req.body?.entryPath || "index.html");
     const uploadedFiles = Array.isArray(req.body?.files) ? req.body.files : [];
     if (!projectName) {
       return res.status(400).json({
@@ -1291,7 +1683,9 @@ app.post("/api/github/publish-folder", publishRateLimit, express.json({ limit: "
       });
     }
 
-    const safeFiles = uploadedFiles
+    const preparedPush = prepareGitHubPush(projectName, uploadedFiles);
+    const entryPath = preparedPush.entryPath;
+    const safeFiles = preparedPush.files
       .map((file) => ({
         path: normalizeRepoFilePath(file?.path || ""),
         contentBase64: String(file?.contentBase64 || "").trim(),
@@ -1324,7 +1718,7 @@ app.post("/api/github/publish-folder", publishRateLimit, express.json({ limit: "
       });
     }
 
-    const folderSlug = slugifyProjectFolderName(projectName);
+    const folderSlug = preparedPush.folderSlug;
     const repoFolderPath = normalizeRepoFilePath(`${GITHUB_PUBLIC_ROOT}/${folderSlug}`);
     const owner = user.githubUsername;
     const repo = "medialab";
@@ -1355,7 +1749,7 @@ app.post("/api/github/publish-folder", publishRateLimit, express.json({ limit: "
       filename: repoEntryPath,
       entryPath,
       repoPath: repoFolderPath,
-      projectType: "folder",
+      projectType: preparedPush.projectType,
       repo,
       url: liveUrl,
       liveUrl,
@@ -1366,8 +1760,16 @@ app.post("/api/github/publish-folder", publishRateLimit, express.json({ limit: "
       renderUrl: existingProject?.renderUrl || "",
       renderHostedConfirmed: Boolean(existingProject?.renderHostedConfirmed),
       renderVerifiedAt: existingProject?.renderVerifiedAt || null,
-      adsensePublisherId: Boolean(existingProject?.monetizationEnabled) ? user.adsenseId || "" : "",
+      adsensePublisherId:
+        Boolean(existingProject?.monetizationEnabled) && Boolean(existingProject?.isMonetized)
+          ? user.adsenseId || ""
+          : "",
       monetizationEnabled: Boolean(existingProject?.monetizationEnabled),
+      isMonetized: Boolean(existingProject?.isMonetized),
+      adDisabledPages: Array.isArray(existingProject?.adDisabledPages)
+        ? existingProject.adDisabledPages
+        : [],
+      monetizationDisabledAt: existingProject?.monetizationDisabledAt || null,
       monetizationVerifiedAt: existingProject?.monetizationVerifiedAt || null,
       lastSyncedAt: new Date(),
       updatedAt: new Date(),
@@ -1838,6 +2240,13 @@ app.get("/api/github/project-monitor", async (req, res) => {
       return res.status(404).json({ success: false, message: "Live project not found." });
     }
 
+    let adsenseSync = null;
+    try {
+      adsenseSync = await refreshAdsenseSiteStatusIfNeeded(user);
+    } catch (error) {
+      console.warn("Project monitor AdSense refresh skipped:", error.message);
+    }
+
     const liveUrl = buildProjectLiveUrl(user, project);
     const health = {
       ok: false,
@@ -1867,7 +2276,9 @@ app.get("/api/github/project-monitor", async (req, res) => {
 
     const adsDetected = detectAdsenseScript(
       html,
-      project?.monetizationEnabled ? user.adsenseId || project.adsensePublisherId || "" : "",
+      project?.monetizationEnabled && project?.isMonetized
+        ? user.adsenseId || project.adsensePublisherId || ""
+        : "",
     );
 
     let adsTxtVerified = false;
@@ -1891,7 +2302,7 @@ app.get("/api/github/project-monitor", async (req, res) => {
     }
 
     let adsPerformance = null;
-    if (project?.monetizationEnabled && user.googleRefreshToken) {
+    if (project?.monetizationEnabled && project?.isMonetized && user.googleRefreshToken) {
       try {
         adsPerformance = await getAdsenseDomainStats(user, liveUrl);
       } catch (error) {
@@ -1909,8 +2320,21 @@ app.get("/api/github/project-monitor", async (req, res) => {
       adsDetected,
       adsTxtVerified,
       adsTxtUrl,
-      monetizationApproved: Boolean(project?.monetizationEnabled && adsDetected && adsTxtVerified && user.adsenseId),
+      monetizationApproved: Boolean(
+        project?.monetizationEnabled &&
+          project?.isMonetized &&
+          adsDetected &&
+          adsTxtVerified &&
+          user.adsenseId,
+      ),
       adsenseId: user.adsenseId || "",
+      adsenseSiteStatus: user.adsenseSiteStatus || "",
+      adsenseReviewState:
+        adsenseSync?.reviewState ||
+        normalizeAdsenseReviewState(user.adsenseSiteStatus || ""),
+      adsenseLastCheckedAt: user.adsenseLastCheckedAt || null,
+      adsenseApprovedAt: user.adsenseApprovedAt || null,
+      isMonetized: Boolean(project?.isMonetized),
       adsPerformance,
     });
   } catch (error) {
@@ -2012,6 +2436,135 @@ app.post("/api/github/verify-render-hosting", express.json(), async (req, res) =
     return res.status(500).json({
       success: false,
       message: error?.message || "Could not verify Render hosting right now.",
+    });
+  }
+});
+
+app.post("/api/projects/update-deploy-info", express.json(), async (req, res) => {
+  if (!req.isAuthenticated() || !req.user) {
+    return res.status(401).json({
+      success: false,
+      message: "You need to sign in before saving deployment details.",
+    });
+  }
+
+  try {
+    const projectId = String(req.body?.projectId || req.body?.filename || "").trim();
+    const rawServiceId = String(req.body?.serviceId || "").trim();
+    const rawLiveUrl = String(req.body?.liveUrl || req.body?.renderUrl || "").trim();
+
+    if (!projectId) {
+      return res.status(400).json({ success: false, message: "Missing project identifier." });
+    }
+    if (!rawLiveUrl) {
+      return res.status(400).json({ success: false, message: "Paste the Render live URL first." });
+    }
+    if (rawServiceId && !/^srv-[a-z0-9]+$/i.test(rawServiceId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Render Service ID must start with srv-.",
+      });
+    }
+
+    let normalizedLiveUrl = normalizeRenderUrl(rawLiveUrl);
+    let parsedLiveUrl;
+    try {
+      parsedLiveUrl = new URL(normalizedLiveUrl);
+    } catch {
+      return res.status(400).json({
+        success: false,
+        message: "Use a valid Render URL ending in .onrender.com.",
+      });
+    }
+
+    if (!/\.onrender\.com$/i.test(parsedLiveUrl.hostname)) {
+      return res.status(400).json({
+        success: false,
+        message: "Use the final Render URL ending in .onrender.com.",
+      });
+    }
+
+    const renderBaseUrl = `${parsedLiveUrl.protocol}//${parsedLiveUrl.host}`;
+
+    let response;
+    try {
+      response = await fetch(normalizedLiveUrl, {
+        method: "GET",
+        redirect: "follow",
+        headers: { "User-Agent": "MediaLab-Render-Deploy-Verify" },
+      });
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Render URL could not be reached yet. Finish deployment on Render and try again.",
+      });
+    }
+
+    if (response.status >= 400) {
+      return res.status(400).json({
+        success: false,
+        message: `Render site responded with ${response.status}. Wait for deploy to finish, then verify again.`,
+      });
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found." });
+    }
+
+    user.liveProjects = Array.isArray(user.liveProjects) ? user.liveProjects : [];
+    const projectIndex = user.liveProjects.findIndex(
+      (item) => String(item?.fileName || item?.filename || "").trim() === projectId,
+    );
+    if (projectIndex < 0) {
+      return res.status(404).json({ success: false, message: "Live project not found." });
+    }
+
+    const project = user.liveProjects[projectIndex];
+    project.renderUrl = renderBaseUrl;
+    if (rawServiceId) {
+      project.renderServiceId = rawServiceId;
+    }
+    project.renderDeployStatus = "manual-verified";
+    project.renderHostedConfirmed = true;
+    project.renderVerifiedAt = new Date();
+    project.updatedAt = new Date();
+
+    if (!user.confirmedFirstHosting) {
+      user.confirmedFirstHosting = true;
+      user.firstHostingConfirmedAt = new Date();
+    }
+
+    await user.save();
+    req.user.liveProjects = user.liveProjects;
+
+    await createUsageLog({
+      user,
+      email: user.email,
+      name: user.name,
+      isPro: Boolean(user.isPro),
+      action: "render-hosting-saved",
+      summary: `saved Render deployment info for ${projectId}`,
+      source: "render",
+      metadata: {
+        projectId,
+        serviceId: rawServiceId,
+        renderUrl: renderBaseUrl,
+      },
+    });
+
+    return res.json({
+      success: true,
+      message: "Render deployment details saved successfully.",
+      project,
+      user: toSafeUser(user),
+    });
+  } catch (error) {
+    console.error("Saving Render deployment info failed:", error);
+    return res.status(500).json({
+      success: false,
+      message: error?.message || "Could not save Render deployment info right now.",
     });
   }
 });
@@ -2265,6 +2818,11 @@ app.post("/api/adsense/link-site", express.json(), async (req, res) => {
       matchedSite.siteUrl || matchedSite.url || matchedSite.domain || domainName;
     user.adsenseSiteStatus =
       matchedSite.state || matchedSite.status || matchedSite.platformType || "";
+    user.adsenseLastCheckedAt = new Date();
+    user.adsenseApprovedAt =
+      normalizeAdsenseReviewState(user.adsenseSiteStatus) === "approved"
+        ? new Date()
+        : null;
     if (adCode) {
       user.adsenseAdCode = adCode;
     }
@@ -2337,6 +2895,13 @@ app.post("/api/github/monetize-project", express.json(), async (req, res) => {
         message: "Link your AdSense domain first before monetizing a project.",
       });
     }
+    if (!user.adsenseApprovedAt) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Google hasn't approved your AdSense request yet. Please check the status in Console before monetizing this page.",
+      });
+    }
 
     user.liveProjects = Array.isArray(user.liveProjects) ? user.liveProjects : [];
     const projectIndex = user.liveProjects.findIndex(
@@ -2375,6 +2940,9 @@ app.post("/api/github/monetize-project", express.json(), async (req, res) => {
     });
 
     project.monetizationEnabled = true;
+    project.isMonetized = true;
+    project.adDisabledPages = [];
+    project.monetizationDisabledAt = null;
     project.monetizationVerifiedAt = new Date();
     project.adsensePublisherId = user.adsenseId || "";
     project.updatedAt = new Date();
@@ -2395,6 +2963,158 @@ app.post("/api/github/monetize-project", express.json(), async (req, res) => {
   }
 });
 
+app.post("/api/projects/:id/toggle-monetization", express.json(), async (req, res) => {
+  if (!req.isAuthenticated() || !req.user) {
+    return res.status(401).json({ success: false, message: "You need to sign in first." });
+  }
+
+  try {
+    const projectId = decodeURIComponent(String(req.params?.id || "").trim());
+    if (!projectId) {
+      return res.status(400).json({ success: false, message: "Missing project id." });
+    }
+
+    const user = await User.findById(req.user._id).select("+githubToken +adsenseAdCode");
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found." });
+    }
+    if (!user.githubUsername || !user.githubToken) {
+      return res.status(400).json({ success: false, message: "Connect GitHub first." });
+    }
+
+    user.liveProjects = Array.isArray(user.liveProjects) ? user.liveProjects : [];
+    const projectIndex = user.liveProjects.findIndex(
+      (item) => String(item?.fileName || item?.filename || "").trim() === projectId,
+    );
+    if (projectIndex < 0) {
+      return res.status(404).json({ success: false, message: "Live project not found." });
+    }
+
+    const project = user.liveProjects[projectIndex];
+    if (!project.monetizationEnabled && !project.isMonetized) {
+      return res.status(400).json({
+        success: false,
+        message: "Activate monetization for this project first before using the ad toggle.",
+      });
+    }
+
+    const entryPath = String(project.fileName || project.filename || "").trim();
+    if (!entryPath) {
+      return res.status(400).json({ success: false, message: "Project entry file is missing." });
+    }
+
+    const octokit = buildGithubClient(user);
+    const contentResponse = await octokit.rest.repos.getContent({
+      owner: user.githubUsername,
+      repo: project.repo || "medialab",
+      path: entryPath,
+    });
+    if (Array.isArray(contentResponse.data) || !contentResponse.data?.content) {
+      return res.status(400).json({
+        success: false,
+        message: "That project entry file could not be updated for monetization.",
+      });
+    }
+
+    const sourceHtml = Buffer.from(contentResponse.data.content, "base64").toString("utf8");
+    const nextIsMonetized = !Boolean(project.isMonetized);
+    const cleanedHtml = stripAdsenseFromHtml(sourceHtml);
+    const nextHtml = nextIsMonetized
+      ? buildPublishedHtmlFromSource({
+          documentHtml: cleanedHtml,
+          projectName: project.name || "MediaLab Project",
+          adsenseId: user.adsenseId || "",
+          adsenseAdCode: user.adsenseAdCode || "",
+        })
+      : cleanedHtml;
+
+    await octokit.rest.repos.createOrUpdateFileContents({
+      owner: user.githubUsername,
+      repo: project.repo || "medialab",
+      path: entryPath,
+      sha: contentResponse.data.sha,
+      message: `${nextIsMonetized ? "Enable" : "Disable"} monetization for ${entryPath} from MediaLab`,
+      content: Buffer.from(nextHtml, "utf8").toString("base64"),
+    });
+
+    const disabledPageKey = String(project.entryPath || project.fileName || project.filename || "").trim();
+    project.isMonetized = nextIsMonetized;
+    project.adDisabledPages = Array.isArray(project.adDisabledPages) ? project.adDisabledPages : [];
+    if (nextIsMonetized) {
+      project.adDisabledPages = project.adDisabledPages.filter((item) => String(item || "").trim() !== disabledPageKey);
+      project.monetizationDisabledAt = null;
+    } else {
+      if (disabledPageKey && !project.adDisabledPages.includes(disabledPageKey)) {
+        project.adDisabledPages.push(disabledPageKey);
+      }
+      project.monetizationDisabledAt = new Date();
+    }
+    project.updatedAt = new Date();
+    await user.save();
+
+    await createUsageLog({
+      ...buildUsageIdentity(req),
+      action: nextIsMonetized ? "project-monetization-on" : "project-monetization-off",
+      summary: nextIsMonetized
+        ? `enabled ad revenue on ${project.name || entryPath}`
+        : `disabled ad revenue on ${project.name || entryPath}`,
+      source: "adsense",
+      metadata: {
+        projectId,
+        entryPath,
+        isMonetized: nextIsMonetized,
+        disabledAt: nextIsMonetized ? null : project.monetizationDisabledAt,
+      },
+    });
+
+    return res.json({
+      success: true,
+      isMonetized: nextIsMonetized,
+      message: nextIsMonetized
+        ? "Ads are now live for this project."
+        : "Ads are now turned off for this project.",
+      project,
+      user: toSafeUser(user),
+    });
+  } catch (error) {
+    console.error("Project monetization toggle failed:", error);
+    return res.status(error?.status || error?.response?.status || 500).json({
+      success: false,
+      message: error?.message || "Could not update project monetization right now.",
+    });
+  }
+});
+
+app.post("/api/adsense/sync-status", async (req, res) => {
+  if (!req.isAuthenticated() || !req.user) {
+    return res.status(401).json({ success: false, message: "You need to sign in first." });
+  }
+  try {
+    const user = await User.findById(req.user._id).select("+googleRefreshToken");
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found." });
+    }
+    const sync = await refreshAdsenseSiteStatusIfNeeded(user, {
+      force: Boolean(req.body?.force),
+    });
+    return res.json({
+      success: true,
+      siteStatus: sync.siteStatus,
+      reviewState: sync.reviewState,
+      lastCheckedAt: sync.lastCheckedAt,
+      approvedAt: sync.approvedAt,
+      changed: sync.changed,
+      user: toSafeUser(user),
+    });
+  } catch (error) {
+    console.warn("AdSense sync-status skipped:", error.message);
+    return res.status(500).json({
+      success: false,
+      message: error?.message || "Could not sync AdSense status right now.",
+    });
+  }
+});
+
 app.get("/api/adsense/report", async (req, res) => {
   if (!req.isAuthenticated() || !req.user) {
     return res
@@ -2406,6 +3126,12 @@ app.get("/api/adsense/report", async (req, res) => {
     const user = await User.findById(req.user._id).select("+googleRefreshToken");
     if (!user) {
       return res.status(404).json({ success: false, message: "User not found." });
+    }
+    let adsenseSync = null;
+    try {
+      adsenseSync = await refreshAdsenseSiteStatusIfNeeded(user);
+    } catch (error) {
+      console.warn("AdSense status refresh skipped:", error.message);
     }
 
     const targetUrl =
@@ -2425,6 +3151,10 @@ app.get("/api/adsense/report", async (req, res) => {
         stats: null,
         domains: [],
         message: "Connect AdSense for real-time stats.",
+        siteStatus: String(user.adsenseSiteStatus || "").trim(),
+        reviewState: adsenseSync?.reviewState || normalizeAdsenseReviewState(user.adsenseSiteStatus || ""),
+        lastCheckedAt: user.adsenseLastCheckedAt || null,
+        approvedAt: user.adsenseApprovedAt || null,
       });
     }
 
@@ -2441,6 +3171,10 @@ app.get("/api/adsense/report", async (req, res) => {
         },
         domains: [],
         message: "Publish and host a project first to start matching AdSense domains.",
+        siteStatus: String(user.adsenseSiteStatus || "").trim(),
+        reviewState: adsenseSync?.reviewState || normalizeAdsenseReviewState(user.adsenseSiteStatus || ""),
+        lastCheckedAt: user.adsenseLastCheckedAt || null,
+        approvedAt: user.adsenseApprovedAt || null,
       });
     }
 
@@ -2460,6 +3194,10 @@ app.get("/api/adsense/report", async (req, res) => {
         },
         domains,
         message: "No AdSense account was returned for this Google connection yet.",
+        siteStatus: String(user.adsenseSiteStatus || "").trim(),
+        reviewState: adsenseSync?.reviewState || normalizeAdsenseReviewState(user.adsenseSiteStatus || ""),
+        lastCheckedAt: user.adsenseLastCheckedAt || null,
+        approvedAt: user.adsenseApprovedAt || null,
       });
     }
 
@@ -2526,6 +3264,10 @@ app.get("/api/adsense/report", async (req, res) => {
       domains: requestedDomains,
       accountName,
       message: "Real-time AdSense stats loaded.",
+      siteStatus: String(user.adsenseSiteStatus || "").trim(),
+      reviewState: adsenseSync?.reviewState || normalizeAdsenseReviewState(user.adsenseSiteStatus || ""),
+      lastCheckedAt: user.adsenseLastCheckedAt || null,
+      approvedAt: user.adsenseApprovedAt || null,
     });
   } catch (error) {
     console.error("AdSense report fetch failed:", error);
@@ -2535,6 +3277,84 @@ app.get("/api/adsense/report", async (req, res) => {
         error?.response?.data?.error?.message ||
         error?.message ||
         "Could not load AdSense stats right now.",
+    });
+  }
+});
+
+app.get("/api/adsense/withdrawal-eligibility", async (req, res) => {
+  if (!req.isAuthenticated() || !req.user) {
+    return res
+      .status(401)
+      .json({ success: false, message: "You need to sign in first." });
+  }
+
+  try {
+    const user = await User.findById(req.user._id).select("+googleRefreshToken");
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found." });
+    }
+
+    if (!user.googleRefreshToken) {
+      return res.json({
+        success: true,
+        connected: false,
+        eligible: false,
+        threshold: 100,
+        currentBalance: 0,
+        progressPercent: 0,
+        message: "Connect AdSense first to check payout eligibility.",
+      });
+    }
+
+    const auth = getAdsenseOAuthClient(user);
+    const adsense = google.adsense({ version: "v2", auth });
+    const accountResponse = await adsense.accounts.list({ pageSize: 1 });
+    const accountName = accountResponse.data?.accounts?.[0]?.name;
+    if (!accountName) {
+      return res.json({
+        success: true,
+        connected: true,
+        eligible: false,
+        threshold: 100,
+        currentBalance: 0,
+        progressPercent: 0,
+        message: "No AdSense account was returned for this Google connection yet.",
+      });
+    }
+
+    const report = await adsense.accounts.reports.generate({
+      account: accountName,
+      dateRange: "MONTH_TO_DATE",
+      metrics: ["ESTIMATED_EARNINGS"],
+      limit: 1,
+      languageCode: "en",
+    });
+    const totals = report.data?.totals?.cells || report.data?.rows?.[0]?.cells || [];
+    const currentBalance = Number(totals?.[0]?.value || 0);
+    const threshold = 100;
+    const progressPercent = Math.max(0, Math.min(100, (currentBalance / threshold) * 100));
+
+    return res.json({
+      success: true,
+      connected: true,
+      eligible: currentBalance >= threshold,
+      threshold,
+      currentBalance: Number(currentBalance.toFixed(2)),
+      progressPercent: Number(progressPercent.toFixed(1)),
+      payoutUrl: "https://adsense.google.com/main/payments",
+      message:
+        currentBalance >= threshold
+          ? "Your AdSense revenue is eligible for withdrawal."
+          : "Your AdSense revenue has not reached the payout threshold yet.",
+    });
+  } catch (error) {
+    console.error("AdSense withdrawal eligibility failed:", error);
+    return res.status(500).json({
+      success: false,
+      message:
+        error?.response?.data?.error?.message ||
+        error?.message ||
+        "Could not check AdSense payout eligibility right now.",
     });
   }
 });
@@ -3024,6 +3844,31 @@ app.post("/api/account/withdrawals", accountRateLimit, async (req, res) => {
   }
 });
 
+app.get("/api/account/withdrawals", async (req, res) => {
+  try {
+    if (!req.user?._id) {
+      return res.status(401).json({ success: false, message: "Login required." });
+    }
+
+    const requests = await WithdrawalRequest.find({ userId: req.user._id })
+      .sort({ createdAt: -1 })
+      .limit(25)
+      .lean();
+
+    return res.json({
+      success: true,
+      requests,
+      current: requests[0] || null,
+    });
+  } catch (error) {
+    console.error("Withdrawal history fetch failed:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Could not load withdrawal history right now.",
+    });
+  }
+});
+
 app.get("/api/builder-drafts", async (req, res) => {
   try {
     if (!req.user) {
@@ -3137,6 +3982,11 @@ app.get("/api/admin/downloads", adminRateLimit, requireAdminApi, async (_req, re
 
 app.get("/api/admin/withdrawals", adminRateLimit, requireAdminApi, async (_req, res) => {
   try {
+    const cleanupBefore = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    await WithdrawalRequest.deleteMany({
+      status: { $in: ["paid", "failed"] },
+      reviewedAt: { $lte: cleanupBefore },
+    });
     const withdrawals = await WithdrawalRequest.find({})
       .sort({ createdAt: -1 })
       .limit(300)
@@ -3145,6 +3995,54 @@ app.get("/api/admin/withdrawals", adminRateLimit, requireAdminApi, async (_req, 
   } catch (error) {
     console.error("Admin withdrawals fetch failed:", error);
     res.status(500).json({ success: false, message: "Could not load withdrawals." });
+  }
+});
+
+app.get("/api/admin/payout-users", adminRateLimit, requireAdminApi, async (_req, res) => {
+  try {
+    await syncUserActivityWeights();
+    const users = await User.find({})
+      .sort({ activityWeight: -1, lastLogin: -1, createdAt: -1 })
+      .limit(120)
+      .select(
+        "name email profilePicture isPro location provider lastLogin createdAt accountBalance activityWeight activityStats lastActivityWeightCalculatedAt",
+      )
+      .lean();
+    res.json({ success: true, users });
+  } catch (error) {
+    console.error("Admin payout users fetch failed:", error);
+    res.status(500).json({ success: false, message: "Could not load payout users." });
+  }
+});
+
+app.post("/api/admin/users/:id/reward", adminRateLimit, requireAdminApi, async (req, res) => {
+  try {
+    const amount = Number(req.body?.amount || 0);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({ success: false, message: "Enter a valid reward amount." });
+    }
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found." });
+    }
+    user.accountBalance = Number((Number(user.accountBalance || 0) + amount).toFixed(2));
+    await user.save();
+
+    await createUsageLog({
+      user,
+      email: user.email,
+      name: user.name,
+      isPro: Boolean(user.isPro),
+      action: "admin-reward",
+      summary: `admin rewarded ${amount.toFixed(2)} to ${user.email}`,
+      source: "admin-payout",
+      metadata: { amount },
+    });
+
+    res.json({ success: true, user });
+  } catch (error) {
+    console.error("Admin reward failed:", error);
+    res.status(500).json({ success: false, message: "Could not reward this user." });
   }
 });
 
@@ -3319,9 +4217,14 @@ app.patch("/api/admin/withdrawals/:id", adminRateLimit, requireAdminApi, async (
 
     const previousStatus = request.status;
     request.status = nextStatus;
+    request.reviewedAt = new Date();
+    request.updatedAt = new Date();
+    request.deniedReason =
+      nextStatus === "failed" ? String(req.body?.deniedReason || "").trim() : "";
     request.metadata = {
       ...(request.metadata || {}),
       reviewedAt: new Date(),
+      deniedReason: request.deniedReason,
     };
     await request.save();
 

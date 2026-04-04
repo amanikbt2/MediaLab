@@ -7,8 +7,16 @@
       let currentLiveProjectDetail = null;
       let currentLiveProjectMonitor = null;
       let currentRenderHostingProject = null;
+      let currentRenderLiveProject = null;
+      let renderProjectSyncPoller = null;
+      let currentLiveProjectHealthPoller = null;
+      let renderLongWaitTimer = null;
+      let renderServiceIdRevealTimer = null;
+      let renderServiceIdStepVisible = false;
       let currentAdsenseConsoleReport = null;
       let monetizeWizardStep = 1;
+      let adsenseStatusSyncTimer = null;
+      let userWalletRefreshTimer = null;
       let pendingAdsTxtFile = null;
       let builderRunPreviewUrl = null;
       let customUpgradeFeatureLabel = "";
@@ -16,8 +24,52 @@
       let withdrawalStep = "form";
       let withdrawalSubmissionInFlight = false;
       let withdrawMethodsCollapsed = false;
+      let currentWithdrawalRequests = [];
+      let expandedWithdrawalRequestId = "";
+      let currentReferralStatus = null;
+      let currentAppDialogResolver = null;
       const LOGIN_REQUIRED_TOOL_IDS = ["image-pdf"];
       const PREMIUM_TOOL_IDS = ["voice-clone", "text-to-speech", "image-edit"];
+      function normalizeHostedBaseUrl(url = "") {
+        return String(url || "").trim().replace(/\/$/, "");
+      }
+      function buildProjectRoutePath(project = {}) {
+        const repoPath = String(project?.repoPath || "")
+          .trim()
+          .replace(/^public\/?/i, "")
+          .replace(/^\/+/, "")
+          .replace(/\/{2,}/g, "/");
+        const entryPath = String(project?.entryPath || "index.html")
+          .trim()
+          .replace(/^\/+/, "")
+          .replace(/\/{2,}/g, "/");
+        if (!repoPath) {
+          const filename = String(project?.fileName || project?.filename || "")
+            .trim()
+            .replace(/^public\/?/i, "")
+            .replace(/^\/+/, "");
+          if (!filename) return "";
+          return /\/index\.html?$/i.test(filename)
+            ? filename.replace(/\/index\.html?$/i, "/")
+            : filename;
+        }
+        if (!entryPath || /^index\.html?$/i.test(entryPath)) return `${repoPath}/`;
+        return `${repoPath}/${entryPath}`;
+      }
+      function getProjectPrimaryUrl(project = {}) {
+        const renderBase = normalizeHostedBaseUrl(project?.renderUrl || "");
+        const routePath = buildProjectRoutePath(project).replace(/^\/+/, "");
+        if (project?.renderHostedConfirmed && renderBase) {
+          return routePath ? `${renderBase}/${routePath}` : renderBase;
+        }
+        return String(project?.liveUrl || project?.url || "").trim();
+      }
+      function getProjectSecondaryUrl(project = {}) {
+        if (project?.renderHostedConfirmed && project?.renderUrl) {
+          return String(project?.liveUrl || project?.url || "").trim();
+        }
+        return String(project?.renderUrl || "").trim();
+      }
       let historyItems = [];
       let currentImages = [];
       let builderTourState = {
@@ -480,6 +532,21 @@
           return "Unknown";
         }
       }
+      function escapeInlineJsString(value = "") {
+        return String(value || "")
+          .replace(/\\/g, "\\\\")
+          .replace(/'/g, "\\'")
+          .replace(/\r/g, "")
+          .replace(/\n/g, "\\n");
+      }
+      function getAdsenseReviewLabel(status = "") {
+        const normalized = String(status || "").trim().toUpperCase();
+        if (!normalized) return "Not linked";
+        if (["REQUIRES_REVIEW", "GETTING_READY", "PENDING", "PENDING_REVIEW", "REVIEWING"].includes(normalized)) {
+          return "Pending Review";
+        }
+        return "Approved";
+      }
       function renderLiveProjectItems(projects) {
         if (!projects || projects.length === 0) {
           return `<div class="col-span-full rounded-[2.75rem] border border-dashed border-cyan-500/20 bg-gray-900/55 p-10 sm:p-14 text-center shadow-[0_30px_80px_rgba(8,145,178,0.08)]">
@@ -491,9 +558,11 @@
             </div>`;
         }
         return projects
-          .map(
-            (project) => `
-          <div onclick="openLiveProjectDetail('${project.fileName || project.filename}')" class="rounded-[2.3rem] border border-cyan-500/10 bg-gray-900 p-7 shadow-[0_25px_80px_rgba(2,6,23,0.38)] transition-all hover:border-cyan-400/30 cursor-pointer">
+          .map((project) => {
+            const primaryUrl = getProjectPrimaryUrl(project);
+            const secondaryUrl = getProjectSecondaryUrl(project);
+            return `
+          <div onclick="openLiveProjectDetail('${encodeURIComponent(String(project.fileName || project.filename || ""))}')" class="rounded-[2.3rem] border border-cyan-500/10 bg-gray-900 p-7 shadow-[0_25px_80px_rgba(2,6,23,0.38)] transition-all hover:border-cyan-400/30 cursor-pointer">
             <div class="flex items-start justify-between gap-4">
               <div class="min-w-0">
                 <div class="flex flex-wrap items-center gap-2">
@@ -511,38 +580,64 @@
                       : ""
                   }
                   ${
-                    project.adsensePublisherId
-                      ? `<span class="inline-flex items-center gap-2 rounded-full border border-amber-400/20 bg-amber-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-amber-300">💰 Ads Active</span>`
+                    project.monetizationEnabled
+                      ? project.isMonetized
+                        ? `<span class="inline-flex items-center gap-2 rounded-full border border-amber-400/20 bg-amber-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-amber-300">💰 Ads On</span>`
+                        : `<span class="inline-flex items-center gap-2 rounded-full border border-slate-400/20 bg-slate-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-300">Ads Off</span>`
                       : ""
                   }
                 </div>
-                <a href="${project.liveUrl || project.url}" target="_blank" rel="noopener noreferrer" class="mt-3 inline-flex max-w-full items-center gap-2 truncate text-sm text-cyan-300 hover:text-cyan-200">
-                  <i class="fas fa-arrow-up-right-from-square text-xs"></i>
-                  <span class="truncate">${project.liveUrl || project.url}</span>
-                </a>
+                <div class="mt-3 flex items-center gap-2 max-w-full">
+                  <a href="${primaryUrl}" target="_blank" rel="noopener noreferrer" class="inline-flex min-w-0 flex-1 items-center gap-2 truncate text-sm text-cyan-300 hover:text-cyan-200">
+                    <i class="fas fa-arrow-up-right-from-square text-xs"></i>
+                    <span class="truncate">${primaryUrl}</span>
+                  </a>
+                  <button title="Copy URL" onclick="event.stopPropagation(); copyProjectUrl('${primaryUrl}')" class="h-8 w-8 shrink-0 rounded-xl border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white transition-all">
+                    <i class="fas fa-copy text-[11px]"></i>
+                  </button>
+                </div>
+                ${
+                  secondaryUrl
+                    ? `<div class="mt-2 flex items-center gap-2 max-w-full">
+                        <a href="${secondaryUrl}" target="_blank" rel="noopener noreferrer" class="inline-flex min-w-0 flex-1 items-center gap-2 truncate text-sm text-emerald-300 hover:text-emerald-200">
+                          <i class="fas fa-signal text-xs"></i>
+                          <span class="truncate">${secondaryUrl}</span>
+                        </a>
+                        <button title="Copy URL" onclick="event.stopPropagation(); copyProjectUrl('${secondaryUrl}')" class="h-8 w-8 shrink-0 rounded-xl border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white transition-all">
+                          <i class="fas fa-copy text-[11px]"></i>
+                        </button>
+                      </div>`
+                    : ""
+                }
               </div>
               <div class="rounded-2xl border border-white/5 bg-white/[0.03] px-3 py-2 text-right">
                 <div class="text-[9px] font-black uppercase tracking-[0.22em] text-slate-500">Last Published</div>
                 <div class="mt-1 text-xs font-semibold text-slate-200">${formatProjectTimestamp(project.updatedAt || project.lastSyncedAt || project.createdAt)}</div>
               </div>
             </div>
-            <div class="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <button onclick="event.stopPropagation(); openLiveProjectSite('${project.liveUrl || project.url}')" class="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 px-4 py-3 text-sm font-black text-cyan-100 transition-all hover:bg-cyan-500/20">
-                <i class="fas fa-globe mr-2"></i>Open Site
+            <div class="mt-6 flex flex-wrap items-center gap-2">
+              <button title="Open Site" onclick="event.stopPropagation(); openLiveProjectSite('${primaryUrl}')" class="h-12 w-12 rounded-2xl border border-cyan-500/20 bg-cyan-500/10 text-cyan-100 transition-all hover:bg-cyan-500/20">
+                <i class="fas fa-globe"></i>
               </button>
-              <button onclick="event.stopPropagation(); editLiveProjectCode('${project.fileName || project.filename}', '${(project.name || "").replace(/'/g, "\\'")}')" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-black text-slate-100 transition-all hover:bg-white/10">
-                <i class="fas fa-code mr-2 text-cyan-300"></i>Edit Code
+              <button title="Project Dashboard" onclick="event.stopPropagation(); openLiveProjectDetail('${encodeURIComponent(String(project.fileName || project.filename || ""))}')" class="h-12 w-12 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-100 transition-all hover:bg-emerald-500/20">
+                <i class="fas fa-chart-line"></i>
               </button>
-              <button onclick="event.stopPropagation(); deleteLiveProject('${project.fileName || project.filename}')" class="rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm font-black text-rose-100 transition-all hover:bg-rose-500/20">
-                <i class="fas fa-trash-can mr-2"></i>Delete
+              <button title="Edit Code" onclick="event.stopPropagation(); editLiveProjectCode('${encodeURIComponent(String(project.fileName || project.filename || ""))}', '${escapeInlineJsString(project.name || "")}')" class="h-12 w-12 rounded-2xl border border-white/10 bg-white/5 text-slate-100 transition-all hover:bg-white/10">
+                <span class="text-sm font-black text-cyan-300">&lt;/&gt;</span>
+              </button>
+              <button title="Delete Project" onclick="event.stopPropagation(); deleteLiveProject('${encodeURIComponent(String(project.fileName || project.filename || ""))}')" class="h-12 w-12 rounded-2xl border border-rose-500/20 bg-rose-500/10 text-rose-100 transition-all hover:bg-rose-500/20">
+                <i class="fas fa-trash-can"></i>
               </button>
             </div>
-          </div>`,
-          )
+          </div>`;
+          })
           .join("");
       }
-      async function fetchGithubProjects() {
+      async function fetchGithubProjects(options = {}) {
         if (!loggedIn || !currentUser?.githubUsername) return [];
+        const previousProjects = Array.isArray(currentUser?.liveProjects)
+          ? [...currentUser.liveProjects]
+          : [];
         try {
           const res = await fetch("/api/github/projects", {
             credentials: "include",
@@ -555,9 +650,12 @@
           currentUser.liveProjects = Array.isArray(data.projects) ? data.projects : [];
           updateUserProfileUi();
           maybePromptRenderHostingOnboarding();
+          handleLiveProjectSyncSideEffects(previousProjects, currentUser.liveProjects);
           return currentUser.liveProjects;
         } catch (error) {
-          console.warn("GitHub projects fetch skipped:", error);
+          if (!options?.silent) {
+            console.warn("GitHub projects fetch skipped:", error);
+          }
           return currentUser?.liveProjects || [];
         }
       }
@@ -601,7 +699,16 @@
       }
       async function deleteLiveProject(filename) {
         if (!filename) return;
-        if (!confirm(`Delete ${filename} from your live GitHub projects?`)) return;
+        const confirmed = await openAppDialog({
+          chip: "Delete Project",
+          title: "Delete this live project?",
+          message: `Delete ${filename} from your live GitHub projects? This cannot be undone.`,
+          tone: "error",
+          confirmLabel: "Delete Project",
+          cancelLabel: "Cancel",
+          destructive: true,
+        });
+        if (!confirmed) return;
         try {
           const res = await fetch(
             `/api/github/project?filename=${encodeURIComponent(filename)}`,
@@ -647,13 +754,31 @@
         );
       }
       function closeLiveProjectDetail() {
+        if (currentLiveProjectHealthPoller) {
+          clearInterval(currentLiveProjectHealthPoller);
+          currentLiveProjectHealthPoller = null;
+        }
         document
           .getElementById("live-project-detail-modal")
           ?.classList.add("hidden");
         document.getElementById("live-project-monetize-panel")?.classList.add("hidden");
+        const togglePanel = document.getElementById("project-monetization-toggle-panel");
+        if (togglePanel) togglePanel.innerHTML = "";
         currentLiveProjectDetail = null;
         currentLiveProjectMonitor = null;
         pendingAdsTxtFile = null;
+      }
+      function startLiveProjectHealthPolling() {
+        if (currentLiveProjectHealthPoller) {
+          clearInterval(currentLiveProjectHealthPoller);
+          currentLiveProjectHealthPoller = null;
+        }
+        if (!currentLiveProjectDetail) return;
+        currentLiveProjectHealthPoller = setInterval(() => {
+          if (document.hidden) return;
+          if (!currentLiveProjectDetail) return;
+          refreshCurrentLiveProjectDetail({ silent: true, preservePreview: false });
+        }, 60 * 1000);
       }
       function renderProjectStatCard(targetId, label, value, tone = "cyan", meta = "") {
         const node = document.getElementById(targetId);
@@ -666,13 +791,167 @@
               : tone === "red"
                 ? "border-rose-400/20 bg-rose-500/10 text-rose-300"
                 : "border-cyan-400/20 bg-cyan-500/10 text-cyan-300";
+        const uptimePercent =
+          targetId === "project-stat-health"
+            ? tone === "green"
+              ? 100
+              : tone === "amber"
+                ? 62
+                : tone === "red"
+                  ? 18
+                : 44
+            : 0;
+        const healthSegments =
+          targetId === "project-stat-health"
+            ? Array.from({ length: 12 }, (_, index) => {
+                const filled = uptimePercent >= Math.round(((index + 1) / 12) * 100);
+                const segmentClass = filled
+                  ? tone === "green"
+                    ? "bg-emerald-400"
+                    : tone === "amber"
+                      ? "bg-amber-400"
+                      : tone === "red"
+                        ? "bg-rose-400"
+                        : "bg-cyan-400"
+                  : "bg-white/5";
+                return `<span class="h-3 rounded-md ${segmentClass}"></span>`;
+              }).join("")
+            : "";
         node.innerHTML = `
           <div class="rounded-[1.5rem] border ${palette} p-4 h-full">
             <div class="text-[10px] font-black uppercase tracking-[0.22em] opacity-80">${label}</div>
             <div class="mt-3 text-xl font-semibold text-white">${value}</div>
-            <div class="mt-2 text-xs text-slate-400">${meta}</div>
+            ${
+              targetId === "project-stat-health"
+                ? `<div class="mt-4">
+                     <div class="grid grid-cols-12 gap-1.5">${healthSegments}</div>
+                     <div class="mt-3 flex items-center justify-between gap-3">
+                       <span class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">System Online</span>
+                       <span class="text-sm font-black text-white">${uptimePercent}%</span>
+                     </div>
+                   </div>`
+                : ""
+            }
+            <div class="mt-2 text-xs break-all text-slate-400">${meta}</div>
           </div>
         `;
+      }
+      function renderProjectMonetizationToggle(project, monitor = {}) {
+        const panel = document.getElementById("project-monetization-toggle-panel");
+        if (!panel) return;
+        const monetizationReady = Boolean(project?.monetizationEnabled);
+        const monetized = Boolean(project?.isMonetized);
+        const adsensePending =
+          currentUser?.adsenseConnected &&
+          !currentUser?.adsenseApprovedAt;
+        const statusText = !monetizationReady
+          ? adsensePending
+            ? "Your project is not yet verified by Google AdSense."
+            : "Project ads are not active yet."
+          : monetized
+            ? "Ad revenue is currently enabled for this page."
+            : "Ads are currently turned off for this page.";
+        panel.innerHTML = `
+          <div class="rounded-[1.6rem] border border-white/10 bg-white/[0.04] p-4">
+            ${
+              adsensePending
+                ? `<div class="mb-4 rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-xs font-bold text-rose-200">Monetization disabled: your project is not yet verified by Google AdSense.</div>`
+                : ""
+            }
+            <div class="flex items-start justify-between gap-4">
+              <div class="min-w-0">
+                <p class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Smart Ad Toggle</p>
+                <p class="mt-2 text-sm font-semibold text-white">${adsensePending ? "Pending AdSense Approval" : monetizationReady ? (monetized ? "Monetized" : "De-monetized") : "Not Active Yet"}</p>
+                <p class="mt-2 text-xs leading-5 text-slate-400">${statusText}</p>
+              </div>
+              <button
+                type="button"
+                ${monetizationReady && !adsensePending ? "" : "disabled"}
+                onclick="handleProjectMonetizationToggleRequest()"
+                class="relative inline-flex h-8 w-16 items-center rounded-full border transition-all ${
+                  monetizationReady && !adsensePending
+                    ? monetized
+                      ? "border-emerald-400/30 bg-emerald-500/20"
+                      : "border-slate-500/30 bg-slate-700/60"
+                    : "border-white/10 bg-white/5 opacity-50 cursor-not-allowed"
+                }"
+              >
+                <span class="inline-block h-6 w-6 transform rounded-full bg-white shadow transition-all ${
+                  monetizationReady && monetized ? "translate-x-9" : "translate-x-1"
+                }"></span>
+              </button>
+            </div>
+            <div class="mt-4 text-[11px] text-slate-400">${
+              monetizationReady && !adsensePending
+                ? monitor?.isMonetized
+                  ? "This page is loading AdSense normally."
+                  : "This page stays clean because MediaLab will skip AdSense code entirely."
+                : adsensePending
+                  ? "Check Console and wait for Google approval before this switch becomes available."
+                  : "Use Monetize Project first, then this switch becomes available."
+            }</div>
+          </div>
+        `;
+      }
+      async function handleProjectMonetizationToggleRequest() {
+        const projectId = String(
+          currentLiveProjectDetail?.fileName || currentLiveProjectDetail?.filename || "",
+        ).trim();
+        if (!projectId) return;
+        const monetizationReady = Boolean(currentLiveProjectDetail?.monetizationEnabled);
+        const isMonetized = Boolean(currentLiveProjectDetail?.isMonetized);
+        if (!monetizationReady) {
+          showBuilderSnackbar(
+            "Use Monetize Project first before switching ads on or off for this page.",
+            "error",
+          );
+          return;
+        }
+        if (isMonetized) {
+          const confirmed = await openAppDialog({
+            chip: "Confirm",
+            title: "Turn off ads for this page?",
+            message:
+              "Are you sure? This will stop ad revenue for this project immediately.",
+            tone: "error",
+            confirmLabel: "Turn Off Ads",
+            cancelLabel: "Cancel",
+            destructive: true,
+          });
+          if (!confirmed) return;
+        }
+        try {
+          const res = await fetch(
+            `/api/projects/${encodeURIComponent(projectId)}/toggle-monetization`,
+            {
+              method: "POST",
+              credentials: "include",
+              headers: { "Content-Type": "application/json" },
+            },
+          );
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            throw new Error(data.message || "Could not update project monetization.");
+          }
+          currentUser = { ...(currentUser || {}), ...(data.user || {}) };
+          updateUserProfileUi();
+          if (currentLiveProjectDetail) {
+            currentLiveProjectDetail = {
+              ...currentLiveProjectDetail,
+              ...(data.project || {}),
+            };
+          }
+          showBuilderSnackbar(
+            data.message || (data.isMonetized ? "Ads are now live for this project." : "Ads are now turned off for this project."),
+            data.isMonetized ? "success" : "error",
+          );
+          await refreshCurrentLiveProjectDetail();
+        } catch (error) {
+          showBuilderSnackbar(
+            error.message || "Could not update project monetization right now.",
+            "error",
+          );
+        }
       }
       function setMonetizeWizardStep(step) {
         monetizeWizardStep = step;
@@ -687,12 +966,24 @@
         const content = document.getElementById("monetize-step-content");
         if (!content) return;
         if (step === 1) {
+          if (currentUser?.adsenseConnected && !currentUser?.adsenseApprovedAt) {
+            content.innerHTML = `
+              <div class="rounded-[1.6rem] border border-rose-500/20 bg-rose-500/10 p-4">
+                <p class="text-sm font-semibold text-white">Your project is not yet verified by Google AdSense.</p>
+                <p class="mt-2 text-sm leading-6 text-rose-100/80">Please check the status in Console first. Once Google approves your AdSense request, monetization will unlock for this page.</p>
+              </div>
+            `;
+            return;
+          }
           content.innerHTML = `
             <div class="rounded-[1.6rem] border border-white/10 bg-white/5 p-4">
-              <p class="text-sm text-slate-200">Open Google AdSense, create or review your publisher account, then come back here with your publisher ID.</p>
-              <a href="https://www.google.com/adsense/start/" target="_blank" rel="noopener noreferrer" class="mt-4 inline-flex items-center gap-2 rounded-2xl bg-white text-slate-950 px-4 py-3 text-sm font-black">
-                <i class="fab fa-google"></i>Open Google AdSense
-              </a>
+              <p class="text-sm text-slate-200">Link your domain to AdSense once, then MediaLab can activate ads only on the specific projects you choose.</p>
+              <div class="mt-4 flex flex-wrap items-center gap-3">
+                <button onclick="openAdsenseLinkModal()" class="inline-flex items-center gap-2 rounded-2xl bg-white text-slate-950 px-4 py-3 text-sm font-black">
+                  <i class="fab fa-google"></i>Link Domain
+                </button>
+                <span class="text-xs text-slate-400">${currentUser?.adsenseSiteUrl ? `Linked: ${currentUser.adsenseSiteUrl}` : "No AdSense domain linked yet."}</span>
+              </div>
             </div>
           `;
           return;
@@ -700,27 +991,27 @@
         if (step === 2) {
           content.innerHTML = `
             <div class="rounded-[1.6rem] border border-white/10 bg-white/5 p-4">
-              <label class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Publisher ID</label>
-              <input id="project-adsense-id-input" value="${currentUser?.adsenseId || ""}" class="mt-3 w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none focus:border-amber-400" placeholder="ca-pub-xxxxxxxxxxxxxxxx" />
-              <button onclick="saveProjectAdsenseId()" class="mt-4 rounded-2xl bg-amber-400 px-4 py-3 text-sm font-black text-slate-950">Save Publisher ID</button>
+              <label class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">ads.txt Upload</label>
+              <div onclick="document.getElementById('project-ads-file-input').click()" class="mt-3 rounded-[1.4rem] border border-dashed border-amber-400/30 bg-amber-500/10 px-4 py-6 text-center cursor-pointer">
+                <i class="fas fa-file-upload text-2xl text-amber-300"></i>
+                <p class="mt-3 text-sm font-semibold text-white">Upload Google ads.txt</p>
+                <p id="project-ads-file-name" class="mt-1 text-xs text-amber-100/70">${pendingAdsTxtFile?.name || "Drop in the exact file Google gave you."}</p>
+              </div>
+              <input id="project-ads-file-input" type="file" accept=".txt,text/plain" class="hidden" onchange="handleAdsTxtSelection(this.files[0])" />
+              <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button onclick="uploadProjectAdsTxt()" class="rounded-2xl bg-amber-400 px-4 py-3 text-sm font-black text-slate-950">Upload ads.txt</button>
+                <button onclick="verifyProjectAdsSetup()" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-black text-slate-100">Verify Setup</button>
+              </div>
+              <p id="project-ads-verify-note" class="mt-3 text-xs text-slate-400">MediaLab will place <span class="font-black text-white">ads.txt</span> at the root of your <span class="font-black text-white">medialab</span> repository.</p>
             </div>
           `;
           return;
         }
         content.innerHTML = `
           <div class="rounded-[1.6rem] border border-white/10 bg-white/5 p-4">
-            <label class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">ads.txt Upload</label>
-            <div onclick="document.getElementById('project-ads-file-input').click()" class="mt-3 rounded-[1.4rem] border border-dashed border-amber-400/30 bg-amber-500/10 px-4 py-6 text-center cursor-pointer">
-              <i class="fas fa-file-upload text-2xl text-amber-300"></i>
-              <p class="mt-3 text-sm font-semibold text-white">Upload Google ads.txt</p>
-              <p id="project-ads-file-name" class="mt-1 text-xs text-amber-100/70">${pendingAdsTxtFile?.name || "Drop in the exact file Google gave you."}</p>
-            </div>
-            <input id="project-ads-file-input" type="file" accept=".txt,text/plain" class="hidden" onchange="handleAdsTxtSelection(this.files[0])" />
-            <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <button onclick="uploadProjectAdsTxt()" class="rounded-2xl bg-amber-400 px-4 py-3 text-sm font-black text-slate-950">Upload ads.txt</button>
-              <button onclick="verifyProjectAdsSetup()" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-black text-slate-100">Verify Setup</button>
-            </div>
-            <p id="project-ads-verify-note" class="mt-3 text-xs text-slate-400">MediaLab will place <span class="font-black text-white">ads.txt</span> at the root of your <span class="font-black text-white">medialab</span> repository.</p>
+            <label class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Activate Ads On This Project</label>
+            <p class="mt-3 text-sm leading-6 text-slate-300">This keeps monetization project-specific. MediaLab will inject your verified AdSense code only into this project.</p>
+            <button onclick="activateCurrentProjectMonetization()" class="mt-4 rounded-2xl bg-amber-400 px-4 py-3 text-sm font-black text-slate-950">Activate Monetization</button>
           </div>
         `;
       }
@@ -735,39 +1026,74 @@
           );
           return;
         }
+        const adsenseState = String(
+          currentLiveProjectMonitor?.adsenseSiteStatus ||
+            currentUser?.adsenseSiteStatus ||
+            "",
+        )
+          .trim()
+          .toUpperCase();
+        if (
+          ["REQUIRES_REVIEW", "GETTING_READY", "PENDING", "PENDING_REVIEW", "REVIEWING"].includes(
+            adsenseState,
+          )
+        ) {
+          openAppDialog({
+            chip: "AdSense Pending",
+            title: "Google approval still pending",
+            message:
+              "Google is still reviewing your site. Check your status at adsense.google.com, then return here once the site is ready.",
+            tone: "error",
+            confirmLabel: "OK",
+          });
+          return;
+        }
         document.getElementById("live-project-monetize-panel")?.classList.remove("hidden");
+        document.getElementById("live-project-monetize-panel")?.classList.add("flex");
         setMonetizeWizardStep(1);
       }
       function closeMonetizeProjectWizard() {
         document.getElementById("live-project-monetize-panel")?.classList.add("hidden");
+        document.getElementById("live-project-monetize-panel")?.classList.remove("flex");
       }
       function handleAdsTxtSelection(file) {
         if (!file) return;
         pendingAdsTxtFile = file;
         document.getElementById("project-ads-file-name").textContent = file.name;
       }
-      async function saveProjectAdsenseId() {
-        const input = document.getElementById("project-adsense-id-input");
-        const adsenseId = String(input?.value || "").trim();
+      async function activateCurrentProjectMonetization() {
+        const filename =
+          currentLiveProjectDetail?.fileName || currentLiveProjectDetail?.filename || "";
+        if (!filename) return;
+        if (currentUser?.adsenseConnected && !currentUser?.adsenseApprovedAt) {
+          openAppDialog({
+            chip: "AdSense Pending",
+            title: "Google approval still pending",
+            message:
+              "Google hasn't approved your AdSense request yet. Please check the status in Console. Once verified, you can monetize this page.",
+            tone: "error",
+            confirmLabel: "OK",
+          });
+          return;
+        }
         try {
-          const formData = new FormData();
-          formData.append("adsenseId", adsenseId);
-          const res = await fetch("/api/github/settings", {
+          const res = await fetch("/api/github/monetize-project", {
             method: "POST",
             credentials: "include",
-            body: formData,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ filename }),
           });
           const data = await res.json();
           if (!res.ok || !data.success) {
-            throw new Error(data.message || "Could not save your AdSense ID.");
+            throw new Error(data.message || "Could not activate monetization.");
           }
           currentUser = { ...(currentUser || {}), ...(data.user || {}) };
           updateUserProfileUi();
-          showBuilderSnackbar("Publisher ID saved.", "success");
-          setMonetizeWizardStep(3);
+          showBuilderSnackbar("Project monetization activated.", "success");
+          closeMonetizeProjectWizard();
           if (currentLiveProjectDetail) await refreshCurrentLiveProjectDetail();
         } catch (error) {
-          showBuilderSnackbar(error.message || "Could not save your AdSense ID.", "error");
+          showBuilderSnackbar(error.message || "Could not activate monetization.", "error");
         }
       }
       async function uploadProjectAdsTxt() {
@@ -824,17 +1150,44 @@
       function renderLiveProjectDetail(project, monitor = {}) {
         currentLiveProjectDetail = project || null;
         currentLiveProjectMonitor = monitor || null;
+        const primaryUrl = getProjectPrimaryUrl(project || {});
+        const secondaryUrl = getProjectSecondaryUrl(project || {});
+        const monetizeBtn = document.getElementById("project-monetize-btn");
+        const monetizeDisabledNote = document.getElementById("project-monetize-disabled-note");
+        const adsensePending =
+          currentUser?.adsenseConnected &&
+          !currentUser?.adsenseApprovedAt;
+        if (monetizeBtn) {
+          monetizeBtn.classList.toggle("hidden", adsensePending);
+        }
+        if (monetizeDisabledNote) {
+          monetizeDisabledNote.classList.toggle("hidden", !adsensePending);
+        }
         document
           .getElementById("live-project-detail-title")
           .textContent = project?.name || project?.fileName || "Live Project";
         document.getElementById("live-project-detail-subtitle").innerHTML = `
           <div class="flex flex-col gap-2">
-            <a href="${project?.liveUrl || project?.url || "#"}" target="_blank" rel="noopener noreferrer" class="text-cyan-300 hover:text-cyan-200">
-              ${project?.liveUrl || project?.url || "Live URL unavailable"}
-            </a>
+            <div class="flex items-center gap-2 max-w-full">
+              <a href="${primaryUrl || "#"}" target="_blank" rel="noopener noreferrer" class="min-w-0 flex-1 truncate text-cyan-300 hover:text-cyan-200">
+                ${primaryUrl || "Live URL unavailable"}
+              </a>
+              ${
+                primaryUrl
+                  ? `<button title="Copy URL" onclick="copyProjectUrl('${primaryUrl}')" class="h-8 w-8 shrink-0 rounded-xl border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white transition-all">
+                      <i class="fas fa-copy text-[11px]"></i>
+                    </button>`
+                  : ""
+              }
+            </div>
             ${
-              project?.renderHostedConfirmed && project?.renderUrl
-                ? `<a href="${project.renderUrl}" target="_blank" rel="noopener noreferrer" class="text-emerald-300 hover:text-emerald-200">Render Host: ${project.renderUrl}</a>`
+              secondaryUrl
+                ? `<div class="flex items-center gap-2 max-w-full">
+                    <a href="${secondaryUrl}" target="_blank" rel="noopener noreferrer" class="min-w-0 flex-1 truncate text-emerald-300 hover:text-emerald-200">Mirror: ${secondaryUrl}</a>
+                    <button title="Copy URL" onclick="copyProjectUrl('${secondaryUrl}')" class="h-8 w-8 shrink-0 rounded-xl border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white transition-all">
+                      <i class="fas fa-copy text-[11px]"></i>
+                    </button>
+                  </div>`
                 : `<span class="text-amber-300">Render hosting still pending for this project.</span>`
             }
           </div>
@@ -855,11 +1208,29 @@
         renderProjectStatCard(
           "project-stat-ads",
           "Ads Monitor",
-          monitor?.adsDetected ? "Ads Detected" : "Ads Missing",
-          monitor?.adsDetected ? "green" : "red",
-          monitor?.adsDetected
-            ? "Google AdSense script found in the live HTML."
-            : "This page is not currently serving an AdSense script.",
+          project?.monetizationEnabled
+            ? monitor?.monetizationApproved
+              ? "Approved"
+              : project?.isMonetized
+                ? getAdsenseReviewLabel(monitor?.adsenseSiteStatus || currentUser?.adsenseSiteStatus || "")
+                : "De-monetized"
+            : "Manual",
+          project?.monetizationEnabled
+            ? monitor?.monetizationApproved
+              ? "green"
+              : project?.isMonetized
+                ? getAdsenseReviewLabel(monitor?.adsenseSiteStatus || currentUser?.adsenseSiteStatus || "") === "Pending Review"
+                  ? "amber"
+                  : "red"
+                : "amber"
+            : "amber",
+          project?.monetizationEnabled
+            ? monitor?.monetizationApproved
+              ? "AdSense, ads.txt, and live script checks all look good."
+              : project?.isMonetized
+                ? `AdSense status: ${String(monitor?.adsenseSiteStatus || currentUser?.adsenseSiteStatus || "waiting").replace(/_/g, " ")}`
+                : `Ads are turned off for this page${project?.monetizationDisabledAt ? ` since ${formatDate(project.monetizationDisabledAt)}` : ""}.`
+            : "This project is not monetized until you activate it from the dashboard.",
         );
         renderProjectStatCard(
           "project-stat-ads-txt",
@@ -872,8 +1243,79 @@
           "hidden",
           !monitor?.monetizationApproved,
         );
-        document.getElementById("live-project-preview-frame").src =
-          project?.liveUrl || project?.url || "about:blank";
+        const previewFrame = document.getElementById("live-project-preview-frame");
+        if (previewFrame) {
+          previewFrame.src = "about:blank";
+          setTimeout(() => {
+            previewFrame.src = primaryUrl
+              ? `${primaryUrl}${primaryUrl.includes("?") ? "&" : "?"}ml_preview=${Date.now()}`
+              : "about:blank";
+          }, 40);
+        }
+        const approvedBadge = document.getElementById("project-approved-badge");
+        if (approvedBadge) {
+          approvedBadge.textContent = project?.monetizationEnabled
+            ? monitor?.monetizationApproved
+              ? "Monetization Approved"
+              : project?.isMonetized
+                ? getAdsenseReviewLabel(monitor?.adsenseSiteStatus || currentUser?.adsenseSiteStatus || "") === "Pending Review"
+                  ? "AdSense Pending Review"
+                  : "Monetization In Progress"
+                : "Ads Turned Off"
+            : "Monetization";
+        }
+        renderProjectMonetizationToggle(project, monitor);
+        const statsMetaNode = document.getElementById("project-adsense-performance");
+        if (statsMetaNode) {
+          if (monitor?.adsPerformance || project?.monetizationEnabled || currentUser?.adsenseConnected) {
+            statsMetaNode.innerHTML = `
+              <div class="grid grid-cols-2 gap-3">
+                <div class="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                  <div class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">AdSense Status</div>
+                  <div class="mt-2 text-lg font-semibold text-white">${getAdsenseReviewLabel(monitor?.adsenseSiteStatus || currentUser?.adsenseSiteStatus || "")}</div>
+                </div>
+                <div class="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                  <div class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Last Checked</div>
+                  <div class="mt-2 text-lg font-semibold text-white">${monitor?.adsenseLastCheckedAt ? formatDate(monitor.adsenseLastCheckedAt) : currentUser?.adsenseLastCheckedAt ? formatDate(currentUser.adsenseLastCheckedAt) : "Waiting"}</div>
+                </div>
+                <div class="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                  <div class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Publisher ID</div>
+                  <div class="mt-2 text-lg font-semibold text-white">${currentUser?.adsenseId || "Waiting"}</div>
+                </div>
+                <div class="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                  <div class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Approval Time</div>
+                  <div class="mt-2 text-lg font-semibold text-white">${monitor?.adsenseApprovedAt ? formatDate(monitor.adsenseApprovedAt) : currentUser?.adsenseApprovedAt ? formatDate(currentUser.adsenseApprovedAt) : "Pending"}</div>
+                </div>
+              </div>
+              ${
+                monitor?.adsPerformance
+                  ? `<div class="grid grid-cols-2 gap-3 mt-3">
+                      <div class="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                        <div class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Earnings</div>
+                        <div class="mt-2 text-lg font-semibold text-white">$${Number(monitor.adsPerformance.estimatedEarnings || 0).toFixed(2)}</div>
+                      </div>
+                      <div class="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                        <div class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">CTR</div>
+                        <div class="mt-2 text-lg font-semibold text-white">${Number(monitor.adsPerformance.ctr || 0).toFixed(2)}%</div>
+                      </div>
+                      <div class="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                        <div class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Clicks</div>
+                        <div class="mt-2 text-lg font-semibold text-white">${formatCompactNumber(monitor.adsPerformance.clicks || 0)}</div>
+                      </div>
+                      <div class="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                        <div class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Page RPM</div>
+                        <div class="mt-2 text-lg font-semibold text-white">$${Number(monitor.adsPerformance.pageViewsRpm || 0).toFixed(2)}</div>
+                      </div>
+                    </div>`
+                  : ""
+              }
+            `;
+            statsMetaNode.classList.remove("hidden");
+          } else {
+            statsMetaNode.classList.add("hidden");
+            statsMetaNode.innerHTML = "";
+          }
+        }
       }
       function getPendingRenderHostingProject() {
         if (!loggedIn || !currentUser) return null;
@@ -891,10 +1333,319 @@
       function openRenderHostingGuide() {
         window.open("https://dashboard.render.com/", "_blank", "noopener,noreferrer");
       }
+      function closeAppDialog(result = false) {
+        document.getElementById("app-dialog-modal")?.classList.add("hidden");
+        document.getElementById("app-dialog-modal")?.classList.remove("flex");
+        const resolver = currentAppDialogResolver;
+        currentAppDialogResolver = null;
+        if (resolver) resolver(Boolean(result));
+      }
+      function openAppDialog({
+        chip = "Notice",
+        title = "Action Required",
+        message = "",
+        tone = "info",
+        confirmLabel = "OK",
+        cancelLabel = "",
+        destructive = false,
+      } = {}) {
+        const chipNode = document.getElementById("app-dialog-chip");
+        const titleNode = document.getElementById("app-dialog-title");
+        const messageNode = document.getElementById("app-dialog-message");
+        const actionsNode = document.getElementById("app-dialog-actions");
+        const toneClass =
+          tone === "error"
+            ? "text-rose-300"
+            : tone === "success"
+              ? "text-emerald-300"
+              : "text-cyan-300";
+        if (chipNode) {
+          chipNode.textContent = chip;
+          chipNode.className = `text-[10px] font-black uppercase tracking-[0.22em] ${toneClass}`;
+        }
+        if (titleNode) titleNode.textContent = title;
+        if (messageNode) messageNode.textContent = message;
+        if (actionsNode) {
+          actionsNode.innerHTML = `
+            ${
+              cancelLabel
+                ? `<button onclick="closeAppDialog(false)" class="px-4 py-3 rounded-2xl bg-white/5 text-sm font-bold text-slate-300 hover:bg-white/10 transition-all">${cancelLabel}</button>`
+                : ""
+            }
+            <button onclick="closeAppDialog(true)" class="px-5 py-3 rounded-2xl ${
+              destructive
+                ? "bg-rose-500 text-white hover:bg-rose-400"
+                : "bg-cyan-500 text-slate-950 hover:bg-cyan-400"
+            } text-sm font-black transition-all">${confirmLabel}</button>
+          `;
+        }
+        document.getElementById("app-dialog-modal")?.classList.remove("hidden");
+        document.getElementById("app-dialog-modal")?.classList.add("flex");
+        return new Promise((resolve) => {
+          currentAppDialogResolver = resolve;
+        });
+      }
+      window.alert = function (message = "") {
+        openAppDialog({
+          chip: "Notice",
+          title: "MediaLab",
+          message: String(message || ""),
+          tone: "info",
+          confirmLabel: "OK",
+        });
+      };
+      function normalizeRenderServiceId(value = "") {
+        return String(value || "").trim();
+      }
+      function isValidRenderServiceId(value = "") {
+        return /^srv-[a-z0-9]+$/i.test(normalizeRenderServiceId(value));
+      }
+      function getRenderServiceDashboardUrl(serviceId = "") {
+        const normalized = normalizeRenderServiceId(serviceId);
+        return normalized ? `https://dashboard.render.com/web/${encodeURIComponent(normalized)}` : "";
+      }
+      function getCurrentRenderServiceId() {
+        const input = document.getElementById("render-service-id-input");
+        return normalizeRenderServiceId(
+          input?.value || currentRenderHostingProject?.renderServiceId || "",
+        );
+      }
+      function revealRenderServiceIdStep(force = false) {
+        const step = document.getElementById("render-service-id-step");
+        if (!step) return;
+        renderServiceIdStepVisible = true;
+        step.classList.remove("hidden");
+        if (force) {
+          document.getElementById("render-service-id-input")?.focus();
+        }
+      }
+      function hideRenderServiceStatusBanner() {
+        document.getElementById("render-service-status-banner")?.classList.add("hidden");
+      }
+      function updateRenderServiceStatus() {
+        const serviceId = getCurrentRenderServiceId();
+        const banner = document.getElementById("render-service-status-banner");
+        const errorNode = document.getElementById("render-service-id-error");
+        const dashboardLink = document.getElementById("render-service-dashboard-link");
+        const statusText = document.getElementById("render-service-status-text");
+        if (errorNode) errorNode.classList.add("hidden");
+        if (!isValidRenderServiceId(serviceId)) {
+          banner?.classList.add("hidden");
+          if (dashboardLink) {
+            dashboardLink.classList.add("hidden");
+            dashboardLink.href = "#";
+          }
+          return false;
+        }
+        const dashboardUrl = getRenderServiceDashboardUrl(serviceId);
+        if (dashboardLink) {
+          dashboardLink.href = dashboardUrl;
+          dashboardLink.classList.remove("hidden");
+        }
+        if (statusText) {
+          statusText.textContent =
+            "Render service ID saved. Open your Render dashboard, grab the final live URL, then paste it below.";
+        }
+        banner?.classList.remove("hidden");
+        return true;
+      }
+      function handleRenderServiceIdInput() {
+        const input = document.getElementById("render-service-id-input");
+        const errorNode = document.getElementById("render-service-id-error");
+        const value = normalizeRenderServiceId(input?.value || "");
+        if (!value) {
+          hideRenderServiceStatusBanner();
+          errorNode?.classList.add("hidden");
+          return;
+        }
+        if (!/^srv-/i.test(value)) {
+          if (errorNode) {
+            errorNode.textContent = "Render Service ID should start with srv-.";
+            errorNode.classList.remove("hidden");
+          }
+          hideRenderServiceStatusBanner();
+          return;
+        }
+        if (!updateRenderServiceStatus() && errorNode) {
+          errorNode.textContent = "That Service ID format looks incomplete. It should look like srv-xxxx.";
+          errorNode.classList.remove("hidden");
+        }
+      }
+      function openRenderServiceDashboard() {
+        const dashboardUrl = getRenderServiceDashboardUrl(getCurrentRenderServiceId());
+        if (!dashboardUrl) return;
+        window.open(dashboardUrl, "_blank", "noopener,noreferrer");
+      }
+      async function copyRenderServiceDashboardLink() {
+        const dashboardUrl = getRenderServiceDashboardUrl(getCurrentRenderServiceId());
+        if (!dashboardUrl) return;
+        try {
+          await navigator.clipboard.writeText(dashboardUrl);
+          showBuilderSnackbar("Render dashboard link copied.", "success");
+        } catch {
+          showBuilderSnackbar("Could not copy the Render link.", "error");
+        }
+      }
+      function closeRenderLiveModal() {
+        document.getElementById("render-live-modal")?.classList.add("hidden");
+        currentRenderLiveProject = null;
+      }
+      function openRenderLiveProject() {
+        const url = getProjectPrimaryUrl(currentRenderLiveProject || {});
+        if (!url) return;
+        window.open(url, "_blank", "noopener,noreferrer");
+      }
+      async function copyRenderLiveUrl() {
+        const url = getProjectPrimaryUrl(currentRenderLiveProject || {});
+        if (!url) return;
+        try {
+          await navigator.clipboard.writeText(url);
+          showBuilderSnackbar("Live URL copied.", "success");
+        } catch {
+          showBuilderSnackbar("Could not copy the live URL.", "error");
+        }
+      }
+      async function copyProjectUrl(url = "") {
+        const value = String(url || "").trim();
+        if (!value) return;
+        try {
+          await navigator.clipboard.writeText(value);
+          showBuilderSnackbar("URL copied.", "success");
+        } catch {
+          showBuilderSnackbar("Could not copy the URL.", "error");
+        }
+      }
+      function showRenderLiveSuccess(project) {
+        const liveUrl = getProjectPrimaryUrl(project || {});
+        if (!liveUrl) return;
+        currentRenderLiveProject = project;
+        document.getElementById("render-live-project-name").textContent =
+          project.name || project.fileName || project.filename || "Live Project";
+        const link = document.getElementById("render-live-url");
+        const text = document.getElementById("render-live-url-text");
+        if (link) link.href = liveUrl;
+        if (text) text.textContent = liveUrl;
+        document.getElementById("render-live-modal")?.classList.remove("hidden");
+      }
+      function hasRenderProjectTransitionedLive(previousProject, nextProject) {
+        const previousLive = Boolean(previousProject?.renderHostedConfirmed);
+        const nextLive = Boolean(nextProject?.renderHostedConfirmed && nextProject?.renderUrl);
+        return !previousLive && nextLive;
+      }
+      function handleLiveProjectSyncSideEffects(previousProjects = [], nextProjects = []) {
+        const previousMap = new Map(
+          (Array.isArray(previousProjects) ? previousProjects : []).map((project) => [
+            String(project?.fileName || project?.filename || "").trim(),
+            project,
+          ]),
+        );
+        const newlyLive = (Array.isArray(nextProjects) ? nextProjects : []).find((project) =>
+          hasRenderProjectTransitionedLive(
+            previousMap.get(String(project?.fileName || project?.filename || "").trim()),
+            project,
+          ),
+        );
+        if (!newlyLive) return;
+        if (
+          currentRenderHostingProject &&
+          String(currentRenderHostingProject.fileName || currentRenderHostingProject.filename).trim() ===
+            String(newlyLive.fileName || newlyLive.filename).trim()
+        ) {
+          closeRenderHostingOnboarding();
+        }
+        showRenderLiveSuccess(newlyLive);
+        showBuilderSnackbar("Your site is live.", "success");
+        if (
+          currentLiveProjectDetail &&
+          String(currentLiveProjectDetail.fileName || currentLiveProjectDetail.filename).trim() ===
+            String(newlyLive.fileName || newlyLive.filename).trim()
+        ) {
+          setTimeout(() => {
+            refreshCurrentLiveProjectDetail();
+          }, 300);
+        }
+      }
+      function startRenderProjectSyncPolling() {
+        if (renderProjectSyncPoller) return;
+        renderProjectSyncPoller = setInterval(() => {
+          if (!loggedIn || !currentUser?.githubUsername) return;
+          if (document.hidden) return;
+          fetchGithubProjects({ silent: true });
+        }, 12000);
+      }
+      function stopRenderProjectSyncPolling() {
+        if (!renderProjectSyncPoller) return;
+        clearInterval(renderProjectSyncPoller);
+        renderProjectSyncPoller = null;
+      }
+      function generateDeployUrl(repoUrl = "") {
+        const cleanRepoUrl = String(repoUrl || "").trim();
+        if (!cleanRepoUrl) return "";
+        return `https://render.com/deploy?repo=${encodeURIComponent(cleanRepoUrl)}`;
+      }
+      function getCurrentRenderRepoUrl() {
+        return (
+          String(currentRenderHostingProject?.renderRepoUrl || "").trim() ||
+          (currentUser?.githubUsername
+            ? `https://github.com/${currentUser.githubUsername}/medialab`
+            : "")
+        );
+      }
+      function updateRenderDeployUi() {
+        const launchBtn = document.getElementById("render-blueprint-launch-btn");
+        const warning = document.getElementById("render-blueprint-warning");
+        if (!launchBtn || !warning) return;
+        const repoUrl = getCurrentRenderRepoUrl();
+        const hasRenderYaml = Boolean(currentUser?.githubRepoCreated && currentUser?.githubUsername);
+        launchBtn.disabled = !repoUrl;
+        launchBtn.classList.toggle("opacity-60", !repoUrl);
+        launchBtn.classList.toggle("cursor-not-allowed", !repoUrl);
+        if (hasRenderYaml) {
+          warning.classList.add("hidden");
+          warning.textContent = "";
+          return;
+        }
+        warning.textContent =
+          "Your repo must contain render.yaml at the root for one-click deploy to work. Set up GitHub hosting first so MediaLab can add it automatically.";
+        warning.classList.remove("hidden");
+      }
+      function openRenderDeployBlueprint() {
+        const repoUrl = getCurrentRenderRepoUrl();
+        const warning = document.getElementById("render-blueprint-warning");
+        if (!repoUrl) {
+          if (warning) {
+            warning.textContent =
+              "GitHub repository URL not found yet. Connect GitHub and publish your project first.";
+            warning.classList.remove("hidden");
+          }
+          return;
+        }
+        const deployUrl = generateDeployUrl(repoUrl);
+        if (renderServiceIdRevealTimer) clearTimeout(renderServiceIdRevealTimer);
+        renderServiceIdRevealTimer = setTimeout(() => {
+          revealRenderServiceIdStep(true);
+        }, 10000);
+        window.open(deployUrl, "_blank", "noopener,noreferrer");
+      }
       function closeRenderHostingOnboarding() {
         document.getElementById("render-hosting-modal")?.classList.add("hidden");
         currentRenderHostingProject = null;
         document.getElementById("render-hosting-error")?.classList.add("hidden");
+        document.getElementById("render-service-id-error")?.classList.add("hidden");
+        document.getElementById("render-service-dashboard-link")?.classList.add("hidden");
+        document.getElementById("render-service-id-step")?.classList.add("hidden");
+        document.getElementById("render-service-status-banner")?.classList.add("hidden");
+        const note = document.getElementById("render-hosting-delay-note");
+        if (note) note.classList.add("hidden");
+        if (renderLongWaitTimer) {
+          clearTimeout(renderLongWaitTimer);
+          renderLongWaitTimer = null;
+        }
+        if (renderServiceIdRevealTimer) {
+          clearTimeout(renderServiceIdRevealTimer);
+          renderServiceIdRevealTimer = null;
+        }
+        renderServiceIdStepVisible = false;
       }
       function openRenderHostingOnboarding(filename = "") {
         const project =
@@ -915,7 +1666,29 @@
         if (link) link.href = liveUrl;
         const input = document.getElementById("render-hosting-url-input");
         if (input) input.value = project.renderUrl || "";
+        const serviceInput = document.getElementById("render-service-id-input");
+        if (serviceInput) serviceInput.value = project.renderServiceId || "";
         document.getElementById("render-hosting-error")?.classList.add("hidden");
+        document.getElementById("render-service-id-error")?.classList.add("hidden");
+        const note = document.getElementById("render-hosting-delay-note");
+        if (note) {
+          note.classList.add("hidden");
+          note.textContent =
+            "The deployment process is taking longer than usual. Make sure your Render service has auto deploy enabled, or you may want to go and deploy manually.";
+        }
+        if (renderLongWaitTimer) clearTimeout(renderLongWaitTimer);
+        renderLongWaitTimer = setTimeout(() => {
+          document.getElementById("render-hosting-delay-note")?.classList.remove("hidden");
+        }, 120000);
+        if (renderServiceIdRevealTimer) clearTimeout(renderServiceIdRevealTimer);
+        renderServiceIdStepVisible = false;
+        document.getElementById("render-service-id-step")?.classList.add("hidden");
+        hideRenderServiceStatusBanner();
+        if (project.renderServiceId) {
+          revealRenderServiceIdStep(false);
+          updateRenderServiceStatus();
+        }
+        updateRenderDeployUi();
         document.getElementById("render-hosting-modal")?.classList.remove("hidden");
       }
       function maybePromptRenderHostingOnboarding(force = false) {
@@ -943,11 +1716,30 @@
         const errorNode = document.getElementById("render-hosting-error");
         const input = document.getElementById("render-hosting-url-input");
         const verifyBtn = document.getElementById("render-hosting-verify-btn");
+        const serviceId = getCurrentRenderServiceId();
         const renderUrl = String(input?.value || "").trim();
         if (errorNode) errorNode.classList.add("hidden");
+        if (serviceId && !isValidRenderServiceId(serviceId)) {
+          const serviceError = document.getElementById("render-service-id-error");
+          if (serviceError) {
+            serviceError.textContent = "Enter a valid Render Service ID before continuing.";
+            serviceError.classList.remove("hidden");
+          }
+          document.getElementById("render-service-id-input")?.focus();
+          return;
+        }
         if (!renderUrl) {
           if (errorNode) {
             errorNode.textContent = "Paste the Render live URL first.";
+            errorNode.classList.remove("hidden");
+          }
+          input?.focus();
+          return;
+        }
+        const normalizedUrl = /^https?:\/\//i.test(renderUrl) ? renderUrl : `https://${renderUrl}`;
+        if (!/\.onrender\.com(\/|$)/i.test(normalizedUrl)) {
+          if (errorNode) {
+            errorNode.textContent = "Use the final Render URL ending in .onrender.com.";
             errorNode.classList.remove("hidden");
           }
           input?.focus();
@@ -958,13 +1750,14 @@
           verifyBtn.textContent = "Verifying...";
         }
         try {
-          const res = await fetch("/api/github/verify-render-hosting", {
+          const res = await fetch("/api/projects/update-deploy-info", {
             method: "POST",
             credentials: "include",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              filename: project.fileName || project.filename,
-              renderUrl,
+              projectId: project.fileName || project.filename,
+              serviceId,
+              liveUrl: normalizedUrl,
             }),
           });
           const data = await res.json();
@@ -974,6 +1767,9 @@
           currentUser = { ...(currentUser || {}), ...(data.user || {}) };
           updateUserProfileUi();
           showBuilderSnackbar("Render hosting verified. Project is fully live.", "success");
+          if (data.project?.renderUrl) {
+            showRenderLiveSuccess(data.project);
+          }
           if (
             currentLiveProjectDetail &&
             String(currentLiveProjectDetail.fileName || currentLiveProjectDetail.filename) ===
@@ -996,10 +1792,31 @@
         }
       }
       async function openLiveProjectDetail(filename) {
-        if (!filename) return;
+        const normalizedFilename = decodeURIComponent(String(filename || "").trim());
+        if (!normalizedFilename) return;
+        document
+          .getElementById("live-project-detail-modal")
+          ?.classList.remove("hidden");
+        document.getElementById("live-project-detail-title").textContent = "Loading Project Dashboard";
+        document.getElementById("live-project-detail-subtitle").textContent =
+          "Checking hosting, AdSense, ads.txt, and live status...";
+        ["project-stat-health", "project-stat-ads", "project-stat-ads-txt"].forEach((id) => {
+          const node = document.getElementById(id);
+          if (node) {
+            node.innerHTML = `<div class="rounded-[1.5rem] border border-white/10 bg-white/[0.04] p-4 h-full"><div class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Loading</div><div class="mt-3 text-xl font-semibold text-white">Please wait...</div><div class="mt-2 text-xs text-slate-400">Preparing project dashboard.</div></div>`;
+          }
+        });
+        const previewFrame = document.getElementById("live-project-preview-frame");
+        if (previewFrame) previewFrame.src = "about:blank";
+        const statsMetaNode = document.getElementById("project-adsense-performance");
+        if (statsMetaNode) {
+          statsMetaNode.classList.add("hidden");
+          statsMetaNode.innerHTML = "";
+        }
+        await new Promise((resolve) => setTimeout(resolve, 80));
         try {
           const res = await fetch(
-            `/api/github/project-monitor?filename=${encodeURIComponent(filename)}`,
+            `/api/github/project-monitor?filename=${encodeURIComponent(normalizedFilename)}`,
             { credentials: "include" },
           );
           const data = await res.json();
@@ -1011,21 +1828,73 @@
             .getElementById("live-project-detail-modal")
             ?.classList.remove("hidden");
           closeMonetizeProjectWizard();
+          startLiveProjectHealthPolling();
         } catch (error) {
-          showBuilderSnackbar(
-            error.message || "Could not open the project monitor right now.",
-            "error",
+          const fallbackProject = (currentUser?.liveProjects || []).find(
+            (project) =>
+              String(project?.fileName || project?.filename || "").trim() ===
+              normalizedFilename,
           );
+          if (fallbackProject) {
+            renderLiveProjectDetail(fallbackProject, {
+              health: { label: "Monitor Unavailable", state: "amber", status: 0 },
+              adsDetected: false,
+              adsTxtVerified: false,
+              adsTxtUrl: "",
+              monetizationApproved: false,
+              adsenseSiteStatus: currentUser?.adsenseSiteStatus || "",
+              adsenseReviewState: getAdsenseReviewLabel(currentUser?.adsenseSiteStatus || ""),
+              adsenseLastCheckedAt: currentUser?.adsenseLastCheckedAt || null,
+              adsenseApprovedAt: currentUser?.adsenseApprovedAt || null,
+              adsPerformance: null,
+            });
+            document
+              .getElementById("live-project-detail-modal")
+              ?.classList.remove("hidden");
+            closeMonetizeProjectWizard();
+            startLiveProjectHealthPolling();
+            showBuilderSnackbar(
+              "Project dashboard opened with limited monitor data.",
+              "success",
+            );
+            return;
+          }
+          showBuilderSnackbar(error.message || "Could not open the project monitor right now.", "error");
         }
       }
-      async function refreshCurrentLiveProjectDetail() {
+      async function refreshCurrentLiveProjectDetail(options = {}) {
         const filename = String(
           currentLiveProjectDetail?.fileName ||
             currentLiveProjectDetail?.filename ||
             "",
         ).trim();
         if (!filename) return;
-        await openLiveProjectDetail(filename);
+        if (!options.silent) {
+          await openLiveProjectDetail(filename);
+          return;
+        }
+        try {
+          const res = await fetch(
+            `/api/github/project-monitor?filename=${encodeURIComponent(filename)}`,
+            { credentials: "include" },
+          );
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            throw new Error(data.message || "Could not refresh project monitor.");
+          }
+          renderLiveProjectDetail(data.project, data);
+          if (!options.preservePreview) {
+            const previewFrame = document.getElementById("live-project-preview-frame");
+            if (previewFrame) {
+              const primaryUrl = getProjectPrimaryUrl(data.project || {});
+              previewFrame.src = primaryUrl
+                ? `${primaryUrl}${primaryUrl.includes("?") ? "&" : "?"}ml_preview=${Date.now()}`
+                : "about:blank";
+            }
+          }
+        } catch (error) {
+          console.warn("Silent project monitor refresh skipped:", error.message);
+        }
       }
       function handleOpenCurrentLiveProject() {
         openLiveProjectSite(
@@ -1045,14 +1914,20 @@
         await deleteLiveProject(filename);
         closeLiveProjectDetail();
       }
-      function clearAllHistory() {
-        if (
-          confirm("This will clear your local guest project cache. Continue?")
-        ) {
-          localStorage.removeItem("medialab_guest_history");
-          if (typeof switchTool === "function") switchTool("history");
-          updateSidebarHistory([]);
-        }
+      async function clearAllHistory() {
+        const confirmed = await openAppDialog({
+          chip: "Clear History",
+          title: "Clear guest cache?",
+          message: "This will clear your local guest project cache. Continue?",
+          tone: "error",
+          confirmLabel: "Clear Cache",
+          cancelLabel: "Cancel",
+          destructive: true,
+        });
+        if (!confirmed) return;
+        localStorage.removeItem("medialab_guest_history");
+        if (typeof switchTool === "function") switchTool("history");
+        updateSidebarHistory([]);
       }
       function showDownloadState(url, type) {
         const btn = document.getElementById("convert-btn");
@@ -1129,6 +2004,8 @@
         if (!loggedIn || !currentUser) {
           userSection?.classList.add("hidden");
           startBtn?.classList.remove("hidden");
+          stopRenderProjectSyncPolling();
+          stopAdsenseStatusSyncLoop();
           renderGithubStorageStatus();
           closeRenderHostingOnboarding();
           return;
@@ -1168,6 +2045,11 @@
         renderGithubStorageStatus();
         updateAccountModalUi();
         maybePromptRenderHostingOnboarding();
+        startRenderProjectSyncPolling();
+        startAdsenseStatusSyncLoop();
+        if (currentUser?.adsenseConnected) {
+          syncAdsenseStatus({ silent: true });
+        }
       }
       function buildGithubStorageStatusMarkup(context = "sidebar") {
         const isConsole = context === "console";
@@ -1344,6 +2226,193 @@
               ? "Airtel Money"
               : "Not selected";
       }
+      function formatWithdrawalStatus(status = "") {
+        const normalized = String(status || "").toLowerCase();
+        return normalized === "paid"
+          ? "Approved"
+          : normalized === "failed"
+            ? "Disapproved"
+            : normalized === "processing"
+              ? "Processing"
+              : normalized === "pending"
+                ? "Pending"
+                : "No status yet";
+      }
+      function getWithdrawalStatusTone(status = "") {
+        const normalized = String(status || "").toLowerCase();
+        return normalized === "paid"
+          ? "text-emerald-300"
+          : normalized === "failed"
+            ? "text-rose-300"
+            : normalized === "processing"
+              ? "text-amber-300"
+              : "text-cyan-300";
+      }
+      async function fetchWithdrawalRequests() {
+        if (!loggedIn || !currentUser) return [];
+        try {
+          const res = await fetch("/api/account/withdrawals", {
+            credentials: "include",
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            throw new Error(data.message || "Could not load withdrawals.");
+          }
+          currentWithdrawalRequests = Array.isArray(data.requests) ? data.requests : [];
+          return currentWithdrawalRequests;
+        } catch (error) {
+          console.warn("Withdrawal fetch skipped:", error.message);
+          return currentWithdrawalRequests;
+        }
+      }
+      async function fetchReferralStatus() {
+        if (!loggedIn || !currentUser) return null;
+        try {
+          const res = await fetch("/api/referrals/status", {
+            credentials: "include",
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            throw new Error(data.message || "Could not load referral info.");
+          }
+          currentReferralStatus = data;
+          if (data.user) currentUser = { ...(currentUser || {}), ...data.user };
+          updateReferralUi();
+          return data;
+        } catch (error) {
+          console.warn("Referral status skipped:", error.message);
+          return currentReferralStatus;
+        }
+      }
+      function updateReferralUi() {
+        const linkNode = document.getElementById("account-referral-link");
+        const summaryNode = document.getElementById("account-referral-summary");
+        if (linkNode) {
+          linkNode.textContent =
+            currentReferralStatus?.referralLink ||
+            "https://medialab-6b20.onrender.com/";
+        }
+        if (summaryNode) {
+          summaryNode.textContent = currentReferralStatus
+            ? `${Number(currentReferralStatus.referralInstallCount || 0)} installs • ${formatCurrency(
+                currentReferralStatus.referralEarnings || 0,
+              )} earned`
+            : "Rewards appear here after your referrals install the app.";
+        }
+      }
+      async function copyReferralLink() {
+        const link = String(
+          currentReferralStatus?.referralLink || "https://medialab-6b20.onrender.com/",
+        ).trim();
+        try {
+          await navigator.clipboard.writeText(link);
+          showBuilderSnackbar("Referral link copied.", "success");
+        } catch {
+          showBuilderSnackbar("Could not copy the referral link.", "error");
+        }
+      }
+      function updateWithdrawalStatusSummary() {
+        const latest = Array.isArray(currentWithdrawalRequests)
+          ? currentWithdrawalRequests[0]
+          : null;
+        const line = document.getElementById("account-withdraw-status-line");
+        const subline = document.getElementById("account-withdraw-status-subline");
+        if (!latest) {
+          if (line) line.textContent = "No payout requests yet";
+          if (subline) subline.textContent = "Click for more details.";
+          return;
+        }
+        if (line) {
+          line.textContent = `${formatWithdrawalStatus(latest.status)} · ${formatCurrency(
+            latest.amount,
+          )}`;
+          line.className = `text-sm mt-2 font-semibold ${getWithdrawalStatusTone(latest.status)}`;
+        }
+        if (subline) {
+          subline.textContent =
+            latest.status === "failed" && latest.deniedReason
+              ? `Denied reason: ${latest.deniedReason}`
+              : `Latest via ${formatPayoutMethod(latest.method)} on ${formatDate(
+                  latest.createdAt,
+                )}. Click for more details.`;
+        }
+      }
+      function renderWithdrawalStatusModal() {
+        const currentNode = document.getElementById("withdraw-status-current");
+        const listNode = document.getElementById("withdraw-status-list");
+        if (!currentNode || !listNode) return;
+        const latest = Array.isArray(currentWithdrawalRequests)
+          ? currentWithdrawalRequests[0]
+          : null;
+        if (!latest) {
+          currentNode.innerHTML = `
+            <div class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Current</div>
+            <div class="mt-3 text-2xl font-black text-white">No requests yet</div>
+            <div class="mt-2 text-sm text-slate-400">Your recent withdrawal activity will appear here.</div>
+          `;
+          listNode.innerHTML = `<div class="text-slate-400 py-3">No transactions yet.</div>`;
+          return;
+        }
+        currentNode.innerHTML = `
+          <div class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Current</div>
+          <div class="mt-3 flex items-center justify-between gap-3">
+            <div class="text-2xl font-black ${getWithdrawalStatusTone(latest.status)}">${formatWithdrawalStatus(
+              latest.status,
+            )}</div>
+            <div class="text-sm text-slate-400">${formatCurrency(latest.amount)}</div>
+          </div>
+          <div class="mt-3 space-y-1 text-sm text-slate-300">
+            <div>${formatPayoutMethod(latest.method)} · ${latest.destination}</div>
+            <div class="text-slate-400">${formatDate(latest.createdAt)}</div>
+            ${
+              latest.deniedReason
+                ? `<div class="break-words text-rose-300">Reason: ${latest.deniedReason}</div>`
+                : ""
+            }
+          </div>
+        `;
+        listNode.innerHTML = currentWithdrawalRequests
+          .map((item) => {
+            const expanded = expandedWithdrawalRequestId === String(item._id || "");
+            return `
+              <div class="border-b border-white/6 pb-2">
+                <button
+                  onclick="toggleWithdrawalStatusItem('${item._id || ""}')"
+                  class="w-full text-left py-2 flex items-center justify-between gap-3 hover:text-white transition-all"
+                >
+                  <span class="min-w-0 truncate text-slate-200">
+                    ${formatPayoutMethod(item.method)} - ${item.destination} - ${formatCurrency(
+              item.amount,
+            )} - ${formatDate(item.createdAt)}
+                  </span>
+                  <span class="text-xs ${getWithdrawalStatusTone(item.status)}">${formatWithdrawalStatus(
+              item.status,
+            )}</span>
+                </button>
+                <div class="${expanded ? "block" : "hidden"} pl-1 pr-2 pb-2 text-xs leading-6 text-slate-400">
+                  <div>Destination: ${item.destination}</div>
+                  <div>Method: ${formatPayoutMethod(item.method)}</div>
+                  <div>Amount: ${formatCurrency(item.amount)}</div>
+                  <div>Fee: ${formatCurrency(item.fee || 0)}</div>
+                  <div>Requested: ${formatDate(item.createdAt)}</div>
+                  <div>Reviewed: ${item.reviewedAt ? formatDate(item.reviewedAt) : "Waiting"}</div>
+                  <div>Status: ${formatWithdrawalStatus(item.status)}</div>
+                  ${
+                    item.deniedReason
+                      ? `<div class="break-words text-rose-300">Denied reason: ${item.deniedReason}</div>`
+                      : ""
+                  }
+                </div>
+              </div>
+            `;
+          })
+          .join("");
+      }
+      function toggleWithdrawalStatusItem(id = "") {
+        expandedWithdrawalRequestId =
+          expandedWithdrawalRequestId === String(id || "") ? "" : String(id || "");
+        renderWithdrawalStatusModal();
+      }
       function getRecentLiveProjects(limit = 3) {
         return [...(currentUser?.liveProjects || [])]
           .sort((a, b) => {
@@ -1380,13 +2449,96 @@
           return currentAdsenseConsoleReport;
         }
       }
+      async function syncAdsenseStatus(options = {}) {
+        if (!loggedIn || !currentUser?.adsenseConnected) return null;
+        try {
+          const res = await fetch("/api/adsense/sync-status", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ force: Boolean(options.force) }),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            throw new Error(data.message || "Could not sync AdSense status.");
+          }
+          currentUser = { ...(currentUser || {}), ...(data.user || {}) };
+          updateUserProfileUi();
+          return data;
+        } catch (error) {
+          if (!options.silent) {
+            console.warn("AdSense status sync skipped:", error.message);
+          }
+          return null;
+        }
+      }
+      function startAdsenseStatusSyncLoop() {
+        if (adsenseStatusSyncTimer) {
+          clearInterval(adsenseStatusSyncTimer);
+          adsenseStatusSyncTimer = null;
+        }
+        if (!loggedIn || !currentUser?.adsenseConnected) return;
+        adsenseStatusSyncTimer = setInterval(() => {
+          syncAdsenseStatus({ silent: true });
+        }, 6 * 60 * 60 * 1000);
+      }
+      function stopAdsenseStatusSyncLoop() {
+        if (adsenseStatusSyncTimer) {
+          clearInterval(adsenseStatusSyncTimer);
+          adsenseStatusSyncTimer = null;
+        }
+      }
+      function startUserWalletRefreshLoop() {
+        if (userWalletRefreshTimer) {
+          clearInterval(userWalletRefreshTimer);
+          userWalletRefreshTimer = null;
+        }
+        if (!loggedIn) return;
+        userWalletRefreshTimer = setInterval(async () => {
+          if (document.hidden) return;
+          try {
+            const res = await fetch("/api/auth/me", { credentials: "include" });
+            const data = await res.json();
+            if (res.ok && data?.success && data.user) {
+              currentUser = { ...(currentUser || {}), ...(data.user || {}) };
+              updateUserProfileUi();
+              updateReferralUi();
+            }
+          } catch {}
+        }, 60 * 1000);
+      }
+      function stopUserWalletRefreshLoop() {
+        if (userWalletRefreshTimer) {
+          clearInterval(userWalletRefreshTimer);
+          userWalletRefreshTimer = null;
+        }
+      }
+      function hasAdsenseStats(report) {
+        if (!report?.connected || !report?.stats) return false;
+        const stats = report.stats || {};
+        return [
+          Number(stats.estimatedEarnings || 0),
+          Number(stats.impressions || 0),
+          Number(stats.pageViewsRpm || 0),
+          Number(stats.clicks || 0),
+        ].some((value) => value > 0);
+      }
+      function isAdsenseApprovedUser(user = currentUser || {}) {
+        return Boolean(user?.adsenseConnected && user?.adsenseApprovedAt);
+      }
+      function getAdsensePayoutCenterUrl() {
+        return "https://pay.google.com/";
+      }
       function updateAccountModalUi() {
         const balance = getCurrentBalance();
         const canWithdraw = balance >= 5;
+        const adsensePayoutEligible = canWithdraw && isAdsenseApprovedUser();
         const balanceValue = document.getElementById("account-balance-value");
         const balanceNote = document.getElementById("account-balance-note");
         const withdrawBtn = document.getElementById("open-withdraw-btn");
         const minimumNote = document.getElementById("withdraw-minimum-note");
+        const adsenseWithdrawBtn = document.getElementById("open-adsense-withdraw-btn");
+        const adsenseWithdrawNote = document.getElementById("account-adsense-payout-note");
         const accountName = document.getElementById("account-name");
         const accountEmail = document.getElementById("account-email");
         const accountPlan = document.getElementById("account-plan");
@@ -1394,14 +2546,36 @@
         if (balanceValue) balanceValue.textContent = formatCurrency(balance);
         if (balanceNote) {
           balanceNote.textContent = canWithdraw
-            ? "Your balance is ready for payout."
-            : "Minimum withdrawal is $5.";
+            ? "Your MediaLab payout balance is ready for withdrawal."
+            : "Minimum MediaLab withdrawal is $5.";
         }
         if (withdrawBtn) {
           withdrawBtn.disabled = !canWithdraw;
-          withdrawBtn.title = canWithdraw ? "Open withdrawal form" : "Minimum withdrawal is $5";
+          withdrawBtn.title = canWithdraw ? "Open withdrawal form" : "Minimum MediaLab withdrawal is $5";
         }
         minimumNote?.classList.toggle("hidden", canWithdraw);
+        if (minimumNote) {
+          minimumNote.textContent = "Minimum MediaLab withdrawal is $5";
+        }
+        if (adsenseWithdrawBtn) {
+          adsenseWithdrawBtn.disabled = !adsensePayoutEligible;
+        }
+        if (adsenseWithdrawNote) {
+          adsenseWithdrawNote.textContent = !currentUser?.adsenseConnected
+            ? "Connect AdSense first, then use Google’s official payout center."
+            : adsensePayoutEligible
+              ? "Your AdSense account is eligible. Open Google’s payout center safely."
+              : canWithdraw
+                ? "Your AdSense approval is still pending."
+                : "AdSense payouts unlock when your balance reaches at least $5 and Google approval is complete.";
+        }
+        if (adsenseWithdrawNote && !currentUser?.adsenseConnected) {
+          adsenseWithdrawNote.textContent =
+            "This is separate from your MediaLab payout balance. Connect AdSense first, then use Google’s official payout center.";
+        } else if (adsenseWithdrawNote && adsensePayoutEligible) {
+          adsenseWithdrawNote.textContent =
+            "This is separate from your MediaLab payout balance. Your AdSense revenue is eligible for Google payout.";
+        }
         if (accountName) accountName.textContent = currentUser?.name || "User";
         if (accountEmail) accountEmail.textContent = currentUser?.email || "user@example.com";
         if (accountPlan) accountPlan.textContent = currentUser?.isPro ? "Pro" : "Free";
@@ -1412,6 +2586,7 @@
         }
         const availableBalance = document.getElementById("withdraw-available-balance");
         if (availableBalance) availableBalance.textContent = formatCurrency(balance);
+        updateWithdrawalStatusSummary();
       }
       function openAccountModal() {
         if (!loggedIn || !currentUser) {
@@ -1422,6 +2597,65 @@
         updateAccountModalUi();
         document.getElementById("account-modal")?.classList.remove("hidden");
         document.getElementById("account-modal")?.classList.add("flex");
+        fetchWithdrawalRequests().then(() => {
+          updateWithdrawalStatusSummary();
+        });
+        fetchReferralStatus();
+      }
+      async function openAdsenseWithdrawalCenter() {
+        try {
+          const res = await fetch("/api/adsense/withdrawal-eligibility", {
+            credentials: "include",
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            throw new Error(data.message || "Could not check AdSense eligibility.");
+          }
+          if (!data.eligible) {
+            await openAppDialog({
+              chip: "Not Eligible",
+              title: "AdSense payout threshold not reached",
+              message: `Current progress: $${Number(data.currentBalance || 0).toFixed(2)} of $${Number(data.threshold || 100).toFixed(2)}. Google unlocks payouts once your AdSense balance reaches the official threshold.`,
+              tone: "error",
+              confirmLabel: "OK",
+            });
+            return;
+          }
+          window.open(
+            data.payoutUrl || "https://adsense.google.com/main/payments",
+            "_blank",
+            "noopener,noreferrer",
+          );
+          await logUsageActivity(
+            "adsense-payout-center",
+            "opened AdSense payout center",
+            "adsense",
+            { currentBalance: Number(data.currentBalance || 0), threshold: Number(data.threshold || 100) },
+          );
+        } catch (error) {
+          showUserFacingMessage(
+            error.message || "Could not check AdSense payout eligibility right now.",
+            "error",
+          );
+        }
+      }
+      function closeWithdrawSuccessModal() {
+        document.getElementById("withdraw-success-modal")?.classList.add("hidden");
+        document.getElementById("withdraw-success-modal")?.classList.remove("flex");
+      }
+      async function openWithdrawalStatusModal() {
+        await fetchWithdrawalRequests();
+        renderWithdrawalStatusModal();
+        document.getElementById("withdraw-status-modal")?.classList.remove("hidden");
+        document.getElementById("withdraw-status-modal")?.classList.add("flex");
+      }
+      function closeWithdrawalStatusModal() {
+        document.getElementById("withdraw-status-modal")?.classList.add("hidden");
+        document.getElementById("withdraw-status-modal")?.classList.remove("flex");
+      }
+      async function openWithdrawalStatusFromSuccess() {
+        closeWithdrawSuccessModal();
+        await openWithdrawalStatusModal();
       }
       function closeAdsenseLinkModal() {
         document.getElementById("adsense-link-modal")?.classList.add("hidden");
@@ -1482,14 +2716,18 @@
         const errorNode = document.getElementById("adsense-link-error");
         const successNode = document.getElementById("adsense-link-success");
         const reconnectBtn = document.getElementById("adsense-google-reconnect-btn");
-        const liveProjectUrl = String(input?.value || "").trim();
+        const domainName = String(input?.value || "")
+          .trim()
+          .replace(/^https?:\/\//i, "")
+          .replace(/\/.*$/, "")
+          .toLowerCase();
         errorNode?.classList.add("hidden");
         successNode?.classList.add("hidden");
         document.getElementById("adsense-link-checklist")?.classList.add("hidden");
         reconnectBtn?.classList.add("hidden");
-        if (!liveProjectUrl) {
+        if (!domainName) {
           if (errorNode) {
-            errorNode.textContent = "Enter your live project URL first.";
+            errorNode.textContent = "Enter your project domain first.";
             errorNode.classList.remove("hidden");
           }
           input?.focus();
@@ -1504,7 +2742,7 @@
             method: "POST",
             credentials: "include",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ liveProjectUrl }),
+            body: JSON.stringify({ domainName }),
           });
           const data = await res.json();
           if (!res.ok || !data.success) {
@@ -1518,7 +2756,7 @@
           document.getElementById("adsense-link-success-title").textContent =
             `Success! We found your AdSense account ${data.adsenseId || ""}.`;
           document.getElementById("adsense-link-success-subtitle").textContent =
-            `${data.siteUrl || liveProjectUrl} is now linked. Status: ${data.siteStatus || "UNKNOWN"}.`;
+            `${data.siteUrl || domainName} is now linked. Status: ${data.siteStatus || "UNKNOWN"}.`;
           successNode?.classList.remove("hidden");
           renderAdsenseChecklist(data.checklist || {});
           showBuilderSnackbar(
@@ -1532,7 +2770,7 @@
           if (errorNode) {
             errorNode.textContent =
               error.message ||
-              "We couldn't find this URL in your AdSense account yet.";
+              "We couldn't find this domain in your AdSense account yet.";
             errorNode.classList.remove("hidden");
           }
         } finally {
@@ -1743,6 +2981,11 @@
           }
           updateUserProfileUi();
           document.getElementById("withdraw-success")?.classList.remove("hidden");
+          currentWithdrawalRequests = [
+            data.request,
+            ...currentWithdrawalRequests.filter((item) => item._id !== data.request?._id),
+          ];
+          updateWithdrawalStatusSummary();
           await logUsageActivity(
             "withdrawal-request-ui",
             `submitted withdrawal request via ${payload.method}`,
@@ -1751,7 +2994,8 @@
           );
           setTimeout(() => {
             closeWithdrawModal();
-            closeAccountModal();
+            document.getElementById("withdraw-success-modal")?.classList.remove("hidden");
+            document.getElementById("withdraw-success-modal")?.classList.add("flex");
           }, 1400);
         } catch (error) {
           showWithdrawError(
@@ -1776,7 +3020,15 @@
       async function cancelPremiumPlan() {
         if (!loggedIn || !currentUser?.isPro) return;
         document.getElementById("profile-menu")?.classList.add("hidden");
-        const confirmed = confirm("Cancel your premium plan?");
+        const confirmed = await openAppDialog({
+          chip: "Cancel Premium",
+          title: "Cancel your premium plan?",
+          message: "This will switch your account back to the free plan.",
+          tone: "error",
+          confirmLabel: "Cancel Plan",
+          cancelLabel: "Keep Premium",
+          destructive: true,
+        });
         if (!confirmed) return;
         try {
           const res = await fetch("/api/account/cancel-premium", {
@@ -1950,21 +3202,31 @@
         toggleProfileMenu();
       }
       async function logout() {
-        if (confirm("Logout from MediaLab?")) {
-          try {
-            await logUsageActivity("logout", "logged out", "auth");
-            await fetch("/api/auth/logout", { credentials: "include" });
-          } catch (e) {}
-          loggedIn = false;
-          currentUser = null;
-          currentPremiumRequest = null;
-          updateUserProfileUi();
-          updateSidebarHistory([]);
-          renderBuilderDrafts();
-          document.getElementById("profile-menu").classList.add("hidden");
-          document.getElementById("studio").classList.add("hidden");
-          document.getElementById("landing").classList.remove("hidden");
-        }
+        const confirmed = await openAppDialog({
+          chip: "Logout",
+          title: "Logout from MediaLab?",
+          message: "You can sign back in anytime.",
+          tone: "info",
+          confirmLabel: "Logout",
+          cancelLabel: "Stay Here",
+        });
+        if (!confirmed) return;
+        try {
+          await logUsageActivity("logout", "logged out", "auth");
+          await fetch("/api/auth/logout", { credentials: "include" });
+        } catch (e) {}
+        loggedIn = false;
+        currentUser = null;
+        currentPremiumRequest = null;
+        currentReferralStatus = null;
+        stopAdsenseStatusSyncLoop();
+        stopUserWalletRefreshLoop();
+        updateUserProfileUi();
+        updateSidebarHistory([]);
+        renderBuilderDrafts();
+        document.getElementById("profile-menu").classList.add("hidden");
+        document.getElementById("studio").classList.add("hidden");
+        document.getElementById("landing").classList.remove("hidden");
       }
       // Login Functions
       function showLogin() {
@@ -2014,6 +3276,8 @@
             currentUser = devData.user || null;
             await fetchPremiumRequestStatus();
             updateUserProfileUi();
+            startAdsenseStatusSyncLoop();
+            startUserWalletRefreshLoop();
             currentUser.builderDrafts = currentUser.builderDrafts || [];
             updateSidebarHistory(currentUser.projects || []);
             renderBuilderDrafts();
@@ -2045,7 +3309,51 @@
         hideLogin();
         loggedIn = true;
         updateUserProfileUi();
+        startUserWalletRefreshLoop();
         goToStudio();
+      }
+      function storePendingReferralFromUrl() {
+        try {
+          const url = new URL(window.location.href);
+          const ref = String(url.searchParams.get("ref") || "").trim();
+          if (!ref) return;
+          localStorage.setItem("medialab_pending_referral_code", ref);
+        } catch {}
+      }
+      async function claimPendingReferralIfNeeded() {
+        if (!loggedIn || !currentUser) return;
+        const referralCode = String(
+          localStorage.getItem("medialab_pending_referral_code") || "",
+        ).trim();
+        if (!referralCode) return;
+        if (String(currentUser.referredByCode || "").trim()) return;
+        if (String(currentUser.referralCode || "").trim() === referralCode) {
+          localStorage.removeItem("medialab_pending_referral_code");
+          return;
+        }
+        try {
+          const res = await fetch("/api/referrals/claim", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ referralCode }),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            throw new Error(data.message || "Could not save referral link.");
+          }
+          currentUser = { ...(currentUser || {}), ...(data.user || {}) };
+          updateUserProfileUi();
+          localStorage.removeItem("medialab_pending_referral_code");
+          await logUsageActivity(
+            "referral-claimed",
+            `saved referral code ${referralCode}`,
+            "referral",
+            { referralCode },
+          );
+        } catch (error) {
+          console.warn("Referral claim skipped:", error.message);
+        }
       }
       async function checkAuth() {
         try {
@@ -2056,6 +3364,10 @@
             currentUser = data.user;
             await fetchPremiumRequestStatus();
             updateUserProfileUi();
+            startAdsenseStatusSyncLoop();
+            startUserWalletRefreshLoop();
+            await claimPendingReferralIfNeeded();
+            await fetchReferralStatus();
             if (currentUser.projects) {
               updateSidebarHistory(currentUser.projects);
             }
@@ -3107,11 +4419,11 @@
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
                       <div class="relative overflow-hidden rounded-[2rem] border border-cyan-400/20 bg-[linear-gradient(145deg,rgba(6,182,212,0.18),rgba(15,23,42,0.98))] p-5 sm:p-6 shadow-[0_24px_70px_rgba(8,145,178,0.22)] backdrop-blur-2xl">
                         <div class="absolute -right-8 -top-8 h-28 w-28 rounded-full bg-cyan-300/10 blur-2xl"></div>
-                        <p class="relative text-[10px] font-black uppercase tracking-[0.24em] text-cyan-200/80">Current Balance</p>
+                        <p class="relative text-[10px] font-black uppercase tracking-[0.24em] text-cyan-200/80">MediaLab Payout Balance</p>
                         <div class="relative mt-4 flex items-end justify-between gap-4">
                           <div>
                             <p class="text-4xl sm:text-5xl font-black text-white tracking-tight">${formatCurrency(balance)}</p>
-                            <p class="mt-2 text-xs leading-5 text-cyan-100/70">Available for creator payouts, secure withdrawals, and future monetization.</p>
+                            <p class="mt-2 text-xs leading-5 text-cyan-100/70">This is your MediaLab wallet balance for creator rewards, secure withdrawals, and platform payouts.</p>
                           </div>
                           <div class="w-14 h-14 rounded-[1.4rem] border border-white/10 bg-white/10 flex items-center justify-center text-cyan-100 text-xl shadow-[0_10px_35px_rgba(34,211,238,0.18)]">
                             <i class="fas fa-wallet"></i>
@@ -3122,7 +4434,7 @@
                             <i class="fas fa-arrow-up-right-from-square"></i>
                             Withdraw
                           </button>
-                          <p class="text-[11px] text-right text-slate-300/70">${canWithdraw ? "Ready for payout" : "Minimum withdrawal is $5"}</p>
+                          <p class="text-[11px] text-right text-slate-300/70">${canWithdraw ? "Ready for payout" : balance >= 5 ? "Awaiting AdSense approval" : "Minimum withdrawal is $5"}</p>
                         </div>
                       </div>
                       <div class="relative overflow-hidden rounded-[2rem] border border-emerald-400/20 bg-[linear-gradient(145deg,rgba(16,185,129,0.18),rgba(15,23,42,0.98))] p-5 sm:p-6 shadow-[0_24px_70px_rgba(16,185,129,0.18)] backdrop-blur-2xl">
@@ -3149,7 +4461,7 @@
                     <div class="rounded-[2rem] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(15,23,42,0.82))] backdrop-blur-2xl p-5 sm:p-6 shadow-[0_24px_60px_rgba(2,6,23,0.32)]">
                       <div class="flex items-start justify-between gap-4">
                         <div>
-                          <p class="text-[10px] font-black uppercase tracking-[0.24em] text-amber-300">AdSense Performance</p>
+                          <p class="text-[10px] font-black uppercase tracking-[0.24em] text-amber-300">AdSense Revenue</p>
                           <h3 class="mt-2 text-2xl font-semibold tracking-tight text-white">Real-time creator stats</h3>
                           <p class="mt-2 text-sm text-slate-400">${
                             adsenseReport?.connected
@@ -3161,36 +4473,51 @@
                           <i class="fab fa-google"></i>
                         </div>
                       </div>
-                      ${
-                        adsenseReport?.connected && adsenseReport?.stats
-                          ? `<div class="mt-5 grid grid-cols-2 gap-3">
-                              <div class="rounded-[1.4rem] border border-white/10 bg-slate-950/70 p-4">
-                                <p class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Estimated Earnings</p>
-                                <p class="mt-2 text-2xl font-black text-white">$${Number(adsenseReport.stats.estimatedEarnings || 0).toFixed(2)}</p>
+                        ${
+                          hasAdsenseStats(adsenseReport)
+                            ? `<div class="mt-5 grid grid-cols-2 gap-3">
+                                <div class="rounded-[1.4rem] border border-white/10 bg-slate-950/70 p-4">
+                                  <p class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Estimated Earnings</p>
+                                  <p class="mt-2 text-2xl font-black text-white">$${Number(adsenseReport.stats.estimatedEarnings || 0).toFixed(2)}</p>
+                                </div>
+                                <div class="rounded-[1.4rem] border border-white/10 bg-slate-950/70 p-4">
+                                  <p class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Impressions</p>
+                                  <p class="mt-2 text-2xl font-black text-white">${formatCompactNumber(adsenseReport.stats.impressions || 0)}</p>
+                                </div>
+                                <div class="rounded-[1.4rem] border border-white/10 bg-slate-950/70 p-4">
+                                  <p class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Page RPM</p>
+                                  <p class="mt-2 text-2xl font-black text-white">$${Number(adsenseReport.stats.pageViewsRpm || 0).toFixed(2)}</p>
+                                </div>
+                                <div class="rounded-[1.4rem] border border-white/10 bg-slate-950/70 p-4">
+                                  <p class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Clicks</p>
+                                  <p class="mt-2 text-2xl font-black text-white">${formatCompactNumber(adsenseReport.stats.clicks || 0)}</p>
+                                </div>
                               </div>
-                              <div class="rounded-[1.4rem] border border-white/10 bg-slate-950/70 p-4">
-                                <p class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Impressions</p>
-                                <p class="mt-2 text-2xl font-black text-white">${formatCompactNumber(adsenseReport.stats.impressions || 0)}</p>
-                              </div>
-                              <div class="rounded-[1.4rem] border border-white/10 bg-slate-950/70 p-4">
-                                <p class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Page RPM</p>
-                                <p class="mt-2 text-2xl font-black text-white">$${Number(adsenseReport.stats.pageViewsRpm || 0).toFixed(2)}</p>
-                              </div>
-                              <div class="rounded-[1.4rem] border border-white/10 bg-slate-950/70 p-4">
-                                <p class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Clicks</p>
-                                <p class="mt-2 text-2xl font-black text-white">${formatCompactNumber(adsenseReport.stats.clicks || 0)}</p>
-                              </div>
-                            </div>
-                            <p class="mt-4 text-xs leading-6 text-slate-400">${adsenseReport.message || ""}</p>`
-                          : `<div class="mt-5 rounded-[1.5rem] border border-dashed border-amber-400/20 bg-amber-500/5 p-5">
-                              <p class="text-sm font-semibold text-white">Connect AdSense for Real-Time Stats</p>
-                              <p class="mt-2 text-sm leading-6 text-slate-400">MediaLab will reuse your Google sign-in, request AdSense read access, and then pull your actual earnings and traffic metrics into the Console.</p>
-                              <button onclick="openAdsenseLinkModal()" class="mt-4 inline-flex items-center gap-2 rounded-2xl bg-white text-slate-950 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] hover:bg-amber-50 transition-all shadow-[0_18px_35px_rgba(255,255,255,0.12)]">
-                                <i class="fas fa-link"></i>
-                                Connect AdSense
-                              </button>
-                            </div>`
-                      }
+                              <p class="mt-4 text-xs leading-6 text-slate-400">${adsenseReport.message || ""}</p>`
+                            : adsenseReport?.connected
+                              ? `<div class="mt-5 rounded-[1.5rem] border border-dashed border-emerald-400/20 bg-emerald-500/5 p-5">
+                                  <div class="grid grid-cols-2 gap-3">
+                                    <div class="rounded-[1.2rem] border border-white/10 bg-slate-950/50 p-4">
+                                      <p class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">AdSense Status</p>
+                                      <p class="mt-2 text-base font-semibold text-white">${getAdsenseReviewLabel(adsenseReport.siteStatus || currentUser?.adsenseSiteStatus || "")}</p>
+                                    </div>
+                                    <div class="rounded-[1.2rem] border border-white/10 bg-slate-950/50 p-4">
+                                      <p class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Publisher ID</p>
+                                      <p class="mt-2 text-base font-semibold text-white">${currentUser?.adsenseId || "Waiting"}</p>
+                                    </div>
+                                  </div>
+                                  <p class="mt-4 text-sm leading-6 text-slate-400">${adsenseReport.message || "No current AdSense data yet. Once Google starts returning live stats for your hosted domain, they will appear here automatically."}</p>
+                                  <p class="mt-3 text-xs text-emerald-300">Last checked: ${adsenseReport.lastCheckedAt ? formatProjectTimestamp(adsenseReport.lastCheckedAt) : "Waiting"}</p>
+                                </div>`
+                            : `<div class="mt-5 rounded-[1.5rem] border border-dashed border-amber-400/20 bg-amber-500/5 p-5">
+                                <p class="text-sm font-semibold text-white">Connect AdSense for Real-Time Stats</p>
+                                <p class="mt-2 text-sm leading-6 text-slate-400">MediaLab will reuse your Google sign-in, request AdSense read access, and then pull your actual earnings and traffic metrics into the Console.</p>
+                                <button onclick="openAdsenseLinkModal()" class="mt-4 inline-flex items-center gap-2 rounded-2xl bg-white text-slate-950 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] hover:bg-amber-50 transition-all shadow-[0_18px_35px_rgba(255,255,255,0.12)]">
+                                  <i class="fas fa-link"></i>
+                                  Connect AdSense
+                                </button>
+                              </div>`
+                        }
                     </div>
                     ${buildGithubStorageStatusMarkup("console")}
                   </div>
@@ -3226,7 +4553,7 @@
                                         <p class="mt-1 text-[11px] text-slate-500 truncate">${project.liveUrl || project.url || ""}</p>
                                         <p class="mt-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Last Published ${lastPublished}</p>
                                       </div>
-                                      <button onclick="openLiveProjectDetail('${filename}')" class="shrink-0 inline-flex items-center gap-2 rounded-2xl bg-cyan-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-cyan-300 border border-cyan-400/20 hover:bg-cyan-500/15 transition-all">
+                                      <button onclick="openLiveProjectDetail('${encodeURIComponent(String(filename || ""))}')" class="shrink-0 inline-flex items-center gap-2 rounded-2xl bg-cyan-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-cyan-300 border border-cyan-400/20 hover:bg-cyan-500/15 transition-all">
                                         <i class="fas fa-sliders"></i>
                                         Manage
                                       </button>
@@ -4959,6 +6286,7 @@
       // ====================== INIT ======================
       window.onload = async () => {
         renderCards();
+        storePendingReferralFromUrl();
         await checkAuth();
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get("loggedIn") === "true") {
@@ -6561,11 +7889,12 @@
           if (!res.ok) {
             throw new Error(`Template request failed: ${res.status}`);
           }
+          beginUniversalProgress(`Loading ${labels[slug] || "website"} template...`, 14, 88);
           let html = await res.text();
           const ownerName = String(currentUser?.name || "Your Game World").trim() || "Your Game World";
           html = html.replace(/__MEDIALAB_OWNER_NAME__/g, ownerName);
           builderImportedProject = null;
-          builderRawImportDocument = "";
+          builderRawImportDocument = html;
           builderCodeMode = true;
           updateBuilderUI();
           editor.value = html;
@@ -6574,12 +7903,14 @@
           builderCodeMode = false;
           updateBuilderUI();
           preserveBuilderFullscreenAfterUpload();
+          completeUniversalProgress(`${labels[slug] || "Website"} ready.`);
           showBuilderSnackbar(
             `${labels[slug] || "Website"} loaded into the canvas.`,
             "success",
           );
         } catch (error) {
           console.error("Template load failed:", error);
+          failUniversalProgress("Template loading failed.");
           showBuilderSnackbar(
             "Could not load that website template right now.",
             "error",
@@ -9198,6 +10529,67 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
           input.select();
         }, 40);
       }
+      let universalProgressPulse = null;
+      function getUniversalProgressEls() {
+        return {
+          progressDiv: document.getElementById("universal-progress"),
+          statusText: document.getElementById("universal-status-text"),
+          bar: document.getElementById("universal-bar"),
+          percentLabel: document.getElementById("universal-percent"),
+        };
+      }
+      function clearUniversalProgressPulse() {
+        if (universalProgressPulse) {
+          clearInterval(universalProgressPulse);
+          universalProgressPulse = null;
+        }
+      }
+      function setUniversalProgress({
+        visible = true,
+        message = "Working...",
+        percent = 0,
+        tone = "cyan",
+      } = {}) {
+        const { progressDiv, statusText, bar, percentLabel } = getUniversalProgressEls();
+        if (!progressDiv || !statusText || !bar || !percentLabel) return;
+        if (visible) progressDiv.classList.remove("hidden");
+        else progressDiv.classList.add("hidden");
+        statusText.innerText = message;
+        bar.classList.remove("bg-cyan-400", "bg-green-500", "bg-rose-500");
+        bar.classList.add(
+          tone === "success"
+            ? "bg-green-500"
+            : tone === "error"
+              ? "bg-rose-500"
+              : "bg-cyan-400",
+        );
+        const safePercent = Math.max(0, Math.min(100, Number(percent) || 0));
+        bar.style.width = `${safePercent}%`;
+        percentLabel.innerText = `${Math.round(safePercent)}%`;
+      }
+      function beginUniversalProgress(message = "Working...", start = 10, cap = 94) {
+        clearUniversalProgressPulse();
+        let current = Math.max(0, Math.min(cap, start));
+        setUniversalProgress({ visible: true, message, percent: current, tone: "cyan" });
+        universalProgressPulse = setInterval(() => {
+          current = Math.min(cap, current + (current < 40 ? 5 : current < 70 ? 3 : 1));
+          setUniversalProgress({ visible: true, message, percent: current, tone: "cyan" });
+        }, 520);
+      }
+      function completeUniversalProgress(message = "Done") {
+        clearUniversalProgressPulse();
+        setUniversalProgress({ visible: true, message, percent: 100, tone: "success" });
+        setTimeout(() => {
+          setUniversalProgress({ visible: false, message: "Ready", percent: 0, tone: "cyan" });
+        }, 1800);
+      }
+      function failUniversalProgress(message = "Failed") {
+        clearUniversalProgressPulse();
+        setUniversalProgress({ visible: true, message, percent: 100, tone: "error" });
+        setTimeout(() => {
+          setUniversalProgress({ visible: false, message: "Ready", percent: 0, tone: "cyan" });
+        }, 2400);
+      }
       function closeBuilderPublishModal() {
         document.getElementById("builder-publish-modal")?.classList.add("hidden");
       }
@@ -9225,29 +10617,27 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
         }
         const isFolderProject = Boolean(builderImportedProject?.files?.length);
         const payload = isFolderProject ? null : buildExportPayload("medialab-page");
-        if (!isFolderProject && !payload?.body?.trim()) {
+        const documentHtml = isFolderProject ? "" : getBuilderEditorDocument();
+        const hasDirectDocument = /<html[\s>]/i.test(String(documentHtml || ""));
+        if (!isFolderProject && !payload?.body?.trim() && !hasDirectDocument) {
           showBuilderSnackbar("Add content to the canvas before publishing.", "error");
           return;
         }
-        const progressDiv = document.getElementById("universal-progress");
-        const statusText = document.getElementById("universal-status-text");
-        const bar = document.getElementById("universal-bar");
-        const percentLabel = document.getElementById("universal-percent");
-        if (progressDiv && statusText && bar && percentLabel) {
-          progressDiv.classList.remove("hidden");
-          statusText.innerText = isFolderProject
-            ? "Uploading full project folder to GitHub Pages..."
-            : "Publishing project to GitHub Pages...";
-          bar.classList.remove("bg-green-500");
-          bar.classList.add("bg-cyan-400");
-          bar.style.width = "18%";
-          percentLabel.innerText = "18%";
-        }
+        beginUniversalProgress(
+          isFolderProject
+            ? "Preparing full project folder for GitHub..."
+            : "Preparing project for GitHub publish...",
+          12,
+          93,
+        );
         try {
-          if (isFolderProject && statusText && bar && percentLabel) {
-            statusText.innerText = "Preparing project files...";
-            bar.style.width = "38%";
-            percentLabel.innerText = "38%";
+          if (isFolderProject) {
+            setUniversalProgress({
+              visible: true,
+              message: "Encoding project files...",
+              percent: 28,
+              tone: "cyan",
+            });
           }
           const folderFiles = isFolderProject
             ? (builderImportedProject.files || []).map((file) => {
@@ -9277,12 +10667,23 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
                 htmlContent: payload.body || "",
                 cssContent: payload.css || "",
                 interactionScript: payload.interactionScript || "",
+                documentHtml: documentHtml || "",
               };
-          if (isFolderProject && statusText && bar && percentLabel) {
-            statusText.innerText = "Pushing project files to GitHub...";
-            bar.style.width = "62%";
-            percentLabel.innerText = "62%";
-          }
+          setUniversalProgress({
+            visible: true,
+            message: isFolderProject
+              ? "Uploading project to GitHub hosting..."
+              : "Uploading page to GitHub hosting...",
+            percent: isFolderProject ? 56 : 38,
+            tone: "cyan",
+          });
+          beginUniversalProgress(
+            isFolderProject
+              ? "GitHub is writing your project files..."
+              : "GitHub is publishing your page...",
+            isFolderProject ? 56 : 38,
+            95,
+          );
           const res = await fetch(endpoint, {
             method: "POST",
             credentials: "include",
@@ -9295,15 +10696,11 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
           }
           currentUser = { ...(currentUser || {}), ...(data.user || {}) };
           updateUserProfileUi();
-          if (statusText && bar && percentLabel) {
-            statusText.innerText = isFolderProject
+          completeUniversalProgress(
+            isFolderProject
               ? "Hosted project published successfully."
-              : "Project published successfully.";
-            bar.classList.remove("bg-cyan-400");
-            bar.classList.add("bg-green-500");
-            bar.style.width = "100%";
-            percentLabel.innerText = "100%";
-          }
+              : "Project published successfully.",
+          );
           await logUsageActivity(
             "github-publish-ui",
             `published ${data.liveProject?.fileName || data.liveUrl || projectName}`,
@@ -9320,36 +10717,12 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
               maybePromptRenderHostingOnboarding(true);
             }, 200);
           }
-          setTimeout(() => {
-            progressDiv?.classList.add("hidden");
-            if (bar) {
-              bar.style.width = "0%";
-              bar.classList.remove("bg-green-500");
-              bar.classList.add("bg-cyan-400");
-            }
-            if (percentLabel) percentLabel.innerText = "0%";
-          }, 3600);
         } catch (error) {
-          if (statusText && bar && percentLabel) {
-            statusText.innerText = "Publishing failed.";
-            bar.classList.remove("bg-cyan-400", "bg-green-500");
-            bar.classList.add("bg-rose-500");
-            bar.style.width = "100%";
-            percentLabel.innerText = "100%";
-          }
+          failUniversalProgress("Publishing failed.");
           showBuilderSnackbar(
             error.message || "Could not publish this project right now.",
             "error",
           );
-          setTimeout(() => {
-            progressDiv?.classList.add("hidden");
-            if (bar) {
-              bar.style.width = "0%";
-              bar.classList.remove("bg-rose-500", "bg-green-500");
-              bar.classList.add("bg-cyan-400");
-            }
-            if (percentLabel) percentLabel.innerText = "0%";
-          }, 3600);
         }
       }
       function refreshBuilderCodeMode() {
@@ -9435,6 +10808,9 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
             builderRawImportDocument = builderImportedProject.rootHtml;
             renderRawImportedHtmlPreview(builderImportedProject.rootHtml, false);
             return;
+          }
+          if (builderRawImportDocument) {
+            builderRawImportDocument = editor.value;
           }
           try {
             tryApplyCodeModeToCanvas(true);
