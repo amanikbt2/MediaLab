@@ -3136,57 +3136,19 @@
             >
               🚀 Setup My Render Server
             </button>
-            <button
-              onclick="copyRenderBlueprintFile()"
-              class="mt-3 min-h-[48px] w-full rounded-[1.2rem] border border-white/10 bg-white/5 px-4 py-3 text-sm font-black text-white hover:bg-white/10 transition-all"
-            >
-              Copy render.yaml
-            </button>
             <div class="mt-4 rounded-2xl border border-white/10 bg-slate-950/35 px-4 py-4">
               <p class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">What happens next?</p>
               <div class="mt-3 space-y-2 text-sm leading-6 text-slate-300">
                 <p>1. Sign in to Render with GitHub.</p>
                 <p>2. Click Apply to use the free Node.js web service blueprint.</p>
-                <p>3. MediaLab then helps you verify the service ID and live URL.</p>
+                <p>3. MediaLab helps you sync the final live URL once Render finishes building.</p>
               </div>
             </div>
             <p id="render-blueprint-warning" class="hidden mt-4 rounded-2xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100"></p>
           </div>
-          <div class="rounded-[1.7rem] border border-white/10 bg-white/[0.04] p-5">
-            <p class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Step 2</p>
-            <p class="mt-2 text-lg font-semibold text-white">Confirm the Render service</p>
-            <p class="mt-2 text-sm leading-6 text-slate-400">After you click deploy, MediaLab waits a few seconds, then asks for the Render <span class="font-black text-white">Service ID</span> so your project stays linked accurately.</p>
-            <div
-              id="render-service-id-step"
-              class="hidden mt-4 rounded-[1.5rem] border border-cyan-400/15 bg-cyan-500/5 p-4 transition-all duration-500 ease-out"
-            >
-              <label class="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-300">Render Service ID</label>
-              <input
-                id="render-service-id-input"
-                type="text"
-                placeholder="srv-xxxxxxxxxxxxxxxx"
-                oninput="handleRenderServiceIdInput()"
-                class="mt-3 min-h-[48px] w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3.5 text-white outline-none focus:border-cyan-400"
-              />
-              <p class="mt-3 text-xs leading-6 text-slate-400">
-                Open your Render blueprint, copy the service ID that starts with <span class="font-black text-white">srv-</span>, and paste it here.
-              </p>
-              <p id="render-service-id-error" class="hidden mt-3 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-100"></p>
-              <a
-                id="render-service-dashboard-link"
-                href="#"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="hidden mt-4 inline-flex items-center gap-2 text-sm font-semibold text-cyan-200 hover:text-white"
-              >
-                <i class="fas fa-arrow-up-right-from-square text-xs"></i>
-                <span>Open this service on Render</span>
-              </a>
-            </div>
-          </div>
         </div>
         <div class="mt-6 rounded-[1.9rem] border border-cyan-400/15 bg-cyan-500/5 p-5 sm:p-6">
-          <label class="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-300">Step 3 · Render Live URL</label>
+          <label class="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-300">Step 2 · Render Live URL</label>
           <input
             id="render-hosting-url-input"
             type="url"
@@ -8763,6 +8725,55 @@
           document.getElementById("adsense-portal-panel")?.classList.remove("hidden");
         }
       }
+      async function disconnectAdsenseAccount() {
+        if (!loggedIn || !currentUser) {
+          showLogin();
+          return;
+        }
+        try {
+          const res = await fetch("/api/adsense/disconnect", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+          });
+          const data = await res.json().catch(() => ({}));
+          if (res.status === 401) {
+            await handleAuthSessionFailure(data.message || "Your session ended. Please sign in again.");
+            return;
+          }
+          if (!res.ok || !data.success) {
+            throw new Error(data.message || "Could not remove your AdSense account.");
+          }
+          currentUser = { ...(currentUser || {}), ...(data.user || {}) };
+          currentAdsenseConsoleReport = {
+            success: false,
+            connected: false,
+            stats: null,
+            message: "AdSense is not linked yet.",
+          };
+          stopAdsenseStatusSyncLoop();
+          closeAdsenseLinkModal();
+          updateUserProfileUi();
+          showBuilderSnackbar("AdSense account removed from MediaLab.", "success");
+        } catch (error) {
+          showBuilderSnackbar(error.message || "Could not remove AdSense right now.", "error");
+        }
+      }
+      async function openAdsenseConnectionInfo() {
+        const shouldRemove = await openAppDialog({
+          chip: "AdSense Account",
+          title: "Remove linked AdSense account?",
+          message:
+            "Are you sure? This will remove your AdSense connection from MediaLab, clear the saved publisher details, and return the Console to the original link state.",
+          tone: "error",
+          confirmLabel: "Remove Account",
+          cancelLabel: "Keep Linked",
+          destructive: true,
+        });
+        if (shouldRemove) {
+          await disconnectAdsenseAccount();
+        }
+      }
       function renderAdsenseChecklist(checklist = {}) {
         const setLine = (id, ok, label) => {
           const node = document.getElementById(id);
@@ -10597,8 +10608,17 @@
                               : "Connect AdSense for real-time earnings, impressions, RPM, and click performance."
                           }</p>
                         </div>
-                        <div class="w-12 h-12 rounded-[1.3rem] border border-amber-400/20 bg-amber-500/10 flex items-center justify-center text-amber-300 shadow-[0_10px_30px_rgba(245,158,11,0.14)]">
-                          <i class="fab fa-google"></i>
+                        <div class="flex items-center gap-2">
+                          ${
+                            adsenseReport?.connected
+                              ? `<button onclick="openAdsenseConnectionInfo()" class="inline-flex h-10 w-10 items-center justify-center rounded-[1rem] border border-white/10 bg-white/5 text-slate-300 hover:border-amber-400/30 hover:text-amber-200 transition-all" aria-label="AdSense account options">
+                                  <i class="fas fa-info text-sm"></i>
+                                </button>`
+                              : ``
+                          }
+                          <div class="w-12 h-12 rounded-[1.3rem] border border-amber-400/20 bg-amber-500/10 flex items-center justify-center text-amber-300 shadow-[0_10px_30px_rgba(245,158,11,0.14)]">
+                            <i class="fab fa-google"></i>
+                          </div>
                         </div>
                       </div>
                         ${
@@ -16832,6 +16852,8 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
         }
         const modal = document.getElementById("builder-publish-modal");
         const input = document.getElementById("builder-publish-name-input");
+        const descriptionInput = document.getElementById("builder-publish-description-input");
+        const typeSelect = document.getElementById("builder-publish-type-select");
         const repoLabel = document.getElementById("builder-publish-repo-label");
         if (!modal || !input) return;
         if (repoLabel) repoLabel.textContent = getGithubRepoLabel();
@@ -16843,6 +16865,8 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
           .replace(/\s+/g, " ")
           .trim()
           .slice(0, 48);
+        if (descriptionInput) descriptionInput.value = "";
+        if (typeSelect) typeSelect.value = "landing page, website, startup";
         modal.classList.remove("hidden");
         setTimeout(() => {
           input.focus();
@@ -16912,6 +16936,14 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
       }
       function closeBuilderPublishModal() {
         document.getElementById("builder-publish-modal")?.classList.add("hidden");
+      }
+      function resetBuilderPublishForm() {
+        const input = document.getElementById("builder-publish-name-input");
+        const descriptionInput = document.getElementById("builder-publish-description-input");
+        const typeSelect = document.getElementById("builder-publish-type-select");
+        if (input) input.value = "";
+        if (descriptionInput) descriptionInput.value = "";
+        if (typeSelect) typeSelect.value = "landing page, website, startup";
       }
       function handleBuilderPublishKeydown(event) {
         if (event.key === "Enter") {
@@ -17023,6 +17055,12 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
           if (!res.ok || !data.success) {
             throw new Error(data.message || "Could not publish this project.");
           }
+          setUniversalProgress({
+            visible: true,
+            message: "Finalizing deployment details...",
+            percent: 97,
+            tone: "success",
+          });
           currentUser = { ...(currentUser || {}), ...(data.user || {}) };
           updateUserProfileUi();
           completeUniversalProgress(
@@ -17030,6 +17068,7 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
               ? "Hosted project published successfully."
               : "Project published successfully.",
           );
+          resetBuilderPublishForm();
           await logUsageActivity(
             "github-publish-ui",
             `published ${data.liveProject?.fileName || data.liveUrl || projectName}`,

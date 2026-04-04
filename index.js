@@ -4938,6 +4938,54 @@ app.post("/api/adsense/sync-status", async (req, res) => {
   }
 });
 
+app.post("/api/adsense/disconnect", async (req, res) => {
+  if (!req.isAuthenticated() || !req.user) {
+    return res.status(401).json({ success: false, message: "You need to sign in first." });
+  }
+  try {
+    const user = await User.findById(req.user._id).select("+googleRefreshToken +adsenseAdCode");
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found." });
+    }
+
+    user.adsenseId = "";
+    user.adsenseAccountName = "";
+    user.adsenseSiteUrl = "";
+    user.adsenseSiteStatus = "";
+    user.adsenseLastCheckedAt = null;
+    user.adsenseApprovedAt = null;
+    user.googleRefreshToken = "";
+    user.adsenseAdCode = "";
+    user.liveProjects = (user.liveProjects || []).map((project) => ({
+      ...project,
+      adsensePublisherId: "",
+      monetizationEnabled: false,
+      isMonetized: false,
+      monetizationVerifiedAt: null,
+    }));
+
+    await user.save();
+    req.user.adsenseId = "";
+    req.user.adsenseAccountName = "";
+    req.user.adsenseSiteUrl = "";
+    req.user.adsenseSiteStatus = "";
+    req.user.adsenseLastCheckedAt = null;
+    req.user.adsenseApprovedAt = null;
+
+    return res.json({
+      success: true,
+      message: "AdSense account removed from MediaLab.",
+      user: toSafeUser(user),
+    });
+  } catch (error) {
+    console.error("AdSense disconnect failed:", error);
+    return res.status(500).json({
+      success: false,
+      message: error?.message || "Could not remove AdSense right now.",
+    });
+  }
+});
+
 app.get("/api/adsense/report", async (req, res) => {
   if (!req.isAuthenticated() || !req.user) {
     return res
