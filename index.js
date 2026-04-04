@@ -757,7 +757,7 @@ function buildDefaultRenderServiceName(owner = "client") {
 }
 
 function buildProjectLiveUrl(user, project = {}) {
-  if (project?.renderHostedConfirmed && project?.renderUrl) {
+  if (project?.renderUrl) {
     return buildHostedProjectUrl(project.renderUrl, project);
   }
   if (project?.liveUrl || project?.url) return project.liveUrl || project.url;
@@ -765,6 +765,14 @@ function buildProjectLiveUrl(user, project = {}) {
   if (!user?.githubUsername || !filename) return "";
   const routePath = buildProjectRoutePath(project);
   return `https://${user.githubUsername}.github.io/medialab/${routePath}`;
+}
+
+function getUserPrimaryRenderBaseUrl(user) {
+  const projects = Array.isArray(user?.liveProjects) ? user.liveProjects : [];
+  const hosted = projects.find(
+    (project) => project?.renderUrl && (project?.renderHostedConfirmed || project?.renderDeployStatus),
+  );
+  return hosted?.renderUrl ? normalizeRenderUrl(hosted.renderUrl) : "";
 }
 
 
@@ -814,9 +822,21 @@ function normalizeMarketplacePrice(value) {
   return Number(amount.toFixed(2));
 }
 
-function buildMarketplacePublicItem(item = {}) {
+function buildMarketplacePublicItem(item = {}, viewerId = "") {
   const comments = Array.isArray(item.comments) ? item.comments : [];
   const purchases = Array.isArray(item.purchases) ? item.purchases : [];
+  const ratings = Array.isArray(item.ratings) ? item.ratings : [];
+  const averageRating = ratings.length
+    ? Number(
+        (
+          ratings.reduce((sum, rating) => sum + Number(rating.value || 0), 0) / ratings.length
+        ).toFixed(1),
+      )
+    : 0;
+  const ratingPercent = ratings.length
+    ? Number((((averageRating / 5) * 100) || 0).toFixed(1))
+    : 0;
+  const normalizedViewerId = String(viewerId || "").trim();
   return {
     _id: item._id,
     projectId: item.projectId || "",
@@ -825,8 +845,9 @@ function buildMarketplacePublicItem(item = {}) {
     description: item.description || "",
     price: Number(item.price || 0),
     category: item.category || "General",
-    screenshots: Array.isArray(item.screenshots) ? item.screenshots.slice(0, 3) : [],
+    screenshots: Array.isArray(item.screenshots) ? item.screenshots.slice(0, 4) : [],
     purpose: item.purpose || "",
+    sourceType: item.sourceType || "draft",
     status: item.status || "pending",
     authorName: item.authorName || "",
     authorAvatar: item.authorAvatar || "",
@@ -843,14 +864,12 @@ function buildMarketplacePublicItem(item = {}) {
       date: comment.date || null,
     })),
     commentsCount: comments.length,
-    averageRating: comments.length
-      ? Number(
-          (
-            comments.reduce((sum, comment) => sum + Number(comment.rating || 0), 0) /
-            comments.length
-          ).toFixed(1),
-        )
-      : 0,
+    averageRating,
+    ratingPercent,
+    ratingCount: ratings.length,
+    viewerHasRated: normalizedViewerId
+      ? ratings.some((rating) => String(rating?.userId || "") === normalizedViewerId)
+      : false,
     purchaseCount: purchases.length,
     pendingPurchases: purchases.filter((purchase) => purchase.status === "pending").length,
     createdAt: item.createdAt || null,
@@ -877,12 +896,25 @@ async function fetchMarketplaceSourceHtml(author, projectId = "") {
   return { sourceProject, html };
 }
 
+function buildMarketplaceProjectId(sourceType = "draft", projectId = "", title = "") {
+  const raw = String(projectId || "").trim();
+  if (raw) return raw;
+  const seed = sanitizeMarketplaceText(title || "marketplace-project", 80)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return `${String(sourceType || "draft").trim() || "draft"}:${seed || "project"}:${Date.now()}`;
+}
+
 async function transferMarketplaceProjectToBuyer(listing, buyer) {
   const author = await User.findById(listing.authorId).select("+githubToken");
   if (!author) {
     throw new Error("The seller account for this project could not be found.");
   }
-  const { sourceProject, html } = await fetchMarketplaceSourceHtml(author, listing.projectId);
+  const inlineHtml = String(listing?.sourceHtml || "").trim();
+  const { sourceProject, html } = inlineHtml
+    ? { sourceProject: null, html: inlineHtml }
+    : await fetchMarketplaceSourceHtml(author, listing.projectId);
   const draftName = `${sanitizeMarketplaceText(listing.title || sourceProject?.name || "Marketplace Project", 80)} Purchase`;
   buyer.builderDrafts = Array.isArray(buyer.builderDrafts) ? buyer.builderDrafts : [];
   buyer.builderDrafts = buyer.builderDrafts.filter((draft) => String(draft?.name || "").trim() !== draftName);
@@ -1609,7 +1641,7 @@ app.post("/api/github/publish", publishRateLimit, express.json({ limit: "10mb" }
         message: "Enter a project name before publishing.",
       });
     }
-    if (!htmlContent) {
+    if (!htmlContent && !documentHtml) {
       return res.status(400).json({
         success: false,
         message: "This builder project is empty. Add some content before publishing.",
@@ -1623,6 +1655,7 @@ app.post("/api/github/publish", publishRateLimit, express.json({ limit: "10mb" }
     const folderSlug = filename.replace(/\.html$/i, "") || "medialab-page";
     const repoFolderPath = normalizeRepoFilePath(`${GITHUB_PUBLIC_ROOT}/${folderSlug}`);
     const repoFilePath = normalizeRepoFilePath(`${repoFolderPath}/index.html`);
+    const inheritedRenderBaseUrl = getUserPrimaryRenderBaseUrl(user);
     user.liveProjects = Array.isArray(user.liveProjects) ? user.liveProjects : [];
     const existingProject = user.liveProjects.find(
       (project) => String(project?.fileName || project?.filename || "") === repoFilePath,
@@ -1693,9 +1726,12 @@ app.post("/api/github/publish", publishRateLimit, express.json({ limit: "10mb" }
       renderRepoUrl: buildGithubRepoUrl(owner, repo),
       renderServiceName:
         existingProject?.renderServiceName || buildDefaultRenderServiceName(owner),
-      renderUrl: existingProject?.renderUrl || "",
+      renderUrl: existingProject?.renderUrl || inheritedRenderBaseUrl || "",
       renderHostedConfirmed: Boolean(existingProject?.renderHostedConfirmed),
       renderVerifiedAt: existingProject?.renderVerifiedAt || null,
+      renderDeployStatus:
+        existingProject?.renderDeployStatus ||
+        (user.confirmedFirstHosting && inheritedRenderBaseUrl ? "deploying" : ""),
       adsensePublisherId:
         existingProject?.monetizationEnabled && existingProject?.isMonetized
           ? user.adsenseId || ""
@@ -1738,7 +1774,7 @@ app.post("/api/github/publish", publishRateLimit, express.json({ limit: "10mb" }
       liveUrl,
       repoUrl: buildGithubRepoUrl(owner, repo),
       renderBlueprintReady: true,
-      needsHostingOnboarding: !nextProject.renderHostedConfirmed,
+      needsHostingOnboarding: !nextProject.renderHostedConfirmed && !nextProject.renderUrl,
       warnings,
       sizeBytes: htmlSizeBytes,
       user: toSafeUser(user),
@@ -1837,6 +1873,7 @@ app.post("/api/github/publish-folder", publishRateLimit, express.json({ limit: "
     const repoFolderPath = normalizeRepoFilePath(`${GITHUB_PUBLIC_ROOT}/${folderSlug}`);
     const owner = user.githubUsername;
     const repo = "medialab";
+    const inheritedRenderBaseUrl = getUserPrimaryRenderBaseUrl(user);
     const octokit = buildGithubClient(user);
     await ensureGithubRepoScaffold(octokit, owner, repo);
 
@@ -1872,9 +1909,12 @@ app.post("/api/github/publish-folder", publishRateLimit, express.json({ limit: "
       renderRepoUrl: buildGithubRepoUrl(owner, repo),
       renderServiceName:
         existingProject?.renderServiceName || buildDefaultRenderServiceName(owner),
-      renderUrl: existingProject?.renderUrl || "",
+      renderUrl: existingProject?.renderUrl || inheritedRenderBaseUrl || "",
       renderHostedConfirmed: Boolean(existingProject?.renderHostedConfirmed),
       renderVerifiedAt: existingProject?.renderVerifiedAt || null,
+      renderDeployStatus:
+        existingProject?.renderDeployStatus ||
+        (user.confirmedFirstHosting && inheritedRenderBaseUrl ? "deploying" : ""),
       adsensePublisherId:
         Boolean(existingProject?.monetizationEnabled) && Boolean(existingProject?.isMonetized)
           ? user.adsenseId || ""
@@ -1917,7 +1957,7 @@ app.post("/api/github/publish-folder", publishRateLimit, express.json({ limit: "
       liveUrl,
       repoUrl: buildGithubRepoUrl(owner, repo),
       renderBlueprintReady: true,
-      needsHostingOnboarding: !nextProject.renderHostedConfirmed,
+      needsHostingOnboarding: !nextProject.renderHostedConfirmed && !nextProject.renderUrl,
       fileCount: safeFiles.length,
       user: toSafeUser(user),
     });
@@ -1970,11 +2010,44 @@ app.get("/api/github/projects", async (req, res) => {
         }),
       );
       const nextProjects = verified.filter(Boolean);
-        if (nextProjects.length !== user.liveProjects.length) {
-          user.liveProjects = nextProjects;
-          await user.save();
+      let projectsChanged = nextProjects.length !== user.liveProjects.length;
+      user.liveProjects = nextProjects;
+      const deployCandidates = user.liveProjects.filter(
+        (project) => project?.renderUrl && !project?.renderHostedConfirmed,
+      );
+      for (const project of deployCandidates) {
+        try {
+          const renderUrl = buildHostedProjectUrl(project.renderUrl, project);
+          const response = await fetch(renderUrl, {
+            method: "GET",
+            redirect: "follow",
+            headers: { "User-Agent": "MediaLab-Deploy-Check" },
+          });
+          if (response.status < 400) {
+            project.renderHostedConfirmed = true;
+            project.renderVerifiedAt = new Date();
+            project.renderDeployStatus = "live";
+            project.updatedAt = new Date();
+            projectsChanged = true;
+            if (!user.confirmedFirstHosting) {
+              user.confirmedFirstHosting = true;
+              user.firstHostingConfirmedAt = new Date();
+            }
+          } else if (!project.renderDeployStatus) {
+            project.renderDeployStatus = "deploying";
+            projectsChanged = true;
+          }
+        } catch {
+          if (!project.renderDeployStatus) {
+            project.renderDeployStatus = "deploying";
+            projectsChanged = true;
+          }
         }
       }
+      if (projectsChanged) {
+        await user.save();
+      }
+    }
     req.user.liveProjects = user.liveProjects;
     return res.json({
       success: true,
@@ -2382,11 +2455,22 @@ app.get("/api/github/project-monitor", async (req, res) => {
       health.label =
         response.status < 400 ? "System Online" : response.status >= 500 ? "Offline" : "Deploying";
       html = await response.text();
+      if (response.status < 400 && project.renderUrl && !project.renderHostedConfirmed) {
+        project.renderHostedConfirmed = true;
+        project.renderVerifiedAt = new Date();
+        project.renderDeployStatus = "live";
+        project.updatedAt = new Date();
+        if (!user.confirmedFirstHosting) {
+          user.confirmedFirstHosting = true;
+          user.firstHostingConfirmedAt = new Date();
+        }
+        await user.save();
+      }
     } catch (error) {
       health.ok = false;
       health.status = 0;
-      health.state = "offline";
-      health.label = "Offline";
+      health.state = project.renderUrl && !project.renderHostedConfirmed ? "deploying" : "offline";
+      health.label = health.state === "deploying" ? "Deploying" : "Offline";
     }
 
     const adsDetected = detectAdsenseScript(
@@ -2469,7 +2553,7 @@ app.get("/api/marketplace", async (req, res) => {
     ]);
     return res.json({
       success: true,
-      items: items.map((item) => buildMarketplacePublicItem(item)),
+      items: items.map((item) => buildMarketplacePublicItem(item, req.user?._id)),
     });
   } catch (error) {
     console.error("Marketplace discovery fetch failed:", error);
@@ -2494,7 +2578,7 @@ app.get("/api/marketplace/mine", async (req, res) => {
       .lean();
     return res.json({
       success: true,
-      items: items.map((item) => buildMarketplacePublicItem(item)),
+      items: items.map((item) => buildMarketplacePublicItem(item, req.user?._id)),
     });
   } catch (error) {
     console.error("Marketplace my sales fetch failed:", error);
@@ -2516,7 +2600,7 @@ app.get("/api/marketplace/:id", async (req, res) => {
     }
     return res.json({
       success: true,
-      item: buildMarketplacePublicItem(item),
+      item: buildMarketplacePublicItem(item, req.user?._id),
     });
   } catch (error) {
     console.error("Marketplace detail fetch failed:", error);
@@ -2540,7 +2624,14 @@ app.post("/api/marketplace", publishRateLimit, express.json({ limit: "15mb" }), 
     if (!user) {
       return res.status(404).json({ success: false, message: "User not found." });
     }
-    const projectId = String(req.body?.projectId || "").trim();
+    const sourceType = ["upload", "draft", "live"].includes(String(req.body?.sourceType || "").trim())
+      ? String(req.body.sourceType).trim()
+      : "draft";
+    const projectId = buildMarketplaceProjectId(
+      sourceType,
+      req.body?.projectId || "",
+      req.body?.title || "",
+    );
     const title = sanitizeMarketplaceText(req.body?.title || "", 120);
     const description = sanitizeMarketplaceText(req.body?.description || "", 1200);
     const purpose = sanitizeMarketplaceText(req.body?.purpose || "", 800);
@@ -2549,19 +2640,66 @@ app.post("/api/marketplace", publishRateLimit, express.json({ limit: "15mb" }), 
     const screenshots = (Array.isArray(req.body?.screenshots) ? req.body.screenshots : [])
       .map((value) => String(value || "").trim())
       .filter(Boolean)
-      .slice(0, 3);
+      .slice(0, 4);
+    const sourceHtml = String(req.body?.sourceHtml || "").trim();
+    const sourceEntryPath = normalizeImportedEntryPath(req.body?.sourceEntryPath || "index.html");
+    const sourceFiles = (Array.isArray(req.body?.sourceFiles) ? req.body.sourceFiles : [])
+      .map((file) => ({
+        path: normalizeRepoFilePath(file?.path || file?.name || ""),
+        name: String(file?.name || "").trim(),
+      }))
+      .filter((file) => file.path);
 
-    if (!projectId || !title || !description || !purpose) {
+    if (!title || !description || purpose.length < 10) {
       return res.status(400).json({
         success: false,
         message: "Pick a project and complete the required marketplace details.",
       });
     }
-    const sourceProject = findLiveProject(user, projectId);
-    if (!sourceProject) {
+    if (screenshots.length < 4) {
       return res.status(400).json({
         success: false,
-        message: "Choose one of your live MediaLab projects before listing it.",
+        message: "Upload 4 preview images so buyers get a proper marketplace preview.",
+      });
+    }
+    let sourceProject = null;
+    let liveUrl = "";
+    let resolvedSourceHtml = sourceHtml;
+    if (sourceType === "draft") {
+      const builderDrafts = Array.isArray(user.builderDrafts) ? user.builderDrafts : [];
+      const draft = builderDrafts.find((item) => String(item?.name || "").trim() === projectId);
+      if (!draft) {
+        return res.status(400).json({
+          success: false,
+          message: "Choose one of your MediaLab drafts before listing it.",
+        });
+      }
+      resolvedSourceHtml = resolvedSourceHtml || String(draft.canvasHtml || "").trim();
+    } else if (sourceType === "upload") {
+      if (!resolvedSourceHtml) {
+        return res.status(400).json({
+          success: false,
+          message: "Upload a project folder that contains an HTML entry file before continuing.",
+        });
+      }
+    } else {
+      sourceProject = findLiveProject(user, projectId);
+      liveUrl = sourceProject ? buildProjectLiveUrl(user, sourceProject) : "";
+      if (!resolvedSourceHtml && sourceProject) {
+        const fetched = await fetchMarketplaceSourceHtml(user, projectId);
+        resolvedSourceHtml = String(fetched?.html || "").trim();
+      }
+      if (!resolvedSourceHtml) {
+        return res.status(400).json({
+          success: false,
+          message: "Terminate the live project first so MediaLab can package it for the marketplace.",
+        });
+      }
+    }
+    if (!resolvedSourceHtml) {
+      return res.status(400).json({
+        success: false,
+        message: "MediaLab could not package this project for the marketplace yet.",
       });
     }
 
@@ -2586,10 +2724,14 @@ app.post("/api/marketplace", publishRateLimit, express.json({ limit: "15mb" }), 
       category,
       screenshots,
       purpose,
+      sourceType,
+      sourceHtml: resolvedSourceHtml,
+      sourceEntryPath,
+      sourceFiles,
       status: "pending",
       authorName: user.name || user.email || "MediaLab Creator",
       authorAvatar: user.profilePicture || "",
-      liveUrl: buildProjectLiveUrl(user, sourceProject),
+      liveUrl,
     });
 
     await createUsageLog({
@@ -2600,13 +2742,13 @@ app.post("/api/marketplace", publishRateLimit, express.json({ limit: "15mb" }), 
       action: "marketplace-listing-create",
       summary: `submitted marketplace listing ${title}`,
       source: "marketplace",
-      metadata: { projectId, title, price },
+      metadata: { projectId, title, price, sourceType },
     });
 
     return res.json({
       success: true,
       message: "Project submitted for marketplace review.",
-      item: buildMarketplacePublicItem(item.toObject()),
+      item: buildMarketplacePublicItem(item.toObject(), req.user?._id),
     });
   } catch (error) {
     console.error("Marketplace create failed:", error);
@@ -2644,13 +2786,54 @@ app.post("/api/marketplace/:id/comment", publishRateLimit, express.json(), async
     return res.json({
       success: true,
       message: "Comment posted.",
-      item: buildMarketplacePublicItem(item.toObject()),
+      item: buildMarketplacePublicItem(item.toObject(), req.user?._id),
     });
   } catch (error) {
     console.error("Marketplace comment failed:", error);
     return res.status(500).json({
       success: false,
       message: error?.message || "Could not save your marketplace comment.",
+    });
+  }
+});
+
+app.post("/api/marketplace/:id/rate", publishRateLimit, express.json(), async (req, res) => {
+  if (!req.isAuthenticated() || !req.user) {
+    return res.status(401).json({ success: false, message: "Sign in first to rate." });
+  }
+
+  try {
+    const item = await MarketplaceItem.findById(req.params.id);
+    if (!item || item.status !== "approved") {
+      return res.status(404).json({ success: false, message: "Marketplace listing not found." });
+    }
+    const existingRating = (Array.isArray(item.ratings) ? item.ratings : []).find(
+      (rating) => String(rating?.userId || "") === String(req.user._id),
+    );
+    if (existingRating) {
+      return res.status(400).json({
+        success: false,
+        message: "You have already rated this marketplace project.",
+      });
+    }
+    const value = Math.max(1, Math.min(5, Number(req.body?.value || 5)));
+    item.ratings.push({
+      userId: req.user._id,
+      value,
+      date: new Date(),
+    });
+    item.updatedAt = new Date();
+    await item.save();
+    return res.json({
+      success: true,
+      message: "Rating saved.",
+      item: buildMarketplacePublicItem(item.toObject(), req.user?._id),
+    });
+  } catch (error) {
+    console.error("Marketplace rating failed:", error);
+    return res.status(500).json({
+      success: false,
+      message: error?.message || "Could not save that marketplace rating.",
     });
   }
 });
@@ -2709,7 +2892,7 @@ app.post("/api/marketplace/:id/purchase", publishRateLimit, express.json(), asyn
     return res.json({
       success: true,
       message: "Purchase request submitted for admin approval.",
-      item: buildMarketplacePublicItem(item.toObject()),
+      item: buildMarketplacePublicItem(item.toObject(), req.user?._id),
     });
   } catch (error) {
     console.error("Marketplace purchase failed:", error);
@@ -3061,6 +3244,55 @@ app.post("/api/projects/update-deploy-info", express.json(), async (req, res) =>
     return res.status(500).json({
       success: false,
       message: error?.message || "Could not save Render deployment info right now.",
+    });
+  }
+});
+
+app.post("/api/projects/sync-render-id", express.json(), async (req, res) => {
+  if (!req.isAuthenticated() || !req.user) {
+    return res.status(401).json({
+      success: false,
+      message: "You need to sign in before saving deployment details.",
+    });
+  }
+
+  try {
+    const projectId = String(req.body?.projectId || "").trim();
+    const serviceId = String(req.body?.serviceId || "").trim();
+    if (!projectId || !/^srv-[a-z0-9]+$/i.test(serviceId)) {
+      return res.status(400).json({
+        success: false,
+        message: "A valid Render service ID is required.",
+      });
+    }
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found." });
+    }
+    user.liveProjects = Array.isArray(user.liveProjects) ? user.liveProjects : [];
+    const projectIndex = user.liveProjects.findIndex(
+      (item) => String(item?.fileName || item?.filename || "").trim() === projectId,
+    );
+    if (projectIndex < 0) {
+      return res.status(404).json({ success: false, message: "Project not found." });
+    }
+    const project = user.liveProjects[projectIndex];
+    project.renderServiceId = serviceId;
+    project.renderDeployStatus = project.renderDeployStatus || "deploying";
+    project.updatedAt = new Date();
+    await user.save();
+    req.user.liveProjects = user.liveProjects;
+    return res.json({
+      success: true,
+      message: "Render service ID synced.",
+      project,
+      user: toSafeUser(user),
+    });
+  } catch (error) {
+    console.error("Render service ID sync failed:", error);
+    return res.status(500).json({
+      success: false,
+      message: error?.message || "Could not sync this Render service ID.",
     });
   }
 });

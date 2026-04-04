@@ -4,8 +4,17 @@ const MarketplaceCommentSchema = new mongoose.Schema(
   {
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     name: { type: String, default: "", trim: true },
-    text: { type: String, required: true, trim: true },
+    text: { type: String, default: "", trim: true },
     rating: { type: Number, min: 1, max: 5, default: 5 },
+    date: { type: Date, default: Date.now },
+  },
+  { _id: true },
+);
+
+const MarketplaceRatingSchema = new mongoose.Schema(
+  {
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    value: { type: Number, min: 1, max: 5, required: true },
     date: { type: Date, default: Date.now },
   },
   { _id: true },
@@ -36,6 +45,14 @@ const MarketplaceItemSchema = new mongoose.Schema({
   category: { type: String, default: "General", trim: true },
   screenshots: { type: [String], default: [] },
   purpose: { type: String, default: "", trim: true },
+  sourceType: {
+    type: String,
+    enum: ["live", "draft", "upload"],
+    default: "draft",
+  },
+  sourceHtml: { type: String, default: "" },
+  sourceEntryPath: { type: String, default: "index.html", trim: true },
+  sourceFiles: { type: [mongoose.Schema.Types.Mixed], default: [] },
   status: {
     type: String,
     enum: ["pending", "approved", "sold"],
@@ -45,6 +62,7 @@ const MarketplaceItemSchema = new mongoose.Schema({
   authorAvatar: { type: String, default: "", trim: true },
   liveUrl: { type: String, default: "", trim: true },
   comments: { type: [MarketplaceCommentSchema], default: [] },
+  ratings: { type: [MarketplaceRatingSchema], default: [] },
   purchases: { type: [MarketplacePurchaseSchema], default: [] },
   createdAt: { type: Date, default: Date.now, index: true },
   updatedAt: { type: Date, default: Date.now },
