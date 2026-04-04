@@ -14,6 +14,7 @@ import multer from "multer";
 import ffmpeg from "fluent-ffmpeg";
 import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
 import { google } from "googleapis";
+import PDFDocument from "pdfkit";
 
 // Models & Routes
 import authRoutes, {
@@ -378,6 +379,127 @@ function logServerIssue(summary, metadata = {}) {
     isAnonymous: true,
     metadata,
   });
+}
+
+function streamMediaLabReleasePdf(res) {
+  const doc = new PDFDocument({
+    size: "A4",
+    margin: 50,
+    info: {
+      Title: "MediaLab Release Notes",
+      Author: "MediaLab",
+      Subject: "MediaLab platform overview and user guide",
+    },
+  });
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", 'inline; filename="MediaLab-Release.pdf"');
+  doc.pipe(res);
+
+  const drawSection = (title, lines = []) => {
+    doc.moveDown(0.9);
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(14)
+      .fillColor("#0891b2")
+      .text(title);
+    doc.moveDown(0.35);
+    doc.font("Helvetica").fontSize(10.5).fillColor("#1f2937");
+    lines.forEach((line) => {
+      doc.text(`• ${line}`, {
+        width: 500,
+        lineGap: 3,
+      });
+    });
+  };
+
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(24)
+    .fillColor("#020617")
+    .text("MediaLab Release Notes", { align: "left" });
+  doc.moveDown(0.25);
+  doc
+    .font("Helvetica")
+    .fontSize(11)
+    .fillColor("#475569")
+    .text(
+      "A short professional guide to what MediaLab is, how it works, and how creators can publish, monetize, sell, and withdraw with confidence.",
+      {
+        width: 500,
+        lineGap: 4,
+      },
+    );
+
+  drawSection("1. Introduction", [
+    "MediaLab is a creator platform that combines a smart web builder, publishing workflow, cloud hosting setup, monetization tools, and a project marketplace in one place.",
+    "It is designed for developers, creators, and beginners who want to build professional web projects without jumping between too many separate services.",
+    "The platform is organized to help users create, publish, host, manage, monetize, sell, and track their work with a clean studio experience.",
+  ]);
+
+  drawSection("2. Account Linkage", [
+    "Users can connect GitHub so MediaLab can publish their projects to a structured cloud repository with a public folder for hosted web output.",
+    "Users can connect Render during deployment setup so published projects can be served live from a proper web service.",
+    "Users can connect Google AdSense so MediaLab can check site approval, pull monetization signals, and help manage project-level ad readiness.",
+  ]);
+
+  drawSection("3. Creating Your First Project", [
+    "Open the Web Builder from Studio to start a project visually, insert sections, edit blocks, and run the project in a live preview mode.",
+    "Templates help users move faster. MediaLab includes starter layouts such as landing pages, portfolio structures, startup-style pages, and game templates.",
+    "Builder drafts let users save progress and reopen projects later without losing work.",
+  ]);
+
+  drawSection("4. Publishing Your Project", [
+    "After building, the user publishes to GitHub from the builder. MediaLab prepares a clean project structure and pushes the project into the public hosting area.",
+    "Single-file projects are packaged professionally into a folder with index.html so the project can be accessed with a clean path like /project-name/.",
+    "Once GitHub publishing succeeds, the user can continue deployment with Render so the project becomes live on a hosted service.",
+  ]);
+
+  drawSection("5. AdSense Linking", [
+    "AdSense linking starts from the Console and project dashboard flow. MediaLab checks the connected site, approval state, and monetization readiness.",
+    "If Google is still reviewing the site, MediaLab keeps the monetization state clear so the user understands approval is still pending.",
+    "When approved, users can monetize specific projects instead of forcing ads onto every page under a domain.",
+  ]);
+
+  drawSection("6. Marketplace", [
+    "The Marketplace allows creators to list projects for sale after preparing source details, screenshots, price, and category information.",
+    "Listings go through review before appearing publicly. Buyers can preview, comment, rate, and purchase approved projects.",
+    "Free items can be transferred immediately, while paid purchases can go through admin review before approval and delivery.",
+  ]);
+
+  drawSection("7. MediaLab AI Assistant", [
+    "MediaLab includes a guided assistant style workflow across the Studio so users can move through creation, publishing, monetization, and marketplace steps more confidently.",
+    "The assistant experience is designed to reduce confusion, surface the next best action, and help creators use the platform strategically.",
+  ]);
+
+  drawSection("8. How To Earn In MediaLab", [
+    "Creators can earn through AdSense by publishing approved projects and enabling monetization where Google review allows it.",
+    "Creators can also earn through the Marketplace by listing projects for sale and receiving approved purchase transfers.",
+    "MediaLab may also support wallet-based rewards and activity-based creator incentives inside the platform.",
+  ]);
+
+  drawSection("9. Withdrawals", [
+    "AdSense withdrawals are handled through Google's official payout flow once the AdSense threshold and eligibility requirements are met.",
+    "MediaLab wallet withdrawals are submitted through the account wallet section, where the user chooses a method such as PayPal, M-Pesa, or Airtel Money if available.",
+    "Users can track withdrawal status from the Console wallet and review recent payout records directly in the app.",
+  ]);
+
+  drawSection("10. Rules, Terms, and Conditions", [
+    "Users should only publish, monetize, or sell content they own or are authorized to distribute.",
+    "Marketplace activity, monetization, hosting, and withdrawals remain subject to platform review and external service policies.",
+    "Users should review MediaLab privacy, support, and terms pages for the latest official operating rules.",
+  ]);
+
+  doc.moveDown(1.1);
+  doc
+    .font("Helvetica-Oblique")
+    .fontSize(9.5)
+    .fillColor("#64748b")
+    .text("MediaLab Release Notes • Official platform overview", {
+      align: "center",
+    });
+
+  doc.end();
 }
 
 function slugifyProjectName(value = "medialab-page") {
@@ -2039,6 +2161,9 @@ app.get("/terms-and-services.html", (_req, res) => {
 });
 app.get("/contact-support.html", (_req, res) => {
   res.render("support");
+});
+app.get("/MediaLab-Release.pdf", (_req, res) => {
+  streamMediaLabReleasePdf(res);
 });
 const WEBSITE_TEMPLATE_VIEWS = {
   candycrush: "templates/candycrush",
