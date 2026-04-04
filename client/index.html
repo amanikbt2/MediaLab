@@ -3049,7 +3049,7 @@
       class="hidden fixed inset-0 z-[3950] bg-slate-950/92 p-0 overflow-hidden"
     >
       <div class="absolute inset-0 bg-slate-950/35" onclick="closeRenderHostingOnboarding()"></div>
-      <div class="absolute right-0 top-0 h-full w-full sm:w-full lg:w-[40vw] lg:min-w-[560px] border-l border-cyan-500/20 bg-[linear-gradient(180deg,rgba(10,15,27,0.98),rgba(8,17,31,1))] p-5 sm:p-7 shadow-[-30px_0_100px_rgba(2,6,23,0.62)] overflow-y-auto">
+      <div class="absolute right-0 top-0 h-full w-full lg:w-[58vw] lg:min-w-[760px] lg:max-w-[980px] border-l border-cyan-500/20 bg-[linear-gradient(180deg,rgba(10,15,27,0.995),rgba(8,17,31,1))] p-5 sm:p-7 shadow-[-30px_0_100px_rgba(2,6,23,0.62)] overflow-y-auto">
         <div class="flex items-start justify-between gap-4">
           <div>
             <div class="feature-gate-badge mb-3">Hosting Required</div>
@@ -7192,18 +7192,7 @@
           return;
         }
         const deployUrl = generateDeployUrl(repoUrl);
-        if (renderServiceIdRevealTimer) clearTimeout(renderServiceIdRevealTimer);
-        renderServiceIdRevealTimer = setTimeout(() => {
-          revealRenderServiceIdStep(true);
-        }, 10000);
-        checkFrameSupport().then((supported) => {
-          renderPopupMode = !supported;
-        });
-        renderDeployWindow = window.open(
-          deployUrl,
-          "_blank",
-          "toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes,width=500,height=700",
-        );
+        renderDeployWindow = window.open(deployUrl, "_blank", "noopener,noreferrer");
       }
       function closeRenderHostingOnboarding() {
         document.getElementById("render-hosting-modal")?.classList.add("hidden");
@@ -8397,6 +8386,9 @@
             return true;
           }
           if (loggedIn || currentUser) {
+            if (silent) {
+              return false;
+            }
             await handleAuthSessionFailure(
               silent ? "Your session has ended." : "Your session ended. Please sign in again.",
             );
@@ -10491,9 +10483,14 @@
         });
         const area = document.getElementById("tool-display");
         const builderToolbar = document.getElementById("web-builder-toolbar");
+        const contentArea = document.getElementById("content-area");
         let html = "";
         if (area) {
           area.innerHTML = renderToolLoadingShell(id);
+        }
+        if (contentArea) {
+          contentArea.classList.toggle("overflow-y-auto", id !== "web-builder");
+          contentArea.classList.toggle("overflow-hidden", id === "web-builder");
         }
         if (id !== "marketplace") {
           stopMarketplacePreviewRotation();
@@ -11051,8 +11048,8 @@
                     </div>
                 </div>
             </div>
-            <div id="canvas-container" onclick="deselectAll(event)" class="flex-1 overflow-y-auto overflow-x-hidden flex justify-center items-start px-2 sm:px-4 pt-2 sm:pt-4 pb-2 sm:pb-4 cursor-default custom-scrollbar">
-                <div class="w-full max-w-[1680px]">
+            <div id="canvas-container" onclick="deselectAll(event)" class="flex-1 overflow-y-auto overflow-x-hidden flex justify-center items-start px-2 sm:px-4 pt-2 sm:pt-4 pb-20 sm:pb-28 cursor-default custom-scrollbar" style="touch-action: pan-x pan-y pinch-zoom;">
+                <div class="flex w-full max-w-[1680px] flex-col items-center">
                     <div class="px-1 sm:px-2 pb-2 flex items-center justify-between">
                         <div class="text-[10px] font-black uppercase tracking-[0.22em] text-gray-500">Desktop Canvas</div>
                         <div class="hidden sm:flex items-center gap-2 text-[10px] font-bold text-gray-500">
@@ -11063,6 +11060,7 @@
                     </div>
                     <div id="web-canvas" data-page-background="#ffffff" class="builder-grid bg-white w-full max-w-[1680px] min-h-[calc(100vh-5.2rem)] sm:min-h-[calc(100vh-7.2rem)] relative shadow-[0_60px_150px_rgba(0,0,0,0.55)] rounded-[1.2rem] sm:rounded-[2rem] overflow-hidden transition-transform duration-500">
                     </div>
+                    <div class="h-28 sm:h-36"></div>
                 </div>
             </div>
             <div id="element-picker" class="hidden fixed z-[120] bg-gray-950/90 backdrop-blur-2xl border border-white/10 rounded-[2rem] sm:rounded-[3rem] shadow-2xl p-4 sm:p-6 w-[92vw] max-w-[360px] max-h-[72vh] overflow-y-auto animate-fadeIn ring-1 ring-cyan-500/20">

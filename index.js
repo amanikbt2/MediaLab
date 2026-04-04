@@ -2138,13 +2138,13 @@ app.use(
     secret: process.env.SESSION_SECRET || "medialab-secret-key",
     resave: false,
     saveUninitialized: false,
-    rolling: false,
+    rolling: true,
     store: MongoStore.create({
       mongoUrl: process.env.MONGO_URI,
-      ttl: 24 * 60 * 60, // 1 day
+      ttl: 365 * 24 * 60 * 60, // 1 year
     }),
     cookie: {
-      maxAge: 1000 * 60 * 60 * 24,
+      maxAge: 1000 * 60 * 60 * 24 * 365,
       httpOnly: true,
       // CRITICAL: On Render, secure must be true and sameSite must be 'none' for Google Auth
       secure: process.env.NODE_ENV === "production",
