@@ -2740,7 +2740,7 @@
 
       <div
         id="builder-draft-chooser-modal"
-        class="hidden fixed inset-0 z-[130] items-center justify-center bg-slate-950/78 px-4 py-6 backdrop-blur-sm"
+        class="hidden fixed inset-0 z-[1960000] items-center justify-center bg-slate-950/78 px-4 py-6 backdrop-blur-sm"
         onclick="if (event.target === this) closeBuilderDraftChooser();"
       >
         <div class="w-full max-w-2xl rounded-[2rem] border border-white/10 bg-slate-950 shadow-[0_30px_90px_rgba(2,6,23,0.55)]">
@@ -4700,26 +4700,118 @@
       function getMarketplaceDraftProjects() {
         return Array.isArray(currentUser?.builderDrafts) ? currentUser.builderDrafts : [];
       }
+      function resolveMarketplaceDraftHtml(draft = {}) {
+        const directHtml = String(draft?.canvasHtml || "").trim();
+        if (directHtml) return directHtml;
+        const legacyHtml = String(draft?.canvasState?.html || "").trim();
+        if (legacyHtml) return legacyHtml;
+        return "";
+      }
+      function resolveMarketplaceUploadHtml(listing = marketplaceDraftListing) {
+        const directHtml = String(listing?.sourceHtml || "").trim();
+        if (directHtml) return directHtml;
+        const entryPath = String(listing?.sourceEntryPath || "index.html").trim().replace(/^\/+/, "");
+        const files = Array.isArray(listing?.sourceFiles) ? listing.sourceFiles : [];
+        const exactEntry = files.find(
+          (file) => String(file?.path || file?.name || "").trim().replace(/^\/+/, "") === entryPath,
+        );
+        if (exactEntry?.content) {
+          return String(exactEntry.content || "").trim();
+        }
+        const fallbackHtmlFile = files.find((file) =>
+          /\.html?$/i.test(String(file?.path || file?.name || "").trim()),
+        );
+        return String(fallbackHtmlFile?.content || "").trim();
+      }
       function getMarketplaceLiveProjects() {
         return Array.isArray(currentUser?.liveProjects) ? currentUser.liveProjects : [];
       }
+      function getMarketplaceValidationIssues() {
+        const issues = [];
+        const sourceType = String(marketplaceDraftListing.sourceType || "").trim();
+        const projectId = String(marketplaceDraftListing.projectId || "").trim();
+        const sourceFiles = Array.isArray(marketplaceDraftListing.sourceFiles)
+          ? marketplaceDraftListing.sourceFiles.filter(Boolean)
+          : [];
+        const sourceHtml =
+          sourceType === "draft"
+            ? resolveMarketplaceDraftHtml(
+                getMarketplaceDraftProjects().find(
+                  (item) => String(item?.name || "").trim() === projectId,
+                ) || marketplaceDraftListing,
+              )
+            : sourceType === "upload"
+              ? resolveMarketplaceUploadHtml(marketplaceDraftListing)
+              : String(marketplaceDraftListing.sourceHtml || "").trim();
+        const title = String(marketplaceDraftListing.title || "").trim();
+        const category = String(marketplaceDraftListing.category || "").trim();
+        const purpose = String(marketplaceDraftListing.purpose || "").trim();
+        const description = String(marketplaceDraftListing.description || "").trim();
+        const screenshots = Array.isArray(marketplaceDraftListing.screenshots)
+          ? marketplaceDraftListing.screenshots.filter(Boolean)
+          : [];
+        if (!sourceType) {
+          issues.push("Choose a project source type.");
+        }
+        if (!projectId) {
+          issues.push("Select a project source first.");
+        }
+        if (sourceType === "upload" && !sourceHtml && !sourceFiles.length) {
+          issues.push("Upload a project folder with an HTML entry file.");
+        }
+        if (sourceType === "draft" && !projectId) {
+          issues.push("Choose one of your MediaLab drafts.");
+        }
+        if (sourceType === "live" && !projectId) {
+          issues.push("Choose one of your live projects.");
+        }
+        if (title.length < 3) {
+          issues.push("Enter a marketplace title with at least 3 characters.");
+        }
+        if (!category) {
+          issues.push("Enter a project category.");
+        }
+        if (purpose.length < 5) {
+          issues.push("Purpose is too short.");
+        }
+        if (description.length < 8) {
+          issues.push("Professional description is too short.");
+        }
+        if (Number(marketplaceDraftListing.price) < 0 || Number.isNaN(Number(marketplaceDraftListing.price))) {
+          issues.push("Price must be 0 or more.");
+        }
+        if (screenshots.length < 4) {
+          issues.push("Upload 4 preview images.");
+        }
+        return issues;
+      }
       function canAdvanceMarketplaceStep(step = marketplaceCreateStep) {
         if (Number(step) === 1) {
-          return Boolean(
-            marketplaceDraftListing.sourceType &&
-              marketplaceDraftListing.projectId,
+          return getMarketplaceValidationIssues().every(
+            (issue) =>
+              ![
+                "Choose a project source type.",
+                "Select a project source first.",
+                "Upload a project folder with an HTML entry file.",
+                "Choose one of your MediaLab drafts.",
+                "Terminate and package the live project before listing it.",
+              ].includes(issue),
           );
         }
         if (Number(step) === 2) {
-          return Boolean(
-            marketplaceDraftListing.title.trim().length >= 3 &&
-              marketplaceDraftListing.description.trim().length >= 8 &&
-              marketplaceDraftListing.purpose.trim().length >= 5 &&
-              Number(marketplaceDraftListing.price) >= 0,
+          return getMarketplaceValidationIssues().every(
+            (issue) =>
+              ![
+                "Enter a marketplace title with at least 3 characters.",
+                "Enter a project category.",
+                "Purpose is too short.",
+                "Professional description is too short.",
+                "Price must be 0 or more.",
+              ].includes(issue),
           );
         }
         if (Number(step) === 3) {
-          return (marketplaceDraftListing.screenshots || []).length >= 4;
+          return !getMarketplaceValidationIssues().includes("Upload 4 preview images.");
         }
         return false;
       }
@@ -5504,11 +5596,12 @@
         const draft = getMarketplaceDraftProjects().find(
           (item) => String(item?.name || "").trim() === String(name || "").trim(),
         );
+        const draftHtml = resolveMarketplaceDraftHtml(draft);
         marketplaceDraftListing = {
           ...marketplaceDraftListing,
           projectId: draft?.name || "",
           projectLabel: draft?.name || "",
-          sourceHtml: String(draft?.canvasHtml || "").trim(),
+          sourceHtml: draftHtml,
           sourceEntryPath: "index.html",
           sourceFiles: draft ? [{ path: "index.html", name: "index.html" }] : [],
           title: marketplaceDraftListing.title || String(draft?.name || "").trim(),
@@ -5813,8 +5906,39 @@
           showLogin();
           return;
         }
-        if (!canAdvanceMarketplaceStep(1) || !canAdvanceMarketplaceStep(2) || !canAdvanceMarketplaceStep(3)) {
-          showBuilderSnackbar("Complete all marketplace steps before submitting.", "error");
+        if (String(marketplaceDraftListing.sourceType || "").trim() === "draft") {
+          const selectedDraft = getMarketplaceDraftProjects().find(
+            (item) =>
+              String(item?.name || "").trim() === String(marketplaceDraftListing.projectId || "").trim(),
+          );
+          const draftHtml = resolveMarketplaceDraftHtml(selectedDraft);
+          if (draftHtml) {
+            marketplaceDraftListing = {
+              ...marketplaceDraftListing,
+              sourceHtml: draftHtml,
+              sourceEntryPath: "index.html",
+              sourceFiles:
+                marketplaceDraftListing.sourceFiles?.length > 0
+                  ? marketplaceDraftListing.sourceFiles
+                  : [{ path: "index.html", name: "index.html", content: draftHtml, mimeType: "text/html" }],
+            };
+          }
+        } else if (String(marketplaceDraftListing.sourceType || "").trim() === "upload") {
+          const uploadHtml = resolveMarketplaceUploadHtml(marketplaceDraftListing);
+          if (uploadHtml) {
+            marketplaceDraftListing = {
+              ...marketplaceDraftListing,
+              sourceHtml: uploadHtml,
+            };
+          }
+        }
+        const issues = getMarketplaceValidationIssues();
+        if (issues.length) {
+          const message =
+            issues.length > 1
+              ? `${issues[0]} ${issues[1]}`
+              : issues[0] || "Complete all marketplace steps before submitting.";
+          showBuilderSnackbar(message, "error");
           return;
         }
         beginUniversalProgress("Submitting marketplace listing for review...", 18, 92);

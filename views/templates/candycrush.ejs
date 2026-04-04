@@ -352,12 +352,88 @@
         })),
       ];
 
-      // ================== MISSING FUNCTIONS ADDED ==================
+      // ================== AUDIO (Realistic Candy Crush style) ==================
+      function initAudio() {
+        if (!audioContext)
+          audioContext = new (
+            window.AudioContext || window.webkitAudioContext
+          )();
+      }
+
+      function playSound(type) {
+        if (!audioContext) return;
+        const now = audioContext.currentTime;
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.connect(gain).connect(audioContext.destination);
+        gain.gain.value = (volume / 100) * 0.7;
+
+        switch (type) {
+          case "match":
+            osc.type = "sine";
+            osc.frequency.setValueAtTime(620, now);
+            osc.frequency.linearRampToValueAtTime(880, now + 0.15);
+            gain.gain.linearRampToValueAtTime(0, now + 0.25);
+            break;
+          case "powerup":
+            osc.type = "triangle";
+            osc.frequency.setValueAtTime(920, now);
+            osc.frequency.linearRampToValueAtTime(520, now + 0.4);
+            break;
+          case "win":
+            osc.frequency.setValueAtTime(880, now);
+            osc.frequency.setValueAtTime(1100, now + 0.15);
+            osc.frequency.setValueAtTime(1320, now + 0.35);
+            break;
+          case "lose":
+            osc.frequency.setValueAtTime(520, now);
+            osc.frequency.linearRampToValueAtTime(180, now + 0.8);
+            break;
+        }
+        osc.start(now);
+        osc.stop(now + 1.2);
+      }
+
+      function updateVolume(newVol) {
+        volume = parseInt(newVol);
+        document.getElementById("volume-value").textContent = volume;
+        localStorage.setItem("candyVolume", volume);
+      }
+
+      function testSound() {
+        initAudio();
+        playSound("powerup");
+      }
+
+      // ================== LIGHT PARTICLES (Tiny splash only) ==================
+      class Particle {
+        constructor(x, y) {
+          this.x = x;
+          this.y = y;
+          this.vx = (Math.random() - 0.5) * 5;
+          this.vy = (Math.random() - 0.5) * 5 - 2;
+          this.life = 0.6 + Math.random() * 0.4;
+          this.emoji = ["✨", "💥"][Math.floor(Math.random() * 2)];
+        }
+        update() {
+          this.vy += 0.25;
+          this.x += this.vx;
+          this.y += this.vy;
+          this.life -= 0.035;
+        }
+        draw() {
+          ctx.globalAlpha = this.life;
+          ctx.font = "22px system-ui";
+          ctx.fillText(this.emoji, this.x, this.y);
+        }
+      }
+
+      // ================== RESIZE & GRAVITY ==================
       function resizeCanvas() {
         const container = document.getElementById("game-screen");
         const maxSize = Math.min(
           container.clientWidth - 32,
-          container.clientHeight - 120,
+          container.clientHeight - 140,
         );
         CELL = Math.floor(maxSize / COLS);
         canvas.width = CELL * COLS;
@@ -387,12 +463,9 @@
           animateFalling();
           setTimeout(() => {
             const matches = findMatches();
-            if (matches.length > 0) {
-              removeMatches(matches);
-            } else {
-              checkWinCondition();
-            }
-          }, 300);
+            if (matches.length > 0) removeMatches(matches);
+            else checkWinCondition();
+          }, 280);
         } else {
           checkWinCondition();
         }
@@ -400,95 +473,10 @@
 
       function checkWinCondition() {
         if (isTimerLevel || isCollectLevel || isClearLevel) return;
-        if (score >= targetScore) {
-          endGame(true);
-        }
+        if (score >= targetScore) endGame(true);
       }
 
-      // ================== AUDIO ==================
-      function initAudio() {
-        if (!audioContext)
-          audioContext = new (
-            window.AudioContext || window.webkitAudioContext
-          )();
-      }
-
-      function playSound(type) {
-        if (!audioContext) return;
-        const now = audioContext.currentTime;
-        const osc = audioContext.createOscillator();
-        const gain = audioContext.createGain();
-        osc.connect(gain).connect(audioContext.destination);
-        gain.gain.value = (volume / 100) * 0.85;
-
-        switch (type) {
-          case "match":
-            osc.frequency.setValueAtTime(680 + Math.random() * 180, now);
-            gain.gain.linearRampToValueAtTime(0, now + 0.22);
-            break;
-          case "powerup":
-            osc.type = "sine";
-            osc.frequency.setValueAtTime(1100, now);
-            osc.frequency.linearRampToValueAtTime(450, now + 0.45);
-            break;
-          case "combo":
-            osc.frequency.setValueAtTime(1450, now);
-            osc.frequency.linearRampToValueAtTime(320, now + 0.95);
-            break;
-          case "win":
-            osc.frequency.setValueAtTime(880, now);
-            osc.frequency.setValueAtTime(1100, now + 0.15);
-            osc.frequency.setValueAtTime(1320, now + 0.35);
-            break;
-          case "lose":
-            osc.frequency.setValueAtTime(520, now);
-            osc.frequency.linearRampToValueAtTime(180, now + 0.8);
-            break;
-        }
-        osc.start(now);
-        osc.stop(now + 1.2);
-      }
-
-      function updateVolume(newVol) {
-        volume = parseInt(newVol);
-        document.getElementById("volume-value").textContent = volume;
-        localStorage.setItem("candyVolume", volume);
-      }
-
-      function testSound() {
-        initAudio();
-        playSound("combo");
-      }
-
-      // ================== PARTICLE ==================
-      class Particle {
-        constructor(x, y, vx, vy, life, emoji) {
-          this.x = x;
-          this.y = y;
-          this.vx = vx;
-          this.vy = vy;
-          this.life = this.maxLife = life;
-          this.emoji = emoji;
-        }
-        update() {
-          this.vy += 0.22;
-          this.vx *= 0.98;
-          this.vy *= 0.98;
-          this.x += this.vx;
-          this.y += this.vy;
-          this.life -= 0.018;
-        }
-        draw() {
-          const alpha = this.life / this.maxLife;
-          ctx.globalAlpha = alpha * 1.1;
-          ctx.shadowBlur = 18;
-          ctx.shadowColor = "#ffffff";
-          ctx.font = "38px system-ui";
-          ctx.fillText(this.emoji, this.x, this.y);
-        }
-      }
-
-      // ================== SMOOTH SWAP & DRAW ==================
+      // ================== SMOOTH SWAP & FALLING ==================
       function animateSwap(r1, c1, r2, c2, callback) {
         const dx = (c2 - c1) * CELL;
         const dy = (r2 - r1) * CELL;
@@ -496,7 +484,7 @@
         const start = Date.now();
 
         function step() {
-          progress = Math.min(1, (Date.now() - start) / 180);
+          progress = Math.min(1, (Date.now() - start) / 160);
           const ease = 1 - Math.pow(1 - progress, 3);
           drawWithOffset(r1, c1, r2, c2, dx * ease, dy * ease);
           if (progress < 1) requestAnimationFrame(step);
@@ -527,7 +515,6 @@
 
             const type = grid[r][c];
             if (!type) continue;
-            ctx.shadowBlur = type > 6 ? 28 : 14;
             ctx.font = `${CELL * 0.82}px system-ui`;
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
@@ -567,7 +554,7 @@
       function animationLoop() {
         let still = false;
         for (let i = fallingPieces.length - 1; i >= 0; i--) {
-          fallingPieces[i].progress += 0.26;
+          fallingPieces[i].progress += 0.28;
           if (fallingPieces[i].progress < 1) still = true;
           else fallingPieces.splice(i, 1);
         }
@@ -579,13 +566,13 @@
 
       function draw() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+
         for (let r = 0; r < ROWS; r++) {
           for (let c = 0; c < COLS; c++) {
             const type = grid[r][c];
             if (!type) continue;
             const x = c * CELL + CELL / 2;
             const y = r * CELL + CELL / 2;
-            ctx.shadowBlur = type > 6 ? 28 : 14;
             ctx.font = `${CELL * 0.82}px system-ui`;
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
@@ -597,7 +584,7 @@
         for (let p of fallingPieces) {
           const prog = Math.min(1, p.progress);
           const ease = 1 - Math.pow(1 - prog, 3);
-          const bounce = Math.sin(prog * Math.PI * 2) * 8;
+          const bounce = Math.sin(prog * Math.PI * 2) * 6;
           const y =
             p.startRow * CELL +
             (p.endRow - p.startRow) * CELL * ease +
@@ -618,7 +605,7 @@
         }
       }
 
-      // ================== INPUT & GAME LOGIC (rest is same as before) ==================
+      // ================== INPUT ==================
       function getPos(e) {
         const rect = canvas.getBoundingClientRect();
         const clientX =
@@ -668,23 +655,15 @@
         isProcessing = true;
 
         animateSwap(swipeStart.row, swipeStart.col, tr, tc, () => {
-          const a = grid[swipeStart.row][swipeStart.col];
-          const b = grid[tr][tc];
-
-          if (a > 6 && b > 6) {
-            // Placeholder for combo (you can expand later)
-            console.log("Power-up combo swap");
+          const matches = findMatches();
+          if (matches.length > 0) {
+            if (!isTimerLevel) movesLeft--;
+            updateHUD();
+            removeMatches(matches);
           } else {
-            const matches = findMatches();
-            if (matches.length > 0) {
-              if (!isTimerLevel) movesLeft--;
-              updateHUD();
-              removeMatches(matches);
-            } else {
-              animateSwap(swipeStart.row, swipeStart.col, tr, tc, () =>
-                shakeCanvas(),
-              );
-            }
+            animateSwap(swipeStart.row, swipeStart.col, tr, tc, () =>
+              shakeCanvas(),
+            );
           }
           isProcessing = false;
           swipeStart = null;
@@ -693,14 +672,15 @@
       }
 
       function shakeCanvas() {
-        canvas.style.transform = "translateX(8px)";
-        setTimeout(() => (canvas.style.transform = "translateX(-8px)"), 60);
-        setTimeout(() => (canvas.style.transform = ""), 200);
+        canvas.style.transform = "translateX(6px)";
+        setTimeout(() => (canvas.style.transform = "translateX(-6px)"), 50);
+        setTimeout(() => (canvas.style.transform = ""), 180);
       }
 
+      // ================== REMOVE WITH TINY SPLASH ==================
       function removeMatches(matches) {
         if (!matches.length) return;
-        score += matches.length * 140;
+        score += matches.length * 120;
         playSound("match");
 
         if (matches.length >= 4) {
@@ -712,31 +692,25 @@
         for (const { r, c } of matches) {
           if (grid[r][c] === JELLY) jellyLeft--;
           if (grid[r][c] <= 6 || grid[r][c] === JELLY) {
-            createExplosion(c * CELL + CELL / 2, r * CELL + CELL / 2);
+            createTinySplash(c * CELL + CELL / 2, r * CELL + CELL / 2);
             grid[r][c] = 0;
           }
         }
 
         updateHUD();
         animateFalling();
-        setTimeout(applyGravityAndRefill, 280);
+        setTimeout(applyGravityAndRefill, 260);
       }
 
-      function createExplosion(x, y) {
-        for (let i = 0; i < 14; i++) {
-          const angle = Math.random() * Math.PI * 2;
-          const speed = 3 + Math.random() * 7;
-          particles.push(
-            new Particle(
-              x,
-              y,
-              Math.cos(angle) * speed,
-              Math.sin(angle) * speed - 4,
-              1.0 + Math.random() * 0.7,
-              ["✨", "💥", "🌟"][Math.floor(Math.random() * 3)],
-            ),
-          );
+      function createTinySplash(x, y) {
+        for (let i = 0; i < 7; i++) {
+          particles.push(new Particle(x, y));
         }
+      }
+
+      function createPowerUp(r, c, count) {
+        if (count >= 5) grid[r][c] = POWER_BOMB;
+        else if (count === 4) grid[r][c] = POWER_STRIPE;
       }
 
       function fillGrid(level) {
@@ -803,11 +777,6 @@
           seen.add(key);
           return true;
         });
-      }
-
-      function createPowerUp(r, c, count) {
-        if (count >= 5) grid[r][c] = POWER_BOMB;
-        else if (count === 4) grid[r][c] = POWER_STRIPE;
       }
 
       function updateHUD() {
@@ -1052,7 +1021,7 @@
 
         showStartup();
         console.log(
-          "%c🏆 FIXED BOSS MODE — Game should now load when you click Play!",
+          "%c🏆 OPTIMIZED BOSS MODE — Smooth & Lightweight!",
           "color:#22c55e; font-weight:bold; font-size:16px",
         );
       }

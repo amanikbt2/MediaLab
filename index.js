@@ -1256,6 +1256,25 @@ function stripMarketplaceRootFolder(files = []) {
   });
 }
 
+function resolveMarketplaceSourceHtmlFromFiles(sourceFiles = [], sourceEntryPath = "index.html") {
+  const files = Array.isArray(sourceFiles) ? sourceFiles : [];
+  if (!files.length) return "";
+  const cleanEntryPath = normalizeImportedEntryPath(sourceEntryPath || "index.html");
+  const exactEntry = files.find(
+    (file) => normalizeImportedEntryPath(file?.path || file?.name || "") === cleanEntryPath,
+  );
+  if (exactEntry?.content) {
+    return String(exactEntry.content || "").trim();
+  }
+  const htmlEntry = files.find((file) =>
+    /\.html?$/i.test(String(file?.path || file?.name || "").trim()),
+  );
+  if (htmlEntry?.content) {
+    return String(htmlEntry.content || "").trim();
+  }
+  return "";
+}
+
 function buildMarketplaceSourcePackage({
   title = "",
   sourceHtml = "",
@@ -3539,11 +3558,36 @@ app.post("/api/marketplace", publishRateLimit, express.json({ limit: "15mb" }), 
         mimeType: String(file?.mimeType || "").trim(),
       }))
       .filter((file) => file.path);
+    const packagedSourceHtml = resolveMarketplaceSourceHtmlFromFiles(sourceFiles, sourceEntryPath);
 
-    if (!title || !description || purpose.length < 10) {
+    if (!projectId) {
       return res.status(400).json({
         success: false,
-        message: "Pick a project and complete the required marketplace details.",
+        message: "Select a project source first before submitting it to the marketplace.",
+      });
+    }
+    if (!title) {
+      return res.status(400).json({
+        success: false,
+        message: "Enter a marketplace title before submitting this sale.",
+      });
+    }
+    if (!description) {
+      return res.status(400).json({
+        success: false,
+        message: "Add a professional description before submitting this sale.",
+      });
+    }
+    if (purpose.length < 5) {
+      return res.status(400).json({
+        success: false,
+        message: "Add a clearer project purpose before submitting this sale.",
+      });
+    }
+    if (!category) {
+      return res.status(400).json({
+        success: false,
+        message: "Choose a project category before submitting this sale.",
       });
     }
     if (screenshots.length < 4) {
@@ -3554,17 +3598,20 @@ app.post("/api/marketplace", publishRateLimit, express.json({ limit: "15mb" }), 
     }
     let sourceProject = null;
     let liveUrl = "";
-    let resolvedSourceHtml = sourceHtml;
+    let resolvedSourceHtml = sourceHtml || packagedSourceHtml;
     if (sourceType === "draft") {
       const builderDrafts = Array.isArray(user.builderDrafts) ? user.builderDrafts : [];
       const draft = builderDrafts.find((item) => String(item?.name || "").trim() === projectId);
-      if (!draft) {
+      if (!draft && !resolvedSourceHtml) {
         return res.status(400).json({
           success: false,
           message: "Choose one of your MediaLab drafts before listing it.",
         });
       }
-      resolvedSourceHtml = resolvedSourceHtml || String(draft.canvasHtml || "").trim();
+      resolvedSourceHtml =
+        resolvedSourceHtml ||
+        String(draft?.canvasHtml || "").trim() ||
+        String(draft?.canvasState?.html || "").trim();
     } else if (sourceType === "upload") {
       if (!resolvedSourceHtml) {
         return res.status(400).json({
@@ -3589,7 +3636,7 @@ app.post("/api/marketplace", publishRateLimit, express.json({ limit: "15mb" }), 
     if (!resolvedSourceHtml) {
       return res.status(400).json({
         success: false,
-        message: "MediaLab could not package this project for the marketplace yet.",
+        message: "MediaLab could not package this project source yet. Re-select the source and try again.",
       });
     }
 
