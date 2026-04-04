@@ -3,8 +3,10 @@ import axios from "axios";
 const RENDER_API_BASE = "https://api.render.com/v1";
 
 function slugifyClientName(value = "client") {
+  const raw = String(value || "client").trim();
+  const firstToken = raw.split(/\s+/).filter(Boolean)[0] || raw;
   return (
-    String(value || "")
+    String(firstToken || "")
       .toLowerCase()
       .trim()
       .replace(/[^a-z0-9]+/g, "-")
@@ -14,7 +16,7 @@ function slugifyClientName(value = "client") {
 
 export function createRenderServiceName(clientName = "client") {
   const suffix = Math.random().toString(36).substring(2, 9);
-  return `medialab-${slugifyClientName(clientName)}-${suffix}`;
+  return `${slugifyClientName(clientName)}-${suffix}`;
 }
 
 export function generateRenderBlueprintYaml({

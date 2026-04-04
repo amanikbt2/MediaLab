@@ -365,7 +365,7 @@ function buildFolderProjectLiveUrl(owner, repo, folderPath, entryPath) {
   return `https://${owner}.github.io/${repo}/${cleanFolder}/${cleanEntry}`;
 }
 
-function buildGithubRepoScaffold(owner = "user", repoName = "medialab") {
+function buildGithubRepoScaffold(owner = "user", repoName = "medialab", displayName = owner) {
   const packageJson = JSON.stringify(
     {
       name: repoName,
@@ -485,10 +485,7 @@ npm-debug.log*
 `;
   const renderYaml = `services:
   - type: web
-    name: medialab-${String(owner || "client")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "") || "client"}-host
+    name: ${buildDefaultRenderServiceName(displayName || owner)}
     runtime: node
     plan: free
     autoDeploy: true
@@ -508,8 +505,8 @@ npm-debug.log*
   ];
 }
 
-async function ensureGithubRepoScaffold(octokit, owner, repo) {
-  const scaffoldFiles = buildGithubRepoScaffold(owner, repo);
+async function ensureGithubRepoScaffold(octokit, owner, repo, displayName = owner) {
+  const scaffoldFiles = buildGithubRepoScaffold(owner, repo, displayName);
   for (const file of scaffoldFiles) {
     await upsertGithubFile({
       octokit,
@@ -748,12 +745,28 @@ function buildGithubRepoUrl(username = "", repo = "medialab") {
   return `https://github.com/${owner}/${repo}`;
 }
 
+function buildRenderNameSeed(owner = "client") {
+  const raw = String(owner || "client").trim();
+  const firstToken = raw.split(/\s+/).filter(Boolean)[0] || raw;
+  return (
+    String(firstToken || "client")
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "client"
+  );
+}
+
 function buildDefaultRenderServiceName(owner = "client") {
-  return `medialab-${String(owner || "client")
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "") || "client"}-host`;
+  return buildRenderNameSeed(owner);
+}
+
+function buildRenderServiceUrl(owner = "client") {
+  return `https://${buildDefaultRenderServiceName(owner)}.onrender.com`;
+}
+
+function buildShortRenderServiceDisplay(owner = "client") {
+  return `${buildRenderNameSeed(owner)}.onrender.com`;
 }
 
 function buildProjectLiveUrl(user, project = {}) {
@@ -1660,7 +1673,7 @@ app.post("/api/github/publish", publishRateLimit, express.json({ limit: "10mb" }
     const existingProject = user.liveProjects.find(
       (project) => String(project?.fileName || project?.filename || "") === repoFilePath,
     );
-    await ensureGithubRepoScaffold(octokit, owner, repo);
+    await ensureGithubRepoScaffold(octokit, owner, repo, user.name || owner);
     const fullHtml = documentHtml
       ? buildPublishedHtmlFromSource({
           documentHtml,
@@ -1725,7 +1738,7 @@ app.post("/api/github/publish", publishRateLimit, express.json({ limit: "10mb" }
       status: "live",
       renderRepoUrl: buildGithubRepoUrl(owner, repo),
       renderServiceName:
-        existingProject?.renderServiceName || buildDefaultRenderServiceName(owner),
+        existingProject?.renderServiceName || buildDefaultRenderServiceName(user.name || owner),
       renderUrl: existingProject?.renderUrl || inheritedRenderBaseUrl || "",
       renderHostedConfirmed: Boolean(existingProject?.renderHostedConfirmed),
       renderVerifiedAt: existingProject?.renderVerifiedAt || null,
@@ -1875,7 +1888,7 @@ app.post("/api/github/publish-folder", publishRateLimit, express.json({ limit: "
     const repo = "medialab";
     const inheritedRenderBaseUrl = getUserPrimaryRenderBaseUrl(user);
     const octokit = buildGithubClient(user);
-    await ensureGithubRepoScaffold(octokit, owner, repo);
+    await ensureGithubRepoScaffold(octokit, owner, repo, user.name || owner);
 
     for (const file of safeFiles) {
       const repoPath = normalizeRepoFilePath(`${repoFolderPath}/${file.path}`);
@@ -1908,7 +1921,7 @@ app.post("/api/github/publish-folder", publishRateLimit, express.json({ limit: "
       status: "live",
       renderRepoUrl: buildGithubRepoUrl(owner, repo),
       renderServiceName:
-        existingProject?.renderServiceName || buildDefaultRenderServiceName(owner),
+        existingProject?.renderServiceName || buildDefaultRenderServiceName(user.name || owner),
       renderUrl: existingProject?.renderUrl || inheritedRenderBaseUrl || "",
       renderHostedConfirmed: Boolean(existingProject?.renderHostedConfirmed),
       renderVerifiedAt: existingProject?.renderVerifiedAt || null,

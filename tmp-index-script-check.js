@@ -35,6 +35,9 @@
       let marketplaceItems = [];
       let marketplaceMySales = [];
       let marketplaceActiveTab = "sale";
+      let marketplaceSearchOpen = false;
+      let marketplaceSearchField = "title";
+      let marketplaceSearchTerm = "";
       function createEmptyMarketplaceDraftListing() {
         return {
           sourceType: "",
@@ -852,6 +855,24 @@
             </article>`)
           .join("");
       }
+      function getFilteredMarketplaceItems(items = []) {
+        const term = String(marketplaceSearchTerm || "").trim().toLowerCase();
+        const field = String(marketplaceSearchField || "title").trim();
+        if (!term) return items;
+        return (Array.isArray(items) ? items : []).filter((item) => {
+          if (field === "free") {
+            return Number(item?.price || 0) === 0;
+          }
+          if (field === "name") {
+            return String(item?.authorName || "")
+              .toLowerCase()
+              .includes(term);
+          }
+          return String(item?.title || "")
+            .toLowerCase()
+            .includes(term);
+        });
+      }
       function renderMarketplaceMySales(items = []) {
         if (!loggedIn) {
           return `<div class="rounded-[2rem] border border-dashed border-white/10 bg-slate-900/70 p-10 text-center">
@@ -1047,7 +1068,7 @@
       function renderMarketplacePane() {
         if (marketplaceActiveTab === "mine") return renderMarketplaceMySales(marketplaceMySales);
         if (marketplaceActiveTab === "create") return renderMarketplaceCreatorStep();
-        return `<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">${renderMarketplaceCards(marketplaceItems)}</div>`;
+        return `<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">${renderMarketplaceCards(getFilteredMarketplaceItems(marketplaceItems))}</div>`;
       }
       function renderMarketplaceTool() {
         return `<div class="animate-fadeIn space-y-8">
@@ -1056,9 +1077,14 @@
               <h2 class="text-3xl font-semibold tracking-tighter text-white">Project Marketplace</h2>
               <p class="mt-3 text-sm leading-6 text-slate-400">A curated marketplace for hosted MediaLab projects with discovery, creator tools, and admin-reviewed purchases.</p>
             </div>
-            <div class="rounded-[1.6rem] border border-white/10 bg-white/[0.04] px-4 py-3 text-right">
-              <div class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Discovery Pool</div>
-              <div class="mt-2 text-lg font-semibold text-white">${marketplaceItems.length} live listings</div>
+            <div class="flex items-center gap-3">
+              <button onclick="toggleMarketplaceSearch()" class="inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-slate-200 hover:border-cyan-400/25 hover:text-cyan-200 transition-all">
+                <i class="fas fa-search"></i>
+              </button>
+              <div class="rounded-[1.6rem] border border-white/10 bg-white/[0.04] px-4 py-3 text-right">
+                <div class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Discovery Pool</div>
+                <div class="mt-2 text-lg font-semibold text-white">${getFilteredMarketplaceItems(marketplaceItems).length} live listings</div>
+              </div>
             </div>
           </div>
           <div class="rounded-[2rem] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(15,23,42,0.92))] p-5 sm:p-6 shadow-[0_24px_80px_rgba(2,6,23,0.34)]">
@@ -1067,6 +1093,18 @@
               <button onclick="setMarketplaceTab('mine')" class="rounded-2xl px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] ${marketplaceActiveTab === "mine" ? "bg-cyan-500 text-slate-950" : "border border-white/10 bg-white/5 text-slate-200"}">My Sales</button>
               <button onclick="setMarketplaceTab('create')" class="rounded-2xl px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] ${marketplaceActiveTab === "create" ? "bg-cyan-500 text-slate-950" : "border border-white/10 bg-white/5 text-slate-200"}">Add New Sale +</button>
             </div>
+            ${
+              marketplaceActiveTab === "sale"
+                ? `<div class="${marketplaceSearchOpen ? "" : "hidden"} mt-4 flex flex-col gap-3 rounded-[1.5rem] border border-white/10 bg-slate-950/55 p-3 sm:flex-row">
+                    <select onchange="marketplaceSearchField=this.value; mountMarketplaceTool();" class="w-full sm:w-44 rounded-2xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none focus:border-cyan-400">
+                      <option value="title" ${marketplaceSearchField === "title" ? "selected" : ""}>Project title</option>
+                      <option value="name" ${marketplaceSearchField === "name" ? "selected" : ""}>Author name</option>
+                      <option value="free" ${marketplaceSearchField === "free" ? "selected" : ""}>Free only</option>
+                    </select>
+                    <input ${marketplaceSearchField === "free" ? "disabled" : ""} value="${escapeHtmlText(marketplaceSearchTerm)}" oninput="marketplaceSearchTerm=this.value; mountMarketplaceTool();" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white outline-none focus:border-cyan-400 disabled:opacity-45" placeholder="${marketplaceSearchField === "name" ? "Search by creator name" : marketplaceSearchField === "free" ? "Showing free projects" : "Search by project title"}" />
+                  </div>`
+                : ""
+            }
             <div class="mt-6">${renderMarketplacePane()}</div>
           </div>
         </div>`;
@@ -1078,6 +1116,14 @@
       }
       function setMarketplaceTab(tab = "sale") {
         marketplaceActiveTab = tab;
+        mountMarketplaceTool();
+      }
+      function toggleMarketplaceSearch() {
+        marketplaceSearchOpen = !marketplaceSearchOpen;
+        if (!marketplaceSearchOpen) {
+          marketplaceSearchField = "title";
+          marketplaceSearchTerm = "";
+        }
         mountMarketplaceTool();
       }
       function setMarketplaceCreateStep(step = 1) {

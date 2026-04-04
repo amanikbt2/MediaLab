@@ -130,7 +130,22 @@ const formatGithubInitError = (error) => {
 const waitForGithubProvisioning = (ms = 2500) =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
-const buildGithubRepoScaffold = (owner = "user", repoName = "medialab") => {
+const buildRenderNameSeed = (value = "client") => {
+  const raw = String(value || "client").trim();
+  const firstToken = raw.split(/\s+/).filter(Boolean)[0] || raw;
+  return (
+    String(firstToken || "client")
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "client"
+  );
+};
+
+const buildDefaultRenderServiceName = (value = "client") =>
+  buildRenderNameSeed(value);
+
+const buildGithubRepoScaffold = (owner = "user", repoName = "medialab", displayName = owner) => {
   const packageJson = JSON.stringify(
     {
       name: repoName,
@@ -211,10 +226,7 @@ app.listen(port, () => {
       path: "render.yaml",
       content: `services:
   - type: web
-    name: medialab-${String(owner || "client")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "") || "client"}-host
+    name: ${buildDefaultRenderServiceName(displayName || owner)}
     runtime: node
     plan: free
     autoDeploy: true
@@ -231,8 +243,8 @@ app.listen(port, () => {
   ];
 };
 
-const ensureGithubRepoScaffold = async (octokit, owner, repo) => {
-  for (const file of buildGithubRepoScaffold(owner, repo)) {
+const ensureGithubRepoScaffold = async (octokit, owner, repo, displayName = owner) => {
+  for (const file of buildGithubRepoScaffold(owner, repo, displayName)) {
     let sha = "";
     try {
       const existing = await octokit.rest.repos.getContent({ owner, repo, path: file.path });
@@ -280,7 +292,7 @@ export const initializeGithubStorageForUser = async (user) => {
     await waitForGithubProvisioning();
   }
 
-  await ensureGithubRepoScaffold(octokit, owner, repoName);
+  await ensureGithubRepoScaffold(octokit, owner, repoName, user.name || owner);
 
   try {
     await octokit.rest.repos.getPages({ owner, repo: repoName });
