@@ -6,6 +6,9 @@
       let adminDownloads = [];
       let adminWithdrawals = [];
       let adminPayoutUsers = [];
+      let adminMarketplace = { pendingListings: [], approvedListings: [], pendingPurchases: [], completedPurchases: [] };
+      let adminMarketplaceTab = "pending";
+      let currentAdminMarketplaceItem = null;
       let adminSocket = null;
       let adminCounterValues = {};
       let activeAdminTab = "analytics";
@@ -18,6 +21,7 @@
         downloads: 0,
         withdrawals: 0,
         payouts: 0,
+        marketplace: 0,
       };
       let feedbackView = "all";
       let audienceQuery = "";
@@ -35,6 +39,7 @@
       };
       const ADMIN_PASSWORD = "spiderman";
       const ADMIN_ACCESS_KEY = "medialab_admin_access";
+      const ADMIN_UNREAD_STORAGE_KEY = "medialab_admin_unread_counts";
       function showAdminToast(message, tone = "info") {
         const colors =
           tone === "error"
@@ -56,6 +61,25 @@
         clearTimeout(node._timer);
         node._timer = setTimeout(() => node.classList.add("hidden"), 2600);
       }
+      function loadAdminUnreadCounts() {
+        try {
+          const parsed = JSON.parse(
+            localStorage.getItem(ADMIN_UNREAD_STORAGE_KEY) || "{}",
+          );
+          if (!parsed || typeof parsed !== "object") return;
+          Object.keys(adminUnreadCounts).forEach((key) => {
+            adminUnreadCounts[key] = Number(parsed[key] || 0);
+          });
+        } catch {}
+      }
+      function persistAdminUnreadCounts() {
+        try {
+          localStorage.setItem(
+            ADMIN_UNREAD_STORAGE_KEY,
+            JSON.stringify(adminUnreadCounts),
+          );
+        } catch {}
+      }
       function renderAdminTabBadges() {
         Object.entries(adminUnreadCounts).forEach(([tab, count]) => {
           const badge = document.getElementById(`badge-${tab}`);
@@ -68,6 +92,7 @@
             badge.textContent = "";
           }
         });
+        persistAdminUnreadCounts();
       }
       function markAdminTabRead(name) {
         if (name in adminUnreadCounts) {
@@ -97,7 +122,7 @@
         document
           .querySelectorAll(`.top-tab[data-tab="${name}"]`)
           .forEach((tab) => tab.classList.add("active"));
-        ["analytics", "feedbacks", "logs", "users", "premium", "downloads", "withdrawals", "payouts"].forEach((tabName) => {
+        ["analytics", "feedbacks", "logs", "users", "premium", "downloads", "withdrawals", "payouts", "marketplace"].forEach((tabName) => {
           document
             .getElementById(`tab-${tabName}`)
             ?.classList.toggle("hidden", tabName !== name);
@@ -388,6 +413,9 @@
         const password = field?.value?.trim() || "";
         if (password !== ADMIN_PASSWORD) {
           error?.classList.remove("hidden");
+          if (field) {
+            field.value = "";
+          }
           field?.focus();
           return;
         }
@@ -402,6 +430,7 @@
         document
           .getElementById("admin-auth-overlay")
           ?.classList.toggle("hidden", unlocked);
+        renderAdminTabBadges();
         if (unlocked) loadAdminData();
       }
 
@@ -1087,6 +1116,174 @@
           .join("");
       }
 
+      function setAdminMarketplaceTab(tab = "pending") {
+        adminMarketplaceTab = tab;
+        renderAdminMarketplace();
+      }
+
+      function renderAdminMarketplace() {
+        const el = document.getElementById("tab-marketplace");
+        if (!el) return;
+        const pendingListings = adminMarketplace.pendingListings || [];
+        const approvedListings = adminMarketplace.approvedListings || [];
+        const pendingPurchases = adminMarketplace.pendingPurchases || [];
+        const completedPurchases = adminMarketplace.completedPurchases || [];
+        el.innerHTML = `
+          <div class="rounded-[1.8rem] border border-white/10 bg-white/[0.03] p-5">
+            <div class="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <div class="text-[11px] font-black uppercase tracking-[0.22em] text-cyan-400">Marketplace Review</div>
+                <h3 class="mt-2 text-2xl font-semibold text-white">Pending and approved listings</h3>
+              </div>
+              <div class="flex gap-2">
+                <button onclick="setAdminMarketplaceTab('pending')" class="mini-tab ${adminMarketplaceTab === "pending" ? "active" : ""} px-4 py-2 rounded-2xl text-xs font-bold uppercase tracking-[0.16em]">Pending (${pendingListings.length})</button>
+                <button onclick="setAdminMarketplaceTab('approved')" class="mini-tab ${adminMarketplaceTab === "approved" ? "active" : ""} px-4 py-2 rounded-2xl text-xs font-bold uppercase tracking-[0.16em]">Approved (${approvedListings.length})</button>
+                <button onclick="setAdminMarketplaceTab('purchases')" class="mini-tab ${adminMarketplaceTab === "purchases" ? "active" : ""} px-4 py-2 rounded-2xl text-xs font-bold uppercase tracking-[0.16em]">Purchase Requests (${pendingPurchases.length})</button>
+                <button onclick="setAdminMarketplaceTab('purchased')" class="mini-tab ${adminMarketplaceTab === "purchased" ? "active" : ""} px-4 py-2 rounded-2xl text-xs font-bold uppercase tracking-[0.16em]">Purchased (${completedPurchases.length})</button>
+              </div>
+            </div>
+            <div class="mt-5 space-y-4">
+              ${adminMarketplaceTab === "purchases"
+                ? pendingPurchases.length
+                  ? pendingPurchases.map((item) => `
+                    <article class="rounded-[1.5rem] border border-white/10 bg-slate-950/70 p-4">
+                      <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                        <div class="min-w-0">
+                          <h4 class="text-lg font-semibold text-white">${escapeHtml(item.title || "Untitled Purchase")}</h4>
+                          <p class="mt-2 text-sm text-slate-400">${escapeHtml(item.buyerName || "Unknown Buyer")} · ${escapeHtml(item.buyerEmail || "")}</p>
+                          <p class="mt-2 text-[11px] font-semibold text-slate-500">${item.price > 0 ? `$${Number(item.price).toFixed(2)}` : "Free"} · ${escapeHtml(formatDate(item.createdAt))}</p>
+                        </div>
+                        <div class="flex gap-2">
+                          <button onclick="updateMarketplacePurchase('${item.itemId}', '${item.purchaseId}', 'approved')" class="rounded-2xl bg-emerald-400 px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-slate-950 hover:bg-emerald-300">Approve</button>
+                          <button onclick="updateMarketplacePurchase('${item.itemId}', '${item.purchaseId}', 'failed')" class="rounded-2xl border border-rose-400/20 bg-rose-500/10 px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-rose-100 hover:bg-rose-500/20">Disapprove</button>
+                        </div>
+                      </div>
+                    </article>`).join("")
+                  : `<div class="rounded-[1.5rem] border border-dashed border-white/10 p-8 text-center text-slate-400">No pending purchase requests right now.</div>`
+                : adminMarketplaceTab === "purchased"
+                  ? completedPurchases.length
+                    ? completedPurchases.map((item) => `
+                      <article class="rounded-[1.5rem] border border-white/10 bg-slate-950/70 p-4">
+                        <div class="flex flex-col gap-3">
+                          <div class="flex flex-wrap items-center gap-3">
+                            <h4 class="text-lg font-semibold text-white">${escapeHtml(item.title || "Purchased Project")}</h4>
+                            <span class="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${String(item.status || "").toLowerCase() === "approved" ? "text-emerald-300" : "text-rose-300"}">${escapeHtml(item.status || "")}</span>
+                          </div>
+                          <p class="text-sm text-slate-400">${escapeHtml(item.buyerName || "Unknown Buyer")} · ${escapeHtml(item.buyerEmail || "")}</p>
+                          <p class="text-sm ${String(item.status || "").toLowerCase() === "approved" ? "text-emerald-200" : "text-rose-200"}">${escapeHtml(item.message || "")}</p>
+                        </div>
+                      </article>`).join("")
+                    : `<div class="rounded-[1.5rem] border border-dashed border-white/10 p-8 text-center text-slate-400">No completed purchases yet.</div>`
+                  : (adminMarketplaceTab === "approved" ? approvedListings : pendingListings).length
+                ? (adminMarketplaceTab === "approved" ? approvedListings : pendingListings)
+                    .map(
+                      (item) => `
+                  <article class="rounded-[1.5rem] border border-white/10 bg-slate-950/70 p-4">
+                    <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                      <div class="min-w-0">
+                        <div class="flex items-center gap-3">
+                          <h4 class="text-lg font-semibold text-white">${escapeHtml(item.title || "Untitled Listing")}</h4>
+                          <span class="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-300">${escapeHtml(item.status || "pending")}</span>
+                        </div>
+                        <p class="mt-2 text-sm leading-6 text-slate-400">${escapeHtml(item.description || item.purpose || "")}</p>
+                        <div class="mt-3 flex flex-wrap gap-4 text-[11px] font-semibold text-slate-500">
+                          <span>${escapeHtml(item.authorName || "Unknown Creator")}</span>
+                          <span>${escapeHtml(item.category || "General")}</span>
+                          <span>${item.price > 0 ? `$${Number(item.price).toFixed(2)}` : "Free"}</span>
+                        </div>
+                      </div>
+                      <button onclick="openAdminMarketplaceDetail('${item._id}')" class="rounded-2xl bg-cyan-400 px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-slate-950 hover:bg-cyan-300">Review</button>
+                    </div>
+                  </article>`,
+                    )
+                    .join("")
+                : `<div class="rounded-[1.5rem] border border-dashed border-white/10 p-8 text-center text-slate-400">No ${adminMarketplaceTab} marketplace listings right now.</div>`}
+            </div>
+          </div>`;
+      }
+
+      function closeAdminMarketplaceModal() {
+        currentAdminMarketplaceItem = null;
+        document.getElementById("admin-marketplace-modal")?.classList.add("hidden");
+        document.getElementById("admin-marketplace-modal")?.classList.remove("flex");
+      }
+
+      async function openAdminMarketplaceDetail(id) {
+        const modal = document.getElementById("admin-marketplace-modal");
+        const body = document.getElementById("admin-marketplace-modal-body");
+        document.getElementById("admin-marketplace-modal-title").textContent = "Loading listing...";
+        document.getElementById("admin-marketplace-modal-subtitle").textContent = "Preparing preview and review controls.";
+        if (body) body.innerHTML = `<div class="rounded-[1.5rem] border border-white/10 bg-white/[0.03] p-6 text-slate-300">Loading...</div>`;
+        modal?.classList.remove("hidden");
+        modal?.classList.add("flex");
+        try {
+          const res = await fetch(`/api/admin/marketplace/${id}`, { headers: getAdminHeaders() });
+          const data = await res.json();
+          if (!res.ok || !data.success) throw new Error(data.message || "Could not load this listing.");
+          currentAdminMarketplaceItem = data.item;
+          document.getElementById("admin-marketplace-modal-title").textContent = data.item.title || "Marketplace Listing";
+          document.getElementById("admin-marketplace-modal-subtitle").textContent = `${data.item.authorName || "Unknown Creator"} · ${data.item.price > 0 ? `$${Number(data.item.price).toFixed(2)}` : "Free"}`;
+          if (body) {
+            body.innerHTML = `
+              <div class="grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
+                <div class="rounded-[1.5rem] border border-white/10 bg-white/[0.03] p-4">
+                  <div class="flex items-center justify-between gap-3">
+                    <div class="text-[11px] font-black uppercase tracking-[0.22em] text-cyan-400">Project Preview</div>
+                    <button onclick="window.open('/admin/marketplace', '_blank')" class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-200">Open Desk</button>
+                  </div>
+                  <iframe srcdoc="${escapeHtml(data.item.sourceHtml || "<!DOCTYPE html><html><body><p>No preview available.</p></body></html>")}" class="mt-4 h-[420px] w-full rounded-[1.25rem] border border-white/10 bg-white"></iframe>
+                </div>
+                <div class="space-y-4">
+                  <div class="rounded-[1.5rem] border border-white/10 bg-white/[0.03] p-4">
+                    <div class="text-[11px] font-black uppercase tracking-[0.22em] text-cyan-400">Listing Details</div>
+                    <p class="mt-3 text-sm leading-6 text-slate-300">${escapeHtml(data.item.description || data.item.purpose || "")}</p>
+                    ${data.item.disapprovalReason ? `<p class="mt-3 text-sm text-rose-300"><span class="font-bold uppercase tracking-[0.12em]">Reason:</span> ${escapeHtml(data.item.disapprovalReason)}</p>` : ""}
+                    <div class="mt-4 flex flex-wrap gap-3 text-[11px] font-semibold text-slate-400">
+                      <span>Category: ${escapeHtml(data.item.category || "General")}</span>
+                      <span>Rating: ${Number(data.item.ratingPercent || 0).toFixed(0)}%</span>
+                      <span>Status: ${escapeHtml(data.item.status || "pending")}</span>
+                    </div>
+                  </div>
+                  <div class="rounded-[1.5rem] border border-white/10 bg-white/[0.03] p-4">
+                    <label class="block text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">Disapproval message</label>
+                    <textarea id="admin-marketplace-disapproval" rows="4" class="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none resize-none focus:border-rose-400" placeholder="Explain what should be fixed before approval...">${escapeHtml(data.item.disapprovalReason || "")}</textarea>
+                    <div class="mt-4 flex flex-wrap gap-3">
+                      <button onclick="updateAdminMarketplaceListing('${data.item._id}', 'approved')" class="rounded-2xl bg-emerald-400 px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-slate-950 hover:bg-emerald-300">Approve</button>
+                      <button onclick="updateAdminMarketplaceListing('${data.item._id}', 'disapproved')" class="rounded-2xl bg-rose-500 px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-white hover:bg-rose-400">Disapprove</button>
+                    </div>
+                  </div>
+                </div>
+              </div>`;
+          }
+        } catch (error) {
+          if (body) {
+            body.innerHTML = `<div class="rounded-[1.5rem] border border-rose-400/20 bg-rose-500/10 p-6 text-rose-100">${escapeHtml(error.message || "Could not load this listing.")}</div>`;
+          }
+        }
+      }
+
+      async function updateAdminMarketplaceListing(id, status) {
+        const disapprovalReason = String(
+          document.getElementById("admin-marketplace-disapproval")?.value || "",
+        ).trim();
+        try {
+          const res = await fetch(`/api/admin/marketplace/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json", ...getAdminHeaders() },
+            body: JSON.stringify({ status, disapprovalReason }),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            throw new Error(data.message || "Could not update this listing.");
+          }
+          showAdminToast(data.message || "Marketplace listing updated.", "success");
+          closeAdminMarketplaceModal();
+          await loadAdminData();
+        } catch (error) {
+          showAdminToast(error.message || "Could not update this listing.", "error");
+        }
+      }
+
       function renderLogs() {
         const el = document.getElementById("tab-logs");
         if (!el) return;
@@ -1389,7 +1586,13 @@
           );
           const previousPayoutIds = new Set(adminPayoutUsers.map((item) => item._id));
           const headers = getAdminHeaders();
-          const [feedbackRes, analyticsRes, usageLogRes, premiumRes, downloadsRes, withdrawalsRes, payoutUsersRes] = await Promise.all([
+          const previousMarketplacePendingIds = new Set(
+            (adminMarketplace?.pendingListings || []).map((item) => item._id),
+          );
+          const previousMarketplacePurchaseIds = new Set(
+            (adminMarketplace?.pendingPurchases || []).map((item) => item.purchaseId),
+          );
+          const [feedbackRes, analyticsRes, usageLogRes, premiumRes, downloadsRes, withdrawalsRes, payoutUsersRes, marketplaceRes] = await Promise.all([
             fetch("/api/admin/feedbacks", { headers }),
             fetch("/api/admin/analytics", { headers }),
             fetch("/api/admin/usage-logs", { headers }),
@@ -1397,6 +1600,7 @@
             fetch("/api/admin/downloads", { headers }),
             fetch("/api/admin/withdrawals", { headers }),
             fetch("/api/admin/payout-users", { headers }),
+            fetch("/api/admin/marketplace", { headers }),
           ]);
           const feedbackData = await feedbackRes.json();
           const analyticsData = await analyticsRes.json();
@@ -1405,6 +1609,7 @@
           const downloadsData = await downloadsRes.json();
           const withdrawalsData = await withdrawalsRes.json();
           const payoutUsersData = await payoutUsersRes.json();
+          const marketplaceData = await marketplaceRes.json();
           adminFeedbacks = feedbackData.feedbacks || [];
           adminAnalytics = analyticsData.analytics || {};
           adminUsageLogs = usageLogData.logs || [];
@@ -1412,12 +1617,26 @@
           adminDownloads = downloadsData.downloads || [];
           adminWithdrawals = withdrawalsData.withdrawals || [];
           adminPayoutUsers = payoutUsersData.users || [];
+          adminMarketplace = marketplaceData.success
+            ? {
+                pendingListings: marketplaceData.pendingListings || [],
+                approvedListings: marketplaceData.approvedListings || [],
+                pendingPurchases: marketplaceData.pendingPurchases || [],
+                completedPurchases: marketplaceData.completedPurchases || [],
+              }
+            : { pendingListings: [], approvedListings: [], pendingPurchases: [], completedPurchases: [] };
           const nextFeedbacks = adminFeedbacks.filter((item) => !previousFeedbackIds.has(item._id));
           const nextUsers = (adminAnalytics?.recentUsers || []).filter(
             (item) => !previousUserIds.has(item._id),
           );
           const nextPayoutUsers = adminPayoutUsers.filter(
             (item) => !previousPayoutIds.has(item._id),
+          );
+          const nextMarketplacePending = (adminMarketplace.pendingListings || []).filter(
+            (item) => !previousMarketplacePendingIds.has(item._id),
+          );
+          const nextMarketplacePurchases = (adminMarketplace.pendingPurchases || []).filter(
+            (item) => !previousMarketplacePurchaseIds.has(item.purchaseId),
           );
           if (hasLoadedAdminData && nextFeedbacks.length && activeAdminTab !== "feedbacks") {
             adminUnreadCounts.feedbacks += nextFeedbacks.length;
@@ -1427,6 +1646,14 @@
           }
           if (hasLoadedAdminData && nextPayoutUsers.length && activeAdminTab !== "payouts") {
             adminUnreadCounts.payouts += nextPayoutUsers.length;
+          }
+          if (
+            hasLoadedAdminData &&
+            activeAdminTab !== "marketplace"
+          ) {
+            adminUnreadCounts.marketplace +=
+              nextMarketplacePending.length +
+              nextMarketplacePurchases.length;
           }
           hasLoadedAdminData = true;
           renderAdminTabBadges();
@@ -1438,6 +1665,7 @@
           renderDownloads();
           renderWithdrawals();
           renderPayouts();
+          renderAdminMarketplace();
           connectAdminLiveFeed();
           setLiveStatus(Boolean(adminSocket?.connected));
         } catch (error) {
@@ -1453,6 +1681,7 @@
           if (event.key === "Enter") unlockAdmin();
         });
 
+      loadAdminUnreadCounts();
       ensureAdminAccess();
       setLiveStatus(localStorage.getItem(ADMIN_ACCESS_KEY) === "granted");
     

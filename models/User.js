@@ -63,6 +63,7 @@ const UserSchema = new mongoose.Schema({
   githubUsername: { type: String, default: "", trim: true },
   githubToken: { type: String, default: "", select: false },
   githubRepoCreated: { type: Boolean, default: false },
+  githubRepoName: { type: String, default: "", trim: true },
   githubLinkedAt: { type: Date, default: null },
   googleRefreshToken: { type: String, default: "", select: false },
   confirmedFirstHosting: { type: Boolean, default: false },
@@ -85,6 +86,8 @@ const UserSchema = new mongoose.Schema({
   activityWeight: { type: Number, default: 0, min: 0 },
   activityStats: { type: mongoose.Schema.Types.Mixed, default: {} },
   lastActivityWeightCalculatedAt: { type: Date, default: null },
+  feedbackPromptLastShownAt: { type: Date, default: null },
+  feedbackPromptLastSubmittedAt: { type: Date, default: null },
 
   // --- PROJECT HISTORY ---
   // This stores the last 10-20 projects for the sidebar

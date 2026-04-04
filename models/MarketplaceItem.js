@@ -1,5 +1,15 @@
 import mongoose from "mongoose";
 
+const MarketplaceReplySchema = new mongoose.Schema(
+  {
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    name: { type: String, default: "", trim: true },
+    text: { type: String, default: "", trim: true },
+    date: { type: Date, default: Date.now },
+  },
+  { _id: true },
+);
+
 const MarketplaceCommentSchema = new mongoose.Schema(
   {
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
@@ -7,6 +17,7 @@ const MarketplaceCommentSchema = new mongoose.Schema(
     text: { type: String, default: "", trim: true },
     rating: { type: Number, min: 1, max: 5, default: 5 },
     date: { type: Date, default: Date.now },
+    replies: { type: [MarketplaceReplySchema], default: [] },
   },
   { _id: true },
 );
@@ -30,6 +41,8 @@ const MarketplacePurchaseSchema = new mongoose.Schema(
       enum: ["pending", "approved", "failed"],
       default: "pending",
     },
+    message: { type: String, default: "", trim: true },
+    approvedUntil: { type: Date, default: null },
     createdAt: { type: Date, default: Date.now },
     reviewedAt: { type: Date, default: null },
   },
@@ -53,11 +66,17 @@ const MarketplaceItemSchema = new mongoose.Schema({
   sourceHtml: { type: String, default: "" },
   sourceEntryPath: { type: String, default: "index.html", trim: true },
   sourceFiles: { type: [mongoose.Schema.Types.Mixed], default: [] },
+  marketplaceRepo: { type: String, default: "marketplace", trim: true },
+  marketplaceRepoPath: { type: String, default: "", trim: true },
   status: {
     type: String,
-    enum: ["pending", "approved", "sold"],
+    enum: ["pending", "approved", "sold", "disapproved", "removed"],
     default: "pending",
   },
+  disapprovalReason: { type: String, default: "", trim: true },
+  removalReason: { type: String, default: "", trim: true },
+  removedAt: { type: Date, default: null },
+  reviewedAt: { type: Date, default: null },
   authorName: { type: String, default: "", trim: true },
   authorAvatar: { type: String, default: "", trim: true },
   liveUrl: { type: String, default: "", trim: true },

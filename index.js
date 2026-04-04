@@ -519,6 +519,26 @@ async function ensureGithubRepoScaffold(octokit, owner, repo, displayName = owne
   }
 }
 
+function slugifyGithubRepoName(value = "") {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 39);
+}
+
+function getUserGithubRepoName(user = {}) {
+  const saved = String(user?.githubRepoName || "").trim();
+  if (saved) return saved;
+  const displayName = String(user?.name || "").trim();
+  const emailLocal = String(user?.email || "").split("@")[0].trim();
+  const firstNameSource =
+    displayName.split(/\s+/).find(Boolean) ||
+    emailLocal.split(/[._-]+/).find(Boolean) ||
+    "medialab";
+  return slugifyGithubRepoName(firstNameSource) || "medialab";
+}
+
 function injectIntoHead(html = "", injected = "") {
   const source = String(html || "");
   const payload = String(injected || "").trim();
@@ -850,6 +870,11 @@ function buildMarketplacePublicItem(item = {}, viewerId = "") {
     ? Number((((averageRating / 5) * 100) || 0).toFixed(1))
     : 0;
   const normalizedViewerId = String(viewerId || "").trim();
+  const viewerIsOwner =
+    normalizedViewerId && String(item.authorId || "") === normalizedViewerId;
+  const viewerPurchase = normalizedViewerId
+    ? purchases.find((purchase) => String(purchase?.buyerId || "") === normalizedViewerId)
+    : null;
   return {
     _id: item._id,
     projectId: item.projectId || "",
@@ -865,6 +890,10 @@ function buildMarketplacePublicItem(item = {}, viewerId = "") {
     authorName: item.authorName || "",
     authorAvatar: item.authorAvatar || "",
     liveUrl: item.liveUrl || "",
+    disapprovalReason: item.disapprovalReason || "",
+    removalReason: item.removalReason || "",
+    marketplaceRepo: item.marketplaceRepo || "",
+    marketplaceRepoPath: item.marketplaceRepoPath || "",
     previewImage:
       (Array.isArray(item.screenshots) && item.screenshots[0]) ||
       getMarketplacePreviewImage(item),
@@ -875,19 +904,166 @@ function buildMarketplacePublicItem(item = {}, viewerId = "") {
       text: comment.text || "",
       rating: Number(comment.rating || 5),
       date: comment.date || null,
+      replies: (Array.isArray(comment.replies) ? comment.replies : []).map((reply) => ({
+        _id: reply._id,
+        userId: reply.userId || "",
+        name: reply.name || "MediaLab user",
+        text: reply.text || "",
+        date: reply.date || null,
+      })),
     })),
     commentsCount: comments.length,
     averageRating,
     ratingPercent,
     ratingCount: ratings.length,
+    viewerIsOwner: Boolean(viewerIsOwner),
     viewerHasRated: normalizedViewerId
       ? ratings.some((rating) => String(rating?.userId || "") === normalizedViewerId)
       : false,
     purchaseCount: purchases.length,
     pendingPurchases: purchases.filter((purchase) => purchase.status === "pending").length,
+    viewerPurchaseStatus: viewerPurchase?.status || "",
+    viewerPurchaseMessage: viewerPurchase?.message || "",
+    viewerPurchaseApprovedUntil: viewerPurchase?.approvedUntil || null,
     createdAt: item.createdAt || null,
     updatedAt: item.updatedAt || null,
   };
+}
+
+function stripMarketplaceRootFolder(files = []) {
+  const normalizedFiles = Array.isArray(files) ? files : [];
+  if (!normalizedFiles.length) return [];
+  const firstSegments = normalizedFiles
+    .map((file) => String(file?.path || "").split("/")[0])
+    .filter(Boolean);
+  if (!firstSegments.length) return normalizedFiles;
+  const root = firstSegments[0];
+  const sameRoot = firstSegments.every((segment) => segment === root);
+  if (!sameRoot) return normalizedFiles;
+  return normalizedFiles.map((file) => {
+    const rawPath = String(file?.path || "").trim();
+    return {
+      ...file,
+      path: rawPath.split("/").slice(1).join("/") || file.name || "index.html",
+    };
+  });
+}
+
+function buildMarketplaceSourcePackage({
+  title = "",
+  sourceHtml = "",
+  sourceFiles = [],
+  sourceEntryPath = "index.html",
+} = {}) {
+  const folderSlug = slugifyProjectFolderName(title || "marketplace-project");
+  const rawFiles = stripMarketplaceRootFolder(
+    (Array.isArray(sourceFiles) ? sourceFiles : [])
+      .map((file) => ({
+        ...file,
+        path: normalizeRepoFilePath(file?.path || file?.name || ""),
+        name: String(file?.name || "").trim(),
+        content: typeof file?.content === "string" ? file.content : "",
+        contentBase64: typeof file?.contentBase64 === "string" ? file.contentBase64 : "",
+        mimeType: String(file?.mimeType || "").trim(),
+      }))
+      .filter((file) => file.path),
+  );
+  const prepared = prepareGitHubPush(title || folderSlug, rawFiles);
+  const hasFileContents = prepared.files.some(
+    (file) => String(file?.content || "").length || String(file?.contentBase64 || "").length,
+  );
+  if (prepared.projectType === "single" || (!hasFileContents && String(sourceHtml || "").trim())) {
+    return {
+      folderSlug,
+      entryPath: "index.html",
+      files: [
+        {
+          path: "index.html",
+          name: "index.html",
+          content: String(sourceHtml || "").trim(),
+          mimeType: "text/html",
+        },
+      ],
+    };
+  }
+  return {
+    folderSlug,
+    entryPath: normalizeImportedEntryPath(prepared.entryPath || sourceEntryPath || "index.html"),
+    files: prepared.files,
+  };
+}
+
+async function ensureMarketplaceRepoForUser(user) {
+  if (!user?.githubUsername || !user?.githubToken) return null;
+  const octokit = buildGithubClient(user);
+  const repo = "marketplace";
+  try {
+    await octokit.rest.repos.get({
+      owner: user.githubUsername,
+      repo,
+    });
+  } catch (error) {
+    const status = error?.status || error?.response?.status;
+    if (status !== 404) throw error;
+    await octokit.rest.repos.createForAuthenticatedUser({
+      name: repo,
+      private: true,
+      auto_init: true,
+      description: "Temporary MediaLab marketplace review storage.",
+    });
+  }
+  await upsertGithubFile({
+    octokit,
+    owner: user.githubUsername,
+    repo,
+    path: "README.md",
+    message: "Initialize MediaLab marketplace review storage",
+    contentBase64: Buffer.from(
+      "# MediaLab Marketplace\n\nPending marketplace listings are stored here for review.\n",
+      "utf8",
+    ).toString("base64"),
+  });
+  return { octokit, repo };
+}
+
+async function syncMarketplaceListingToGithub(user, item) {
+  const repoConfig = await ensureMarketplaceRepoForUser(user);
+  if (!repoConfig) return item;
+  const { octokit, repo } = repoConfig;
+  const packageData = buildMarketplaceSourcePackage({
+    title: item.title || item.projectId || "marketplace-project",
+    sourceHtml: item.sourceHtml || "",
+    sourceFiles: item.sourceFiles || [],
+    sourceEntryPath: item.sourceEntryPath || "index.html",
+  });
+  const repoFolderPath = normalizeRepoFilePath(packageData.folderSlug);
+  try {
+    await deleteGithubPathRecursive(octokit, user.githubUsername, repo, repoFolderPath);
+  } catch (error) {
+    const status = error?.status || error?.response?.status;
+    if (status !== 404) throw error;
+  }
+  for (const file of packageData.files) {
+    const filePath = normalizeRepoFilePath(`${repoFolderPath}/${file.path}`);
+    const rawContent = String(file?.content || "");
+    const contentBase64 =
+      String(file?.contentBase64 || "").trim() ||
+      Buffer.from(rawContent, "utf8").toString("base64");
+    await upsertGithubFile({
+      octokit,
+      owner: user.githubUsername,
+      repo,
+      path: filePath,
+      message: `Sync marketplace listing ${item.title || packageData.folderSlug}`,
+      contentBase64,
+    });
+  }
+  item.marketplaceRepo = repo;
+  item.marketplaceRepoPath = repoFolderPath;
+  item.sourceEntryPath = packageData.entryPath;
+  item.updatedAt = new Date();
+  await item.save();
+  return item;
 }
 
 async function fetchMarketplaceSourceHtml(author, projectId = "") {
@@ -898,7 +1074,7 @@ async function fetchMarketplaceSourceHtml(author, projectId = "") {
   const octokit = buildGithubClient(author);
   const response = await octokit.rest.repos.getContent({
     owner: author.githubUsername,
-    repo: "medialab",
+    repo: getUserGithubRepoName(author),
     path: sourceProject.fileName,
   });
   const data = response?.data;
@@ -1189,7 +1365,7 @@ function buildUsageIdentity(req) {
 async function ensureUserReferralCode(user) {
   if (!user) return user;
   if (String(user.referralCode || "").trim()) return user;
-  for (let attempt = 0; attempt < 6; attempt += 1) {
+  for (let attempt = 0; attempt < 32; attempt += 1) {
     const candidate = generateReferralCode(user);
     const existing = await User.findOne({ referralCode: candidate }).select("_id").lean();
     if (existing) continue;
@@ -1197,15 +1373,13 @@ async function ensureUserReferralCode(user) {
     await user.save();
     return user;
   }
-  user.referralCode = `medialab-${String(user._id || "").slice(-6)}`;
-  await user.save();
-  return user;
+  throw new Error("Could not generate a unique referral code right now.");
 }
 
 function buildReferralLink(code = "") {
   const normalizedCode = String(code || "").trim();
   if (!normalizedCode) return "https://medialab-6b20.onrender.com/";
-  return `https://medialab-6b20.onrender.com/?ref=${encodeURIComponent(normalizedCode)}`;
+  return `https://medialab-6b20.onrender.com/${encodeURIComponent(normalizedCode)}`;
 }
 
 // --- 2. FOLDER & STATIC SETUP ---
@@ -1281,6 +1455,7 @@ app.post("/api/downloads", async (req, res) => {
     const type = String(req.body?.type || "pwa").trim() || "pwa";
     const source = String(req.body?.source || "web").trim() || "web";
     const platform = String(req.body?.platform || "").trim();
+    const installState = String(req.body?.metadata?.installState || "").trim().toLowerCase();
     const fallbackEmail = String(req.body?.email || "").trim().toLowerCase();
     const fallbackName = String(req.body?.name || "").trim();
     const fallbackIsPro = Boolean(req.body?.isPro);
@@ -1296,7 +1471,7 @@ app.post("/api/downloads", async (req, res) => {
       metadata: req.body?.metadata || {},
     });
 
-    if (req.user?._id && type === "pwa") {
+    if (req.user?._id && type === "pwa" && installState === "installed") {
       const installedUser = await User.findById(req.user._id);
       if (installedUser) {
         await ensureUserReferralCode(installedUser);
@@ -1555,6 +1730,40 @@ app.get("/templates/:slug", (req, res) => {
   }
   return res.render(view);
 });
+app.get("/:referralCode", async (req, res, next) => {
+  const referralCode = String(req.params?.referralCode || "").trim();
+  if (
+    !referralCode ||
+    referralCode.includes(".") ||
+    !/^[a-zA-Z0-9_-]{4,64}$/.test(referralCode)
+  ) {
+    return next();
+  }
+  const reservedPaths = new Set([
+    "api",
+    "admin",
+    "templates",
+    "uploads",
+    "exports",
+    "sw",
+    "manifest",
+    "favicon",
+    "privacy-policy",
+    "terms-and-services",
+    "contact-support",
+  ]);
+  if (reservedPaths.has(referralCode.toLowerCase())) {
+    return next();
+  }
+  try {
+    const referrer = await User.findOne({ referralCode }).select("_id").lean();
+    if (!referrer) return next();
+    return res.render("index");
+  } catch (error) {
+    console.error("Referral route lookup failed:", error);
+    return next();
+  }
+});
 app.use(express.static(path.join(__dirname, "client")));
 app.use("/uploads", express.static(uploadDir));
 app.use("/exports", express.static(exportDir));
@@ -1663,7 +1872,7 @@ app.post("/api/github/publish", publishRateLimit, express.json({ limit: "10mb" }
 
     const octokit = buildGithubClient(user);
     const owner = user.githubUsername;
-    const repo = "medialab";
+    const repo = getUserGithubRepoName(user);
     const filename = slugifyProjectName(projectName);
     const folderSlug = filename.replace(/\.html$/i, "") || "medialab-page";
     const repoFolderPath = normalizeRepoFilePath(`${GITHUB_PUBLIC_ROOT}/${folderSlug}`);
@@ -1885,7 +2094,7 @@ app.post("/api/github/publish-folder", publishRateLimit, express.json({ limit: "
     const folderSlug = preparedPush.folderSlug;
     const repoFolderPath = normalizeRepoFilePath(`${GITHUB_PUBLIC_ROOT}/${folderSlug}`);
     const owner = user.githubUsername;
-    const repo = "medialab";
+    const repo = getUserGithubRepoName(user);
     const inheritedRenderBaseUrl = getUserPrimaryRenderBaseUrl(user);
     const octokit = buildGithubClient(user);
     await ensureGithubRepoScaffold(octokit, owner, repo, user.name || owner);
@@ -2010,7 +2219,7 @@ app.get("/api/github/projects", async (req, res) => {
           try {
             await octokit.rest.repos.getContent({
               owner: user.githubUsername,
-              repo: "medialab",
+              repo: getUserGithubRepoName(user),
               path: fileName,
             });
             return project;
@@ -2102,7 +2311,7 @@ app.get("/api/github/project-content", async (req, res) => {
     const octokit = buildGithubClient(user);
     const contentResponse = await octokit.rest.repos.getContent({
       owner: user.githubUsername,
-      repo: "medialab",
+      repo: getUserGithubRepoName(user),
       path: filename,
     });
     if (Array.isArray(contentResponse.data) || !contentResponse.data?.content) {
@@ -2166,7 +2375,7 @@ app.delete("/api/github/project", async (req, res) => {
     } else {
       const contentResponse = await octokit.rest.repos.getContent({
         owner: user.githubUsername,
-        repo: "medialab",
+        repo: getUserGithubRepoName(user),
         path: filename,
       });
       if (Array.isArray(contentResponse.data) || !contentResponse.data?.sha) {
@@ -2178,7 +2387,7 @@ app.delete("/api/github/project", async (req, res) => {
 
       await octokit.rest.repos.deleteFile({
         owner: user.githubUsername,
-        repo: "medialab",
+        repo: getUserGithubRepoName(user),
         path: filename,
         sha: contentResponse.data.sha,
         message: `Delete ${filename} from MediaLab`,
@@ -2262,7 +2471,7 @@ app.post(
         try {
           const existing = await octokit.rest.repos.getContent({
             owner: user.githubUsername,
-            repo: "medialab",
+            repo: getUserGithubRepoName(user),
             path: "favicon.ico",
           });
           if (!Array.isArray(existing.data) && existing.data?.sha) {
@@ -2274,7 +2483,7 @@ app.post(
 
         await octokit.rest.repos.createOrUpdateFileContents({
           owner: user.githubUsername,
-          repo: "medialab",
+          repo: getUserGithubRepoName(user),
           path: "favicon.ico",
           message: `${existingSha ? "Update" : "Upload"} favicon.ico from MediaLab`,
           content: req.file.buffer.toString("base64"),
@@ -2342,7 +2551,7 @@ app.post("/api/github/setup-adsense", express.json(), async (req, res) => {
     try {
       const existing = await octokit.rest.repos.getContent({
         owner: user.githubUsername,
-        repo: "medialab",
+        repo: getUserGithubRepoName(user),
         path: "ads.txt",
       });
       if (!Array.isArray(existing.data) && existing.data?.sha) {
@@ -2355,7 +2564,7 @@ app.post("/api/github/setup-adsense", express.json(), async (req, res) => {
     const adsTxtContent = `google.com, ${publisherValue}, DIRECT, f08c47fec0942fa0\n`;
     await octokit.rest.repos.createOrUpdateFileContents({
       owner: user.githubUsername,
-      repo: "medialab",
+      repo: getUserGithubRepoName(user),
       path: "ads.txt",
       message: `${existingSha ? "Update" : "Create"} ads.txt from MediaLab`,
       content: Buffer.from(adsTxtContent).toString("base64"),
@@ -2602,6 +2811,30 @@ app.get("/api/marketplace/mine", async (req, res) => {
   }
 });
 
+app.get("/api/marketplace/purchases", async (req, res) => {
+  if (!req.isAuthenticated() || !req.user) {
+    return res.status(401).json({
+      success: false,
+      message: "You need to sign in first.",
+    });
+  }
+  try {
+    const items = await MarketplaceItem.find({ "purchases.buyerId": req.user._id })
+      .sort({ updatedAt: -1, createdAt: -1 })
+      .lean();
+    return res.json({
+      success: true,
+      items: items.map((item) => buildMarketplacePublicItem(item, req.user?._id)),
+    });
+  } catch (error) {
+    console.error("Marketplace purchases fetch failed:", error);
+    return res.status(500).json({
+      success: false,
+      message: error?.message || "Could not load your purchased projects.",
+    });
+  }
+});
+
 app.get("/api/marketplace/:id", async (req, res) => {
   try {
     const item = await MarketplaceItem.findById(req.params.id).lean();
@@ -2660,6 +2893,9 @@ app.post("/api/marketplace", publishRateLimit, express.json({ limit: "15mb" }), 
       .map((file) => ({
         path: normalizeRepoFilePath(file?.path || file?.name || ""),
         name: String(file?.name || "").trim(),
+        content: typeof file?.content === "string" ? file.content : "",
+        contentBase64: typeof file?.contentBase64 === "string" ? file.contentBase64 : "",
+        mimeType: String(file?.mimeType || "").trim(),
       }))
       .filter((file) => file.path);
 
@@ -2747,6 +2983,14 @@ app.post("/api/marketplace", publishRateLimit, express.json({ limit: "15mb" }), 
       liveUrl,
     });
 
+    if (user.githubUsername && user.githubToken) {
+      try {
+        await syncMarketplaceListingToGithub(user, item);
+      } catch (repoError) {
+        console.warn("Marketplace repo sync skipped:", repoError.message);
+      }
+    }
+
     await createUsageLog({
       user,
       email: user.email,
@@ -2782,6 +3026,12 @@ app.post("/api/marketplace/:id/comment", publishRateLimit, express.json(), async
     if (!item || item.status !== "approved") {
       return res.status(404).json({ success: false, message: "Marketplace listing not found." });
     }
+    if (String(item.authorId || "") === String(req.user._id || "")) {
+      return res.status(403).json({
+        success: false,
+        message: "You cannot comment on your own marketplace project.",
+      });
+    }
     const text = sanitizeMarketplaceText(req.body?.text || "", 400);
     const rating = Math.max(1, Math.min(5, Number(req.body?.rating || 5)));
     if (!text) {
@@ -2810,6 +3060,59 @@ app.post("/api/marketplace/:id/comment", publishRateLimit, express.json(), async
   }
 });
 
+app.post(
+  "/api/marketplace/:id/comments/:commentId/reply",
+  publishRateLimit,
+  express.json(),
+  async (req, res) => {
+    if (!req.isAuthenticated() || !req.user) {
+      return res.status(401).json({ success: false, message: "Sign in first to reply." });
+    }
+    try {
+      const item = await MarketplaceItem.findById(req.params.id);
+      if (!item || item.status !== "approved") {
+        return res.status(404).json({ success: false, message: "Marketplace listing not found." });
+      }
+      const text = sanitizeMarketplaceText(req.body?.text || "", 300);
+      if (!text) {
+        return res.status(400).json({ success: false, message: "Write a reply first." });
+      }
+      const comment = (Array.isArray(item.comments) ? item.comments : []).find(
+        (entry) => String(entry?._id || "") === String(req.params.commentId || ""),
+      );
+      if (!comment) {
+        return res.status(404).json({ success: false, message: "Comment not found." });
+      }
+      if (String(item.authorId || "") === String(req.user._id || "")) {
+        return res.status(403).json({
+          success: false,
+          message: "You cannot reply inside your own marketplace project thread.",
+        });
+      }
+      comment.replies = Array.isArray(comment.replies) ? comment.replies : [];
+      comment.replies.push({
+        userId: req.user._id,
+        name: req.user.name || req.user.email || "MediaLab user",
+        text,
+        date: new Date(),
+      });
+      item.updatedAt = new Date();
+      await item.save();
+      return res.json({
+        success: true,
+        message: "Reply posted.",
+        item: buildMarketplacePublicItem(item.toObject(), req.user?._id),
+      });
+    } catch (error) {
+      console.error("Marketplace reply failed:", error);
+      return res.status(500).json({
+        success: false,
+        message: error?.message || "Could not save your reply.",
+      });
+    }
+  },
+);
+
 app.post("/api/marketplace/:id/rate", publishRateLimit, express.json(), async (req, res) => {
   if (!req.isAuthenticated() || !req.user) {
     return res.status(401).json({ success: false, message: "Sign in first to rate." });
@@ -2819,6 +3122,12 @@ app.post("/api/marketplace/:id/rate", publishRateLimit, express.json(), async (r
     const item = await MarketplaceItem.findById(req.params.id);
     if (!item || item.status !== "approved") {
       return res.status(404).json({ success: false, message: "Marketplace listing not found." });
+    }
+    if (String(item.authorId || "") === String(req.user._id || "")) {
+      return res.status(403).json({
+        success: false,
+        message: "You cannot rate your own marketplace project.",
+      });
     }
     const existingRating = (Array.isArray(item.ratings) ? item.ratings : []).find(
       (rating) => String(rating?.userId || "") === String(req.user._id),
@@ -2881,14 +3190,35 @@ app.post("/api/marketplace/:id/purchase", publishRateLimit, express.json(), asyn
             : "Your purchase request is already pending approval.",
       });
     }
-    item.purchases.push({
+    const purchase = {
       buyerId: req.user._id,
       buyerName: req.user.name || "",
       buyerEmail: req.user.email || "",
       status: "pending",
+      message: "Your purchase will be processed within 24 hours.",
       createdAt: new Date(),
-    });
+    };
+    item.purchases.push(purchase);
     item.updatedAt = new Date();
+    item.status = "sold";
+
+    let transfer = null;
+    let responseMessage = "Your purchase will be processed within 24 hours.";
+    if (Number(item.price || 0) <= 0) {
+      const buyer = await User.findById(req.user._id);
+      if (!buyer) {
+        return res.status(404).json({ success: false, message: "Buyer account not found." });
+      }
+      const targetPurchase = item.purchases[item.purchases.length - 1];
+      targetPurchase.status = "approved";
+      targetPurchase.reviewedAt = new Date();
+      targetPurchase.approvedUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      targetPurchase.message = "Purchase approved. You now own the project.";
+      transfer = await transferMarketplaceProjectToBuyer(item, buyer);
+      item.status = "sold";
+      responseMessage = "Purchase approved. You now own the project.";
+    }
+
     await item.save();
 
     await createUsageLog({
@@ -2896,16 +3226,20 @@ app.post("/api/marketplace/:id/purchase", publishRateLimit, express.json(), asyn
       email: req.user.email,
       name: req.user.name,
       isPro: Boolean(req.user.isPro),
-      action: "marketplace-purchase-pending",
-      summary: `requested purchase for marketplace project ${item.title}`,
+      action: Number(item.price || 0) <= 0 ? "marketplace-purchase-approved" : "marketplace-purchase-pending",
+      summary:
+        Number(item.price || 0) <= 0
+          ? `claimed free marketplace project ${item.title}`
+          : `requested purchase for marketplace project ${item.title}`,
       source: "marketplace",
       metadata: { marketplaceItemId: String(item._id), title: item.title, price: item.price },
     });
 
     return res.json({
       success: true,
-      message: "Purchase request submitted for admin approval.",
+      message: responseMessage,
       item: buildMarketplacePublicItem(item.toObject(), req.user?._id),
+      transfer,
     });
   } catch (error) {
     console.error("Marketplace purchase failed:", error);
@@ -2916,15 +3250,57 @@ app.post("/api/marketplace/:id/purchase", publishRateLimit, express.json(), asyn
   }
 });
 
+app.patch("/api/marketplace/:id/remove", publishRateLimit, express.json(), async (req, res) => {
+  if (!req.isAuthenticated() || !req.user) {
+    return res.status(401).json({ success: false, message: "Sign in first to manage your sales." });
+  }
+  try {
+    const item = await MarketplaceItem.findById(req.params.id);
+    if (!item || String(item.authorId) !== String(req.user._id)) {
+      return res.status(404).json({ success: false, message: "Marketplace sale not found." });
+    }
+    const reason = sanitizeMarketplaceText(req.body?.reason || "", 240);
+    item.status = "removed";
+    item.removalReason = reason || "Seller removed the sale.";
+    item.updatedAt = new Date();
+    item.removedAt = new Date();
+    await item.save();
+    await createUsageLog({
+      user: req.user,
+      email: req.user.email,
+      name: req.user.name,
+      isPro: Boolean(req.user.isPro),
+      action: "marketplace-listing-removed",
+      summary: `removed marketplace sale ${item.title}`,
+      source: "marketplace",
+      metadata: { marketplaceItemId: String(item._id), reason: item.removalReason },
+    });
+    return res.json({
+      success: true,
+      message: "Sale removed from the marketplace.",
+      item: buildMarketplacePublicItem(item.toObject(), req.user?._id),
+    });
+  } catch (error) {
+    console.error("Marketplace remove failed:", error);
+    return res.status(500).json({
+      success: false,
+      message: error?.message || "Could not remove this sale right now.",
+    });
+  }
+});
+
 app.get("/api/admin/marketplace", adminRateLimit, requireAdminApi, async (_req, res) => {
   try {
-    const [pendingListings, itemsWithPendingPurchases] = await Promise.all([
+    const [pendingListings, approvedListings, itemsWithPendingPurchases, itemsWithCompletedPurchases] = await Promise.all([
       MarketplaceItem.find({ status: "pending" }).sort({ createdAt: -1 }).lean(),
+      MarketplaceItem.find({ status: "approved" }).sort({ updatedAt: -1, createdAt: -1 }).lean(),
       MarketplaceItem.find({ "purchases.status": "pending" }).sort({ updatedAt: -1 }).lean(),
+      MarketplaceItem.find({ "purchases.status": { $in: ["approved", "failed"] } }).sort({ updatedAt: -1 }).lean(),
     ]);
     return res.json({
       success: true,
       pendingListings: pendingListings.map((item) => buildMarketplacePublicItem(item)),
+      approvedListings: approvedListings.map((item) => buildMarketplacePublicItem(item)),
       pendingPurchases: itemsWithPendingPurchases
         .flatMap((item) =>
           (Array.isArray(item.purchases) ? item.purchases : [])
@@ -2941,6 +3317,25 @@ app.get("/api/admin/marketplace", adminRateLimit, requireAdminApi, async (_req, 
             })),
         )
         .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)),
+      completedPurchases: itemsWithCompletedPurchases
+        .flatMap((item) =>
+          (Array.isArray(item.purchases) ? item.purchases : [])
+            .filter((purchase) => ["approved", "failed"].includes(String(purchase.status || "").toLowerCase()))
+            .map((purchase) => ({
+              itemId: String(item._id),
+              purchaseId: String(purchase._id),
+              title: item.title,
+              price: Number(item.price || 0),
+              status: purchase.status || "",
+              message: purchase.message || "",
+              buyerId: purchase.buyerId || "",
+              buyerName: purchase.buyerName || "",
+              buyerEmail: purchase.buyerEmail || "",
+              createdAt: purchase.createdAt || null,
+              reviewedAt: purchase.reviewedAt || null,
+            })),
+        )
+        .sort((a, b) => new Date(b.reviewedAt || b.createdAt || 0) - new Date(a.reviewedAt || a.createdAt || 0)),
     });
   } catch (error) {
     console.error("Admin marketplace fetch failed:", error);
@@ -2951,13 +3346,37 @@ app.get("/api/admin/marketplace", adminRateLimit, requireAdminApi, async (_req, 
   }
 });
 
+app.get("/api/admin/marketplace/:id", adminRateLimit, requireAdminApi, async (req, res) => {
+  try {
+    const item = await MarketplaceItem.findById(req.params.id).lean();
+    if (!item) {
+      return res.status(404).json({ success: false, message: "Marketplace listing not found." });
+    }
+    return res.json({
+      success: true,
+      item: {
+        ...buildMarketplacePublicItem(item),
+        sourceHtml: String(item.sourceHtml || ""),
+        sourceEntryPath: item.sourceEntryPath || "index.html",
+        sourceFiles: Array.isArray(item.sourceFiles) ? item.sourceFiles : [],
+      },
+    });
+  } catch (error) {
+    console.error("Admin marketplace detail failed:", error);
+    return res.status(500).json({
+      success: false,
+      message: error?.message || "Could not load this marketplace listing.",
+    });
+  }
+});
+
 app.patch("/api/admin/marketplace/:id", adminRateLimit, requireAdminApi, express.json(), async (req, res) => {
   try {
     const nextStatus = String(req.body?.status || "").trim().toLowerCase();
-    if (!["approved", "sold"].includes(nextStatus)) {
+    if (!["approved", "disapproved", "sold"].includes(nextStatus)) {
       return res.status(400).json({
         success: false,
-        message: "Marketplace status must be approved or sold.",
+        message: "Marketplace status must be approved, disapproved, or sold.",
       });
     }
     const item = await MarketplaceItem.findById(req.params.id);
@@ -2965,11 +3384,19 @@ app.patch("/api/admin/marketplace/:id", adminRateLimit, requireAdminApi, express
       return res.status(404).json({ success: false, message: "Marketplace listing not found." });
     }
     item.status = nextStatus;
+    item.disapprovalReason =
+      nextStatus === "disapproved"
+        ? sanitizeMarketplaceText(req.body?.disapprovalReason || "", 500)
+        : "";
     item.updatedAt = new Date();
+    item.reviewedAt = new Date();
     await item.save();
     return res.json({
       success: true,
-      message: `Marketplace listing marked ${nextStatus}.`,
+      message:
+        nextStatus === "disapproved"
+          ? "Marketplace listing disapproved."
+          : `Marketplace listing marked ${nextStatus}.`,
       item: buildMarketplacePublicItem(item.toObject()),
     });
   } catch (error) {
@@ -3015,8 +3442,15 @@ app.patch(
         if (!buyer) {
           return res.status(404).json({ success: false, message: "Buyer account not found." });
         }
+        purchase.message = "Purchase approved. You now own the project.";
+        purchase.approvedUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
         transfer = await transferMarketplaceProjectToBuyer(item, buyer);
         item.status = "sold";
+      } else {
+        purchase.message =
+          "Your purchase failed, please verify your payment details.";
+        purchase.approvedUntil = null;
+        item.status = "approved";
       }
       await item.save();
       return res.json({
@@ -3655,7 +4089,7 @@ app.post("/api/github/monetize-project", express.json(), async (req, res) => {
     const octokit = buildGithubClient(user);
     const contentResponse = await octokit.rest.repos.getContent({
       owner: user.githubUsername,
-      repo: project.repo || "medialab",
+      repo: project.repo || getUserGithubRepoName(user),
       path: filename,
     });
     if (Array.isArray(contentResponse.data) || !contentResponse.data?.content) {
@@ -3673,7 +4107,7 @@ app.post("/api/github/monetize-project", express.json(), async (req, res) => {
     });
     await octokit.rest.repos.createOrUpdateFileContents({
       owner: user.githubUsername,
-      repo: project.repo || "medialab",
+      repo: project.repo || getUserGithubRepoName(user),
       path: filename,
       sha: contentResponse.data.sha,
       message: `Enable monetization for ${filename} from MediaLab`,
@@ -3747,7 +4181,7 @@ app.post("/api/projects/:id/toggle-monetization", express.json(), async (req, re
     const octokit = buildGithubClient(user);
     const contentResponse = await octokit.rest.repos.getContent({
       owner: user.githubUsername,
-      repo: project.repo || "medialab",
+      repo: project.repo || getUserGithubRepoName(user),
       path: entryPath,
     });
     if (Array.isArray(contentResponse.data) || !contentResponse.data?.content) {
@@ -3771,7 +4205,7 @@ app.post("/api/projects/:id/toggle-monetization", express.json(), async (req, re
 
     await octokit.rest.repos.createOrUpdateFileContents({
       owner: user.githubUsername,
-      repo: project.repo || "medialab",
+      repo: project.repo || getUserGithubRepoName(user),
       path: entryPath,
       sha: contentResponse.data.sha,
       message: `${nextIsMonetized ? "Enable" : "Disable"} monetization for ${entryPath} from MediaLab`,
@@ -4185,11 +4619,11 @@ app.post(
       const octokit = buildGithubClient(user);
       let existingSha = "";
       try {
-        const existing = await octokit.rest.repos.getContent({
-          owner: user.githubUsername,
-          repo: "medialab",
-          path: "ads.txt",
-        });
+      const existing = await octokit.rest.repos.getContent({
+        owner: user.githubUsername,
+        repo: getUserGithubRepoName(user),
+        path: "ads.txt",
+      });
         if (!Array.isArray(existing.data) && existing.data?.sha) {
           existingSha = existing.data.sha;
         }
@@ -4199,7 +4633,7 @@ app.post(
 
       await octokit.rest.repos.createOrUpdateFileContents({
         owner: user.githubUsername,
-        repo: "medialab",
+        repo: getUserGithubRepoName(user),
         path: "ads.txt",
         message: `${existingSha ? "Update" : "Upload"} ads.txt from MediaLab`,
         content: req.file.buffer.toString("base64"),
@@ -4328,6 +4762,15 @@ app.post("/api/community-feedback", async (req, res) => {
       status: "open",
       hidden: false,
     });
+
+    if (req.user?._id) {
+      await User.findByIdAndUpdate(req.user._id, {
+        $set: {
+          feedbackPromptLastShownAt: new Date(),
+          feedbackPromptLastSubmittedAt: new Date(),
+        },
+      });
+    }
     await createUsageLog({
       ...buildUsageIdentity(req),
       action: "feedback-submitted",
@@ -4423,6 +4866,29 @@ app.post("/api/upgrade-request", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Could not save your upgrade request right now.",
+    });
+  }
+});
+
+app.post("/api/feedback-prompt/shown", async (req, res) => {
+  try {
+    if (!req.user?._id) {
+      return res.json({ success: true });
+    }
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      { $set: { feedbackPromptLastShownAt: new Date() } },
+      { new: true },
+    );
+    return res.json({
+      success: true,
+      user: user ? toSafeUser(user) : null,
+    });
+  } catch (error) {
+    console.error("Feedback prompt shown sync failed:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Could not sync feedback prompt state right now.",
     });
   }
 });

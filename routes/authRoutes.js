@@ -37,6 +37,23 @@ const buildGithubEncryptionKey = () =>
 const buildGoogleEncryptionKey = () =>
   crypto.createHash("sha256").update(String(googleTokenSecret)).digest();
 
+const slugifyRepoName = (value = "") =>
+  String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 39);
+
+const getPreferredGithubRepoName = (user = {}) => {
+  const displayName = String(user?.name || "").trim();
+  const emailLocal = String(user?.email || "").split("@")[0].trim();
+  const firstNameSource =
+    displayName.split(/\s+/).find(Boolean) ||
+    emailLocal.split(/[._-]+/).find(Boolean) ||
+    "medialab";
+  return slugifyRepoName(firstNameSource) || "medialab";
+};
+
 const encryptGithubToken = (token = "") => {
   const iv = crypto.randomBytes(16);
   const cipher = crypto.createCipheriv("aes-256-gcm", buildGithubEncryptionKey(), iv);
@@ -113,7 +130,7 @@ const formatGithubInitError = (error) => {
     return "GitHub authorization failed. Reconnect your GitHub account and try again.";
   }
   if (status === 422 && lowered.includes("name already exists")) {
-    return 'A repository named "medialab" already exists in a conflicting state. Rename or remove it on GitHub, then try again.';
+    return "A repository with your MediaLab hosting name already exists in a conflicting state. Rename or remove it on GitHub, then try again.";
   }
   if (status === 422 && (lowered.includes("repository creation failed") || lowered.includes("limit"))) {
     return "GitHub could not create the repository. Your account may have hit a repository limit.";
@@ -267,7 +284,7 @@ const ensureGithubRepoScaffold = async (octokit, owner, repo, displayName = owne
 
 export const initializeGithubStorageForUser = async (user) => {
   const octokit = buildGithubClient(user);
-  const repoName = "medialab";
+  const repoName = getPreferredGithubRepoName(user);
   const owner = user.githubUsername;
   let repoData = null;
   let createdRepo = false;
@@ -321,6 +338,7 @@ export const initializeGithubStorageForUser = async (user) => {
   }
 
   user.githubRepoCreated = true;
+  user.githubRepoName = repoName;
   await user.save();
 
   return {
@@ -342,16 +360,14 @@ export const toSafeUser = (user) => {
   delete source.adsenseAdCode;
   source.githubConnected = Boolean(source.githubUsername);
   source.adsenseConnected = hasAdsenseConnection;
+  source.githubRepoName = String(source.githubRepoName || "").trim();
   return source;
 };
 
 export const generateReferralCode = (user = {}) => {
-  const seed = String(user?.name || user?.email || "medialab")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "")
-    .slice(0, 8);
-  const suffix = Math.random().toString(36).slice(2, 7).toUpperCase();
-  return `${seed || "medialab"}-${suffix}`;
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+  const bytes = crypto.randomBytes(8);
+  return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join("");
 };
 
 const extractClientIp = (req) => {
@@ -712,6 +728,7 @@ router.get("/github/callback", async (req, res) => {
     user.githubUsername = String(profileData.login || "");
     user.githubToken = encryptGithubToken(tokenData.access_token);
     user.githubRepoCreated = Boolean(user.githubRepoCreated);
+    user.githubRepoName = String(user.githubRepoName || getPreferredGithubRepoName(user));
     user.githubLinkedAt = new Date();
     await user.save();
 
@@ -719,6 +736,7 @@ router.get("/github/callback", async (req, res) => {
       req.user.githubId = user.githubId;
       req.user.githubUsername = user.githubUsername;
       req.user.githubRepoCreated = user.githubRepoCreated;
+      req.user.githubRepoName = user.githubRepoName;
       req.user.githubLinkedAt = user.githubLinkedAt;
       req.user.githubToken = user.githubToken;
     }
@@ -747,12 +765,14 @@ router.post("/github/disconnect", async (req, res) => {
     user.githubUsername = "";
     user.githubToken = "";
     user.githubRepoCreated = false;
+    user.githubRepoName = "";
     user.githubLinkedAt = null;
     await user.save();
     req.user.githubId = "";
     req.user.githubUsername = "";
     req.user.githubToken = "";
     req.user.githubRepoCreated = false;
+    req.user.githubRepoName = "";
     req.user.githubLinkedAt = null;
     return res.json({ success: true, user: toSafeUser(user) });
   } catch (error) {
@@ -780,6 +800,7 @@ router.post("/github/initialize-storage", express.json(), async (req, res) => {
 
     const storage = await initializeGithubStorageForUser(user);
     req.user.githubRepoCreated = true;
+    req.user.githubRepoName = user.githubRepoName;
     req.user.githubUsername = user.githubUsername;
     req.user.githubId = user.githubId;
 

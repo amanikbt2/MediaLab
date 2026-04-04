@@ -34,6 +34,7 @@
       let currentReferralStatus = null;
       let marketplaceItems = [];
       let marketplaceMySales = [];
+      let marketplacePurchasedItems = [];
       let marketplaceActiveTab = "sale";
       let marketplaceSearchOpen = false;
       let marketplaceSearchField = "title";
@@ -54,10 +55,29 @@
           screenshots: [],
         };
       }
+      function createEmptyMarketplaceUploadState() {
+        return {
+          active: false,
+          percent: 0,
+          current: 0,
+          total: 0,
+          message: "",
+        };
+      }
+      function createEmptyMarketplaceSubmitState() {
+        return {
+          active: false,
+          percent: 0,
+          message: "",
+        };
+      }
       let marketplaceDraftListing = createEmptyMarketplaceDraftListing();
       let currentMarketplaceItem = null;
       let marketplaceCreateStep = 1;
+      let marketplaceUploadState = createEmptyMarketplaceUploadState();
+      let marketplaceSubmitState = createEmptyMarketplaceSubmitState();
       let marketplacePreviewVisible = false;
+      let pendingMarketplaceRemovalId = "";
       let currentAppDialogResolver = null;
       const LOGIN_REQUIRED_TOOL_IDS = ["image-pdf"];
       const PREMIUM_TOOL_IDS = ["voice-clone", "text-to-speech", "image-edit"];
@@ -404,7 +424,7 @@
         metadata = {},
       ) {
         try {
-          await fetch("/api/downloads", {
+          const res = await fetch("/api/downloads", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             credentials: "include",
@@ -421,8 +441,10 @@
               metadata,
             }),
           });
+          return await res.json();
         } catch (error) {
           console.warn("Download activity skipped:", error);
+          return { success: false };
         }
       }
       let exitLogSent = false;
@@ -703,6 +725,20 @@
         const amount = Number(price || 0);
         return amount <= 0 ? "Free" : `$${amount.toFixed(2)}`;
       }
+      function renderMarketplacePriceValue(price = 0, className = "") {
+        const amount = Number(price || 0);
+        if (amount <= 0) {
+          return `<span class="${className || ""} text-emerald-300">Free</span>`;
+        }
+        return `<span class="${className || ""} text-white">$${amount.toFixed(2)}</span>`;
+      }
+      function renderMarketplacePriceStamp(price = 0) {
+        const amount = Number(price || 0);
+        if (amount <= 0) {
+          return `<div class="absolute right-4 top-4 rotate-[6deg] rounded-md border border-emerald-300/30 bg-emerald-400 px-3 py-2 text-[10px] font-black uppercase tracking-[0.22em] text-emerald-950 shadow-[0_18px_40px_rgba(16,185,129,0.28)]">Free</div>`;
+        }
+        return `<div class="absolute right-4 top-4 rotate-[6deg] rounded-md border border-white/20 bg-[#fff4d6] px-3 py-2 text-[10px] font-black uppercase tracking-[0.22em] text-slate-900 shadow-[0_18px_40px_rgba(15,23,42,0.22)]">$${amount.toFixed(2)}</div>`;
+      }
       function escapeHtmlText(value = "") {
         return String(value || "")
           .replace(/&/g, "&amp;")
@@ -731,6 +767,12 @@
         if (normalized === "sold") {
           return `<span class="inline-flex items-center rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-300">Purchased</span>`;
         }
+        if (normalized === "failed" || normalized === "disapproved") {
+          return `<span class="inline-flex items-center rounded-full border border-rose-400/20 bg-rose-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-rose-300">Disapproved</span>`;
+        }
+        if (normalized === "removed") {
+          return `<span class="inline-flex items-center rounded-full border border-slate-400/20 bg-slate-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-300">Removed</span>`;
+        }
         return `<span class="inline-flex items-center rounded-full border border-amber-400/20 bg-amber-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-amber-300">Pending Approval</span>`;
       }
       async function fetchMarketplaceDiscovery() {
@@ -755,12 +797,29 @@
         marketplaceMySales = Array.isArray(data.items) ? data.items : [];
         return marketplaceMySales;
       }
+      async function fetchMarketplacePurchases() {
+        if (!loggedIn) {
+          marketplacePurchasedItems = [];
+          return [];
+        }
+        const res = await fetch("/api/marketplace/purchases", { credentials: "include" });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.message || "Could not load your purchased projects.");
+        }
+        marketplacePurchasedItems = Array.isArray(data.items) ? data.items : [];
+        return marketplacePurchasedItems;
+      }
       async function refreshMarketplaceData() {
         await Promise.all([
           fetchMarketplaceDiscovery(),
           fetchMarketplaceMySales().catch((error) => {
             console.warn("Marketplace my sales skipped:", error.message);
             marketplaceMySales = [];
+          }),
+          fetchMarketplacePurchases().catch((error) => {
+            console.warn("Marketplace purchases skipped:", error.message);
+            marketplacePurchasedItems = [];
           }),
           loggedIn && currentUser?.githubUsername
             ? fetchGithubProjects({ silent: true }).catch(() => currentUser?.liveProjects || [])
@@ -818,8 +877,12 @@
           </div>`;
         }
         return items
-          .map((item) => `
-            <article onclick="openMarketplaceDetail('${item._id}')" class="group cursor-pointer overflow-hidden rounded-[2rem] border border-white/10 bg-slate-950/95 shadow-[0_24px_80px_rgba(2,6,23,0.34)] transition-all hover:-translate-y-1 hover:border-cyan-400/30">
+          .map((item) => {
+            const isApproved = String(item?.status || "").toLowerCase() === "approved";
+            const isOwner = Boolean(item?.viewerIsOwner) || String(item?.authorId || "") === String(currentUser?._id || "");
+            const ratingDisabled = !isApproved || isOwner || Boolean(item?.viewerHasRated);
+            return `
+            <article onclick="openMarketplaceDetail('${item._id}')" class="group cursor-pointer overflow-hidden rounded-[2rem] border ${isApproved ? "border-white/10" : "border-white/6 opacity-75"} bg-slate-950/95 shadow-[0_24px_80px_rgba(2,6,23,0.34)] transition-all ${isApproved ? "hover:-translate-y-1 hover:border-cyan-400/30" : ""}">
               <div class="flex items-center gap-3 border-b border-white/8 px-5 py-4">
                 <div class="h-11 w-11 overflow-hidden rounded-full border border-white/10 bg-white/5">
                   ${item.authorAvatar ? `<img src="${escapeHtmlText(item.authorAvatar)}" alt="${escapeHtmlText(item.authorName || "Creator")}" class="h-full w-full object-cover" />` : `<div class="flex h-full w-full items-center justify-center text-cyan-300 font-black">${escapeHtmlText((item.authorName || "M").slice(0, 1).toUpperCase())}</div>`}
@@ -835,15 +898,16 @@
               </div>
               <div class="relative mt-4 h-56 overflow-hidden bg-slate-900">
                 <img src="${escapeHtmlText(item.previewImage || "")}" alt="${escapeHtmlText(item.title || "Marketplace project")}" class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]" />
-                <div class="absolute right-4 top-4 rounded-full border border-white/15 bg-slate-950/70 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-white shadow-[0_16px_40px_rgba(2,6,23,0.3)]">${formatMarketplacePrice(item.price)}</div>
+                ${renderMarketplacePriceStamp(item.price)}
               </div>
               <div class="flex items-center justify-between gap-4 px-5 py-4">
                 <div class="min-w-0">
                   <div class="flex items-center gap-2 text-amber-300">${renderMarketplaceRating(item.averageRating || 0)}</div>
                   <p class="mt-1 text-xs text-slate-400">${Number(item.ratingPercent || 0).toFixed(0)}% rating from ${item.ratingCount || 0} user${Number(item.ratingCount || 0) === 1 ? "" : "s"}</p>
+                  ${!isApproved ? `<p class="mt-2 text-[11px] font-semibold text-amber-300">Pending approval. Rating and purchase unlock after review.</p>` : isOwner ? `<p class="mt-2 text-[11px] font-semibold text-slate-400">You cannot rate or purchase your own project.</p>` : ``}
                 </div>
                 <div class="flex items-center gap-2">
-                  <button onclick="event.stopPropagation(); rateMarketplaceItem('${item._id}')" class="inline-flex h-10 w-10 items-center justify-center rounded-2xl border ${item.viewerHasRated ? "border-amber-400/30 bg-amber-500/10 text-amber-300" : "border-white/10 bg-white/5 text-slate-200 hover:border-amber-300/30 hover:text-amber-300"} transition-all">
+                  <button onclick="event.stopPropagation(); rateMarketplaceItem('${item._id}')" class="inline-flex h-10 w-10 items-center justify-center rounded-2xl border ${ratingDisabled ? "border-white/10 bg-white/[0.04] text-slate-500 cursor-not-allowed" : "border-white/10 bg-white/5 text-slate-200 hover:border-amber-300/30 hover:text-amber-300"} ${item.viewerHasRated ? "border-amber-400/30 bg-amber-500/10 text-amber-300" : ""} transition-all">
                     <i class="fas fa-star text-sm"></i>
                   </button>
                   <button onclick="event.stopPropagation(); openMarketplaceDetail('${item._id}')" class="inline-flex items-center gap-2 rounded-2xl border border-cyan-400/20 bg-cyan-500/10 px-3 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-cyan-200 hover:bg-cyan-500/15 transition-all">
@@ -852,7 +916,8 @@
                   </button>
                 </div>
               </div>
-            </article>`)
+            </article>`;
+          })
           .join("");
       }
       function getFilteredMarketplaceItems(items = []) {
@@ -898,15 +963,87 @@
                   </div>
                   <p class="mt-3 text-sm leading-6 text-slate-400">${escapeHtmlText(item.description || item.purpose || "")}</p>
                   <div class="mt-4 flex flex-wrap gap-5 text-[11px] font-semibold text-slate-400">
-                    <span>${formatMarketplacePrice(item.price)}</span>
+                    <span>${renderMarketplacePriceValue(item.price, "font-semibold")}</span>
                     <span>${item.commentsCount || 0} comments</span>
                     <span>${item.purchaseCount || 0} purchases</span>
                   </div>
+                  ${
+                    item.status === "disapproved" && item.disapprovalReason
+                      ? `<p class="mt-3 text-sm text-rose-300"><span class="font-bold uppercase tracking-[0.12em]">Disapproved:</span> ${escapeHtmlText(item.disapprovalReason)}</p>`
+                      : ""
+                  }
+                  ${
+                    item.status === "removed" && item.removalReason
+                      ? `<p class="mt-3 text-sm text-amber-300"><span class="font-bold uppercase tracking-[0.12em]">Removed:</span> ${escapeHtmlText(item.removalReason)}</p>`
+                      : ""
+                  }
                 </div>
-                <button onclick="openMarketplaceDetail('${item._id}')" class="shrink-0 inline-flex items-center gap-2 rounded-2xl border border-cyan-400/20 bg-cyan-500/10 px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-cyan-200 hover:bg-cyan-500/15 transition-all">
-                  <i class="fas fa-chart-line"></i>
-                  View Analytics
-                </button>
+                <div class="flex shrink-0 items-center gap-2">
+                  <button onclick="openMarketplaceDetail('${item._id}')" class="inline-flex items-center gap-2 rounded-2xl border border-cyan-400/20 bg-cyan-500/10 px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-cyan-200 hover:bg-cyan-500/15 transition-all">
+                    <i class="fas fa-chart-line"></i>
+                    View Analytics
+                  </button>
+                  <button onclick="openMarketplaceRemoveModal('${item._id}')" class="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-rose-400/20 bg-rose-500/10 text-rose-200 hover:bg-rose-500/15 transition-all">
+                    <i class="fas fa-trash"></i>
+                  </button>
+                </div>
+              </div>
+            </div>`).join("")}
+        </div>`;
+      }
+      function openPurchasedMarketplaceProject(draftName = "") {
+        const targetName = String(draftName || "").trim();
+        if (!targetName) return;
+        const drafts = getBuilderDrafts();
+        const index = drafts.findIndex(
+          (draft) => String(draft?.name || "").trim() === targetName,
+        );
+        if (index < 0) {
+          showBuilderSnackbar("This purchased project is not in your drafts yet.", "error");
+          return;
+        }
+        switchTool("web-builder");
+        setTimeout(() => {
+          loadBuilderDraftByIndex(index);
+          launchBossMode();
+        }, 120);
+      }
+      function renderMarketplacePurchased(items = []) {
+        if (!loggedIn) {
+          return `<div class="rounded-[2rem] border border-dashed border-white/10 bg-slate-900/70 p-10 text-center">
+            <p class="text-xl font-semibold text-white">Sign in to view your purchased projects</p>
+            <p class="mt-3 text-sm leading-6 text-slate-400">Pending, approved, and failed purchases will appear here.</p>
+            <button onclick="showLogin()" class="mt-5 inline-flex items-center gap-2 rounded-2xl bg-cyan-500 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-slate-950">Sign In</button>
+          </div>`;
+        }
+        if (!items.length) {
+          return `<div class="rounded-[2rem] border border-dashed border-white/10 bg-slate-900/70 p-10 text-center">
+            <p class="text-xl font-semibold text-white">No purchased projects yet</p>
+            <p class="mt-3 text-sm leading-6 text-slate-400">Purchased marketplace projects will appear here with their current approval status.</p>
+          </div>`;
+        }
+        return `<div class="space-y-4">
+          ${items.map((item) => `
+            <div class="rounded-[1.8rem] border border-white/10 bg-slate-900/80 p-5 shadow-[0_16px_40px_rgba(2,6,23,0.28)]">
+              <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div class="min-w-0">
+                  <div class="flex flex-wrap items-center gap-3">
+                    <h3 class="truncate text-xl font-semibold text-white">${escapeHtmlText(item.title || "Purchased Project")}</h3>
+                    ${getMarketplaceStatusBadge(item.viewerPurchaseStatus || item.status)}
+                  </div>
+                  <p class="mt-3 text-sm leading-6 text-slate-400">${escapeHtmlText(item.description || item.purpose || "")}</p>
+                  <p class="mt-3 text-sm ${String(item.viewerPurchaseStatus || "").toLowerCase() === "failed" ? "text-rose-300" : String(item.viewerPurchaseStatus || "").toLowerCase() === "approved" ? "text-emerald-300" : "text-amber-300"}">${escapeHtmlText(item.viewerPurchaseMessage || "Your purchase will be processed within 24 hours.")}</p>
+                </div>
+                <div class="flex shrink-0 items-center gap-2">
+                  <button onclick="openMarketplaceDetail('${item._id}')" class="inline-flex items-center gap-2 rounded-2xl border border-cyan-400/20 bg-cyan-500/10 px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-cyan-200 hover:bg-cyan-500/15 transition-all">
+                    <i class="fas fa-eye"></i>
+                    View
+                  </button>
+                  ${String(item.viewerPurchaseStatus || "").toLowerCase() === "approved" ? `<button onclick="openPurchasedMarketplaceProject('${String(item.title || "").replace(/'/g, "\\'")} Purchase')" class="inline-flex items-center gap-2 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-emerald-200 hover:bg-emerald-500/15 transition-all">
+                    <i class="fas fa-rocket"></i>
+                    Open Draft
+                  </button>` : ""}
+                </div>
               </div>
             </div>`).join("")}
         </div>`;
@@ -914,18 +1051,20 @@
       function renderMarketplaceCreatorStep() {
         const liveProjects = getMarketplaceLiveProjects();
         const draftProjects = getMarketplaceDraftProjects();
+        const selectStyles = `style="color:#020617;background-color:#ffffff;"`;
+        const darkOptionStyle = `style="color:#020617;background-color:#ffffff;"`;
         const liveOptions = liveProjects
           .map((project) => {
             const value = String(project.fileName || project.filename || "");
             const selected = marketplaceDraftListing.projectId === value ? "selected" : "";
-            return `<option value="${escapeHtmlText(value)}" ${selected}>${escapeHtmlText(project.name || value || "Untitled Project")}</option>`;
+            return `<option value="${escapeHtmlText(value)}" ${selected} ${darkOptionStyle}>${escapeHtmlText(project.name || value || "Untitled Project")}</option>`;
           })
           .join("");
         const draftOptions = draftProjects
           .map((draft) => {
             const value = String(draft?.name || "").trim();
             const selected = marketplaceDraftListing.projectId === value ? "selected" : "";
-            return `<option value="${escapeHtmlText(value)}" ${selected}>${escapeHtmlText(value || "Untitled Draft")}</option>`;
+            return `<option value="${escapeHtmlText(value)}" ${selected} ${darkOptionStyle}>${escapeHtmlText(value || "Untitled Draft")}</option>`;
           })
           .join("");
         const stepOneReady = canAdvanceMarketplaceStep(1);
@@ -939,12 +1078,20 @@
           </div>`;
         }
         return `<div class="rounded-[2rem] border border-white/10 bg-slate-900/80 p-5 sm:p-6 shadow-[0_20px_60px_rgba(2,6,23,0.3)]">
-          <div class="grid grid-cols-3 gap-2 text-center">
+          <div class="flex items-center gap-2 text-center">
             ${[1, 2, 3]
               .map((step) => {
                 const enabled =
                   step === 1 || (step === 2 ? stepOneReady : stepOneReady && stepTwoReady);
-                return `<button onclick="${enabled ? `setMarketplaceCreateStep(${step})` : "void(0)"}" class="rounded-2xl border ${marketplaceCreateStep === step ? "border-cyan-400/25 bg-cyan-500/10 text-cyan-200" : "border-white/10 bg-white/5 text-slate-300"} ${enabled ? "" : "opacity-45 cursor-not-allowed"} px-3 py-3 text-[10px] font-black uppercase tracking-[0.18em]">${step}. ${step === 1 ? "Source" : step === 2 ? "Details" : "Previews"}</button>`;
+                const completed =
+                  step < marketplaceCreateStep ||
+                  (step === 1 && stepOneReady) ||
+                  (step === 2 && stepTwoReady) ||
+                  stepThreeReady;
+                return `<div class="flex min-w-0 flex-1 items-center gap-2">
+                  <button onclick="${enabled ? `setMarketplaceCreateStep(${step})` : "void(0)"}" class="min-w-[92px] rounded-2xl border ${marketplaceCreateStep === step ? "border-cyan-400/25 bg-cyan-500/10 text-cyan-200" : completed ? "border-emerald-400/25 bg-emerald-500/10 text-emerald-200" : "border-white/10 bg-white/5 text-slate-300"} ${enabled ? "" : "opacity-45 cursor-not-allowed"} px-3 py-3 text-[10px] font-black uppercase tracking-[0.18em]">${step}. ${step === 1 ? "Source" : step === 2 ? "Details" : "Previews"}</button>
+                  ${step < 3 ? `<div class="h-[3px] flex-1 rounded-full ${(step < marketplaceCreateStep || (step === 1 && stepOneReady && marketplaceCreateStep > 1)) ? "bg-emerald-400/90" : "bg-white/10"}"></div>` : ""}
+                </div>`;
               })
               .join("")}
           </div>
@@ -953,19 +1100,19 @@
               <div class="space-y-4">
                 <label class="block">
                   <span class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Choose project type</span>
-                  <select onchange="setMarketplaceSourceType(this.value)" class="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-cyan-400">
-                    <option value="">Select source type</option>
-                    <option value="upload" ${marketplaceDraftListing.sourceType === "upload" ? "selected" : ""}>Upload project folder</option>
-                    <option value="draft" ${marketplaceDraftListing.sourceType === "draft" ? "selected" : ""}>MediaLab draft</option>
-                    <option value="live" ${marketplaceDraftListing.sourceType === "live" ? "selected" : ""}>Live project</option>
+                  <select onchange="setMarketplaceSourceType(this.value)" data-marketplace-focus="source-type" class="mt-3 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-950 outline-none focus:border-cyan-400" ${selectStyles}>
+                    <option value="" ${darkOptionStyle}>Select source type</option>
+                    <option value="upload" ${marketplaceDraftListing.sourceType === "upload" ? "selected" : ""} ${darkOptionStyle}>Upload project folder</option>
+                    <option value="draft" ${marketplaceDraftListing.sourceType === "draft" ? "selected" : ""} ${darkOptionStyle}>MediaLab draft</option>
+                    <option value="live" ${marketplaceDraftListing.sourceType === "live" ? "selected" : ""} ${darkOptionStyle}>Live project</option>
                   </select>
                 </label>
                 ${
                   marketplaceDraftListing.sourceType === "draft"
                     ? `<label class="block">
                         <span class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Choose draft project</span>
-                        <select onchange="selectMarketplaceDraftProject(this.value)" class="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-cyan-400">
-                          <option value="">Select one of your drafts</option>
+                        <select onchange="selectMarketplaceDraftProject(this.value)" data-marketplace-focus="draft-select" class="mt-3 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-950 outline-none focus:border-cyan-400" ${selectStyles}>
+                          <option value="" ${darkOptionStyle}>Select one of your drafts</option>
                           ${draftOptions}
                         </select>
                       </label>`
@@ -973,23 +1120,43 @@
                 }
                 ${
                   marketplaceDraftListing.sourceType === "upload"
-                    ? `<div class="rounded-[1.8rem] border border-dashed border-white/10 bg-white/[0.03] p-5">
-                        <p class="text-[10px] font-black uppercase tracking-[0.18em] text-cyan-300">Upload Project Folder</p>
-                        <div ondragover="event.preventDefault(); this.classList.add('border-cyan-400/30');" ondragleave="this.classList.remove('border-cyan-400/30');" ondrop="handleMarketplaceUploadDrop(event)" onclick="document.getElementById('marketplace-upload-input').click()" class="mt-4 flex min-h-[170px] cursor-pointer flex-col items-center justify-center rounded-[1.6rem] border border-dashed border-white/10 bg-slate-950/70 px-6 text-center transition-all hover:border-cyan-400/30">
-                          <input id="marketplace-upload-input" type="file" multiple webkitdirectory directory class="hidden" onchange="handleMarketplaceUploadFolderInput(this)" />
-                          <div class="flex h-14 w-14 items-center justify-center rounded-[1.3rem] border border-cyan-400/20 bg-cyan-500/10 text-cyan-300"><i class="fas fa-folder-open text-xl"></i></div>
-                          <p class="mt-4 text-base font-semibold text-white">Drag and drop a project folder</p>
-                          <p class="mt-2 max-w-md text-sm leading-6 text-slate-400">MediaLab will detect the main HTML entry and prepare it for the marketplace creator flow.</p>
-                        </div>
-                      </div>`
+                    ? `${marketplaceDraftListing.sourceHtml
+                        ? `<div class="rounded-[1.8rem] border border-emerald-400/15 bg-emerald-500/[0.08] p-5">
+                            <div class="flex items-start justify-between gap-4">
+                              <div>
+                                <p class="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-300">Upload Ready</p>
+                                <p class="mt-3 text-sm font-semibold text-white">${escapeHtmlText(marketplaceDraftListing.projectLabel || "Uploaded project")}</p>
+                                <p class="mt-2 text-sm leading-6 text-slate-300">Project folder captured and locked in. Switch the source type above if you want to replace it.</p>
+                              </div>
+                              <div class="flex h-11 w-11 items-center justify-center rounded-2xl border border-emerald-400/20 bg-emerald-500/10 text-emerald-300"><i class="fas fa-check"></i></div>
+                            </div>
+                          </div>`
+                        : `<div class="rounded-[1.8rem] border border-dashed border-white/10 bg-white/[0.03] p-5">
+                            <p class="text-[10px] font-black uppercase tracking-[0.18em] text-cyan-300">Upload Project Folder</p>
+                            <div ondragover="event.preventDefault(); this.classList.add('border-cyan-400/30');" ondragleave="this.classList.remove('border-cyan-400/30');" ondrop="handleMarketplaceUploadDrop(event)" onclick="${marketplaceUploadState.active ? "void(0)" : "document.getElementById('marketplace-upload-input').click()"}" class="mt-4 flex min-h-[170px] ${marketplaceUploadState.active ? "cursor-wait" : "cursor-pointer"} flex-col items-center justify-center rounded-[1.6rem] border border-dashed border-white/10 bg-slate-950/70 px-6 text-center transition-all hover:border-cyan-400/30">
+                              <input id="marketplace-upload-input" type="file" multiple webkitdirectory directory class="hidden" onchange="handleMarketplaceUploadFolderInput(this)" />
+                              <div class="flex h-14 w-14 items-center justify-center rounded-[1.3rem] border border-cyan-400/20 bg-cyan-500/10 text-cyan-300"><i class="fas fa-folder-open text-xl"></i></div>
+                              <p class="mt-4 text-base font-semibold text-white">${marketplaceUploadState.active ? "Preparing your project..." : "Drag and drop a project folder"}</p>
+                              <p class="mt-2 max-w-md text-sm leading-6 text-slate-400">${marketplaceUploadState.active ? escapeHtmlText(marketplaceUploadState.message || "Scanning files and packaging source...") : "MediaLab will detect the main HTML entry and prepare it for the marketplace creator flow."}</p>
+                              ${marketplaceUploadState.active ? `<div class="mt-5 w-full max-w-md">
+                                <div class="flex items-center justify-between text-[10px] font-black uppercase tracking-[0.18em] text-cyan-200">
+                                  <span>${Math.max(0, marketplaceUploadState.current)}/${Math.max(1, marketplaceUploadState.total || 1)} files</span>
+                                  <span>${Math.max(0, Math.min(100, Number(marketplaceUploadState.percent || 0)))}%</span>
+                                </div>
+                                <div class="mt-2 h-2 overflow-hidden rounded-full bg-white/10">
+                                  <div class="h-full rounded-full bg-gradient-to-r from-cyan-400 to-emerald-400 transition-all duration-200" style="width:${Math.max(0, Math.min(100, Number(marketplaceUploadState.percent || 0)))}%"></div>
+                                </div>
+                              </div>` : ""}
+                            </div>
+                          </div>`}`
                     : ""
                 }
                 ${
                   marketplaceDraftListing.sourceType === "live"
                     ? `<label class="block">
                         <span class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Choose live project</span>
-                        <select onchange="selectMarketplaceLiveProject(this.value)" class="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-cyan-400">
-                          <option value="">Select one of your live projects</option>
+                        <select onchange="selectMarketplaceLiveProject(this.value)" data-marketplace-focus="live-select" class="mt-3 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-950 outline-none focus:border-cyan-400" ${selectStyles}>
+                          <option value="" ${darkOptionStyle}>Select one of your live projects</option>
                           ${liveOptions}
                         </select>
                       </label>
@@ -1016,23 +1183,23 @@
               <div class="space-y-4">
                 <label class="block">
                   <span class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Marketplace title</span>
-                  <input value="${escapeHtmlText(marketplaceDraftListing.title)}" oninput="updateMarketplaceDraftField('title', this.value); mountMarketplaceTool();" class="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-cyan-400" placeholder="Candy Crush Starter Pack" />
+                  <input value="${escapeHtmlText(marketplaceDraftListing.title)}" data-marketplace-focus="title" oninput="handleMarketplaceLiveInput(event, 'title')" class="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-cyan-400" placeholder="Candy Crush Starter Pack" />
                 </label>
                 <label class="block">
                   <span class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Category</span>
-                  <input value="${escapeHtmlText(marketplaceDraftListing.category)}" oninput="updateMarketplaceDraftField('category', this.value); mountMarketplaceTool();" class="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-cyan-400" placeholder="Game, Portfolio, SaaS..." />
+                  <input value="${escapeHtmlText(marketplaceDraftListing.category)}" data-marketplace-focus="category" oninput="handleMarketplaceLiveInput(event, 'category')" class="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-cyan-400" placeholder="Game, Portfolio, SaaS..." />
                 </label>
                 <label class="block">
                   <span class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Purpose</span>
-                  <textarea rows="3" oninput="updateMarketplaceDraftField('purpose', this.value); mountMarketplaceTool();" class="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none resize-none focus:border-cyan-400" placeholder="What problem does this project solve?">${escapeHtmlText(marketplaceDraftListing.purpose)}</textarea>
+                  <textarea rows="3" data-marketplace-focus="purpose" oninput="handleMarketplaceLiveInput(event, 'purpose')" class="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none resize-none focus:border-cyan-400" placeholder="What problem does this project solve?">${escapeHtmlText(marketplaceDraftListing.purpose)}</textarea>
                 </label>
                 <label class="block">
                   <span class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Professional description</span>
-                  <textarea rows="5" oninput="updateMarketplaceDraftField('description', this.value); mountMarketplaceTool();" class="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none resize-none focus:border-cyan-400" placeholder="Write a compelling professional description.">${escapeHtmlText(marketplaceDraftListing.description)}</textarea>
+                  <textarea rows="5" data-marketplace-focus="description" oninput="handleMarketplaceLiveInput(event, 'description')" class="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none resize-none focus:border-cyan-400" placeholder="Write a compelling professional description.">${escapeHtmlText(marketplaceDraftListing.description)}</textarea>
                 </label>
                 <label class="block">
                   <span class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Set price</span>
-                  <input type="number" min="0" step="0.01" value="${Number(marketplaceDraftListing.price || 0)}" oninput="updateMarketplaceDraftField('price', this.value); mountMarketplaceTool();" class="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-cyan-400" placeholder="0 for free" />
+                  <input type="number" min="0" step="0.01" value="${Number(marketplaceDraftListing.price || 0)}" data-marketplace-focus="price" oninput="handleMarketplaceLiveInput(event, 'price')" class="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-cyan-400" placeholder="0 for free" />
                 </label>
               </div>` : `
               <div class="space-y-4">
@@ -1041,16 +1208,32 @@
                   <input type="file" accept="image/*" multiple onchange="handleMarketplaceScreenshotInput(this)" class="mt-3 block w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300" />
                 </label>
                 <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-                  ${(marketplaceDraftListing.screenshots || []).map((shot, index) => `<div class="relative overflow-hidden rounded-[1.4rem] border ${index === 0 ? "border-cyan-400/30" : "border-white/10"} bg-slate-950/70">
-                    <img src="${escapeHtmlText(shot)}" class="h-36 w-full object-cover" />
-                    <button onclick="removeMarketplaceScreenshot(${index})" class="absolute right-2 top-2 h-8 w-8 rounded-xl bg-slate-950/75 text-white"><i class="fas fa-times"></i></button>
-                    <div class="absolute left-2 top-2 rounded-full border border-white/10 bg-slate-950/75 px-2 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-white">${index === 0 ? "Thumbnail" : `Preview ${index + 1}`}</div>
-                  </div>`).join("")}
+                  ${Array.from({ length: 4 }, (_, index) => {
+                    const shot = (marketplaceDraftListing.screenshots || [])[index];
+                    if (!shot) {
+                      return `<div class="relative overflow-hidden rounded-[1.55rem] border border-dashed border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(15,23,42,0.88))] p-4">
+                        <div class="flex h-36 flex-col items-center justify-center rounded-[1.2rem] border border-white/6 bg-slate-950/55 text-center">
+                          <div class="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-400"><i class="fas fa-image"></i></div>
+                          <p class="mt-3 text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">${index === 0 ? "Thumbnail slot" : `Preview ${index + 1}`}</p>
+                          <p class="mt-2 px-4 text-xs leading-5 text-slate-500">Add a clean project screenshot for a stronger marketplace card.</p>
+                        </div>
+                      </div>`;
+                    }
+                    return `<div class="relative overflow-hidden rounded-[1.55rem] border ${index === 0 ? "border-cyan-400/30 shadow-[0_18px_40px_rgba(34,211,238,0.12)]" : "border-white/10"} bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(15,23,42,0.92))] p-2">
+                      <div class="relative overflow-hidden rounded-[1.2rem]">
+                        <img src="${escapeHtmlText(shot)}" class="h-40 w-full object-cover" />
+                        <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/90 via-slate-950/20 to-transparent p-3">
+                          <div class="inline-flex items-center rounded-full border ${index === 0 ? "border-cyan-400/25 bg-cyan-500/10 text-cyan-200" : "border-white/10 bg-slate-950/60 text-white"} px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em]">${index === 0 ? "Marketplace thumbnail" : `Preview ${index + 1}`}</div>
+                        </div>
+                        <button onclick="removeMarketplaceScreenshot(${index})" class="absolute right-2 top-2 h-8 w-8 rounded-xl border border-white/10 bg-slate-950/80 text-white transition-all hover:bg-rose-500"><i class="fas fa-times"></i></button>
+                      </div>
+                    </div>`;
+                  }).join("")}
                 </div>
                 <div class="rounded-[1.6rem] border border-cyan-400/15 bg-cyan-500/5 p-4 text-sm text-slate-300">
                   <p class="font-semibold text-white">Review summary</p>
                   <p class="mt-2">Project: ${escapeHtmlText(marketplaceDraftListing.title || "Untitled Sale")}</p>
-                  <p class="mt-1">Price: ${formatMarketplacePrice(marketplaceDraftListing.price)}</p>
+                  <p class="mt-1">Price: ${renderMarketplacePriceValue(marketplaceDraftListing.price, "font-semibold")}</p>
                   <p class="mt-1">Screenshots: ${(marketplaceDraftListing.screenshots || []).length}/4</p>
                 </div>
               </div>`}
@@ -1067,11 +1250,12 @@
       }
       function renderMarketplacePane() {
         if (marketplaceActiveTab === "mine") return renderMarketplaceMySales(marketplaceMySales);
+        if (marketplaceActiveTab === "purchased") return renderMarketplacePurchased(marketplacePurchasedItems);
         if (marketplaceActiveTab === "create") return renderMarketplaceCreatorStep();
         return `<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">${renderMarketplaceCards(getFilteredMarketplaceItems(marketplaceItems))}</div>`;
       }
       function renderMarketplaceTool() {
-        return `<div class="animate-fadeIn space-y-8">
+        return `<div class="animate-fadeIn relative space-y-8">
           <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h2 class="text-3xl font-semibold tracking-tighter text-white">Project Marketplace</h2>
@@ -1091,28 +1275,63 @@
             <div class="flex flex-wrap gap-3">
               <button onclick="setMarketplaceTab('sale')" class="rounded-2xl px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] ${marketplaceActiveTab === "sale" ? "bg-cyan-500 text-slate-950" : "border border-white/10 bg-white/5 text-slate-200"}">On Sale</button>
               <button onclick="setMarketplaceTab('mine')" class="rounded-2xl px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] ${marketplaceActiveTab === "mine" ? "bg-cyan-500 text-slate-950" : "border border-white/10 bg-white/5 text-slate-200"}">My Sales</button>
+              <button onclick="setMarketplaceTab('purchased')" class="rounded-2xl px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] ${marketplaceActiveTab === "purchased" ? "bg-cyan-500 text-slate-950" : "border border-white/10 bg-white/5 text-slate-200"}">Purchased</button>
               <button onclick="setMarketplaceTab('create')" class="rounded-2xl px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] ${marketplaceActiveTab === "create" ? "bg-cyan-500 text-slate-950" : "border border-white/10 bg-white/5 text-slate-200"}">Add New Sale +</button>
             </div>
             ${
               marketplaceActiveTab === "sale"
                 ? `<div class="${marketplaceSearchOpen ? "" : "hidden"} mt-4 flex flex-col gap-3 rounded-[1.5rem] border border-white/10 bg-slate-950/55 p-3 sm:flex-row">
-                    <select onchange="marketplaceSearchField=this.value; mountMarketplaceTool();" class="w-full sm:w-44 rounded-2xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none focus:border-cyan-400">
-                      <option value="title" ${marketplaceSearchField === "title" ? "selected" : ""}>Project title</option>
-                      <option value="name" ${marketplaceSearchField === "name" ? "selected" : ""}>Author name</option>
-                      <option value="free" ${marketplaceSearchField === "free" ? "selected" : ""}>Free only</option>
+                    <select onchange="marketplaceSearchField=this.value; mountMarketplaceTool();" class="w-full sm:w-44 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-950 outline-none focus:border-cyan-400" ${selectStyles}>
+                      <option value="title" ${marketplaceSearchField === "title" ? "selected" : ""} ${darkOptionStyle}>Project title</option>
+                      <option value="name" ${marketplaceSearchField === "name" ? "selected" : ""} ${darkOptionStyle}>Author name</option>
+                      <option value="free" ${marketplaceSearchField === "free" ? "selected" : ""} ${darkOptionStyle}>Free only</option>
                     </select>
-                    <input ${marketplaceSearchField === "free" ? "disabled" : ""} value="${escapeHtmlText(marketplaceSearchTerm)}" oninput="marketplaceSearchTerm=this.value; mountMarketplaceTool();" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white outline-none focus:border-cyan-400 disabled:opacity-45" placeholder="${marketplaceSearchField === "name" ? "Search by creator name" : marketplaceSearchField === "free" ? "Showing free projects" : "Search by project title"}" />
+                    <input ${marketplaceSearchField === "free" ? "disabled" : ""} data-marketplace-focus="sale-search" value="${escapeHtmlText(marketplaceSearchTerm)}" oninput="handleMarketplaceSearchInput(event)" class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white outline-none focus:border-cyan-400 disabled:opacity-45" placeholder="${marketplaceSearchField === "name" ? "Search by creator name" : marketplaceSearchField === "free" ? "Showing free projects" : "Search by project title"}" />
                   </div>`
                 : ""
             }
             <div class="mt-6">${renderMarketplacePane()}</div>
           </div>
+          ${marketplaceSubmitState.active ? `<div class="absolute inset-0 z-20 flex items-center justify-center rounded-[2.2rem] bg-slate-950/88 p-6 backdrop-blur-sm">
+            <div class="w-full max-w-lg rounded-[2rem] border border-cyan-400/20 bg-[linear-gradient(180deg,rgba(15,23,42,0.98),rgba(2,6,23,0.96))] p-6 shadow-[0_28px_90px_rgba(2,6,23,0.48)]">
+              <div class="flex items-center gap-4">
+                <div class="flex h-14 w-14 items-center justify-center rounded-[1.4rem] border border-cyan-400/20 bg-cyan-500/10 text-cyan-300">
+                  <i class="fas fa-cloud-upload-alt text-xl"></i>
+                </div>
+                <div>
+                  <p class="text-[10px] font-black uppercase tracking-[0.18em] text-cyan-300">Submitting to Marketplace</p>
+                  <h3 class="mt-2 text-xl font-semibold tracking-tight text-white">${escapeHtmlText(marketplaceSubmitState.message || "Packaging your sale and sending it for review...")}</h3>
+                </div>
+              </div>
+              <div class="mt-6">
+                <div class="flex items-center justify-between text-[10px] font-black uppercase tracking-[0.18em] text-slate-300">
+                  <span>Submission Progress</span>
+                  <span>${Math.max(0, Math.min(100, Number(marketplaceSubmitState.percent || 0)))}%</span>
+                </div>
+                <div class="mt-2 h-2.5 overflow-hidden rounded-full bg-white/10">
+                  <div class="h-full rounded-full bg-gradient-to-r from-cyan-400 via-sky-400 to-emerald-400 transition-all duration-200" style="width:${Math.max(0, Math.min(100, Number(marketplaceSubmitState.percent || 0)))}%"></div>
+                </div>
+                <p class="mt-4 text-sm leading-6 text-slate-400">MediaLab is uploading your project package, screenshots, and metadata. Keep this tab open until the review submission completes.</p>
+              </div>
+            </div>
+          </div>` : ""}
         </div>`;
       }
       function mountMarketplaceTool() {
         const area = document.getElementById("tool-display");
         if (!area) return;
+        const focusState = captureMarketplaceFocus();
+        const previousHeight = area.offsetHeight;
+        const previousScroll = area.scrollTop;
+        if (previousHeight > 0) {
+          area.style.minHeight = `${previousHeight}px`;
+        }
         area.innerHTML = renderMarketplaceTool();
+        area.scrollTop = previousScroll;
+        restoreMarketplaceFocus(focusState);
+        requestAnimationFrame(() => {
+          area.style.minHeight = "";
+        });
       }
       function setMarketplaceTab(tab = "sale") {
         marketplaceActiveTab = tab;
@@ -1136,6 +1355,54 @@
           [field]: field === "price" ? Number(value || 0) : String(value || ""),
         };
       }
+      function handleMarketplaceLiveInput(event, field) {
+        updateMarketplaceDraftField(field, event?.target?.value ?? "");
+        if (currentStudioToolId === "marketplace") mountMarketplaceTool();
+      }
+      function handleMarketplaceSearchInput(event) {
+        marketplaceSearchTerm = String(event?.target?.value || "");
+        mountMarketplaceTool();
+      }
+      function captureMarketplaceFocus() {
+        const active = document.activeElement;
+        if (!active) return null;
+        const key = active.getAttribute?.("data-marketplace-focus");
+        if (!key) return null;
+        return {
+          key,
+          start: typeof active.selectionStart === "number" ? active.selectionStart : null,
+          end: typeof active.selectionEnd === "number" ? active.selectionEnd : null,
+        };
+      }
+      function restoreMarketplaceFocus(state) {
+        if (!state) return;
+        requestAnimationFrame(() => {
+          const input = document.querySelector(`[data-marketplace-focus="${state.key}"]`);
+          if (!input) return;
+          input.focus({ preventScroll: true });
+          if (
+            typeof input.setSelectionRange === "function" &&
+            typeof state.start === "number" &&
+            typeof state.end === "number"
+          ) {
+            input.setSelectionRange(state.start, state.end);
+          }
+        });
+      }
+      function setMarketplaceUploadState(patch = {}) {
+        marketplaceUploadState = {
+          ...marketplaceUploadState,
+          ...patch,
+        };
+        if (currentStudioToolId === "marketplace") mountMarketplaceTool();
+      }
+      function setMarketplaceSubmitState(patch = {}) {
+        marketplaceSubmitState = {
+          ...marketplaceSubmitState,
+          ...patch,
+        };
+        if (currentStudioToolId === "marketplace") mountMarketplaceTool();
+      }
       function selectMarketplaceDraftProject(name = "") {
         const draft = getMarketplaceDraftProjects().find(
           (item) => String(item?.name || "").trim() === String(name || "").trim(),
@@ -1147,6 +1414,7 @@
           sourceHtml: String(draft?.canvasHtml || "").trim(),
           sourceEntryPath: "index.html",
           sourceFiles: draft ? [{ path: "index.html", name: "index.html" }] : [],
+          title: marketplaceDraftListing.title || String(draft?.name || "").trim(),
         };
         mountMarketplaceTool();
       }
@@ -1162,8 +1430,40 @@
           sourceHtml: "",
           sourceEntryPath: "index.html",
           sourceFiles: [],
+          title: marketplaceDraftListing.title || String(project?.name || "").trim(),
         };
         mountMarketplaceTool();
+      }
+      async function readMarketplaceUploadFile(file, path) {
+        const mimeType = String(file?.type || "").trim();
+        const normalizedPath = String(path || file?.name || "").replace(/\\/g, "/");
+        const isTextLike =
+          /^text\//i.test(mimeType) ||
+          /\.(html?|css|js|json|txt|md|svg)$/i.test(normalizedPath);
+        if (isTextLike) {
+          const content = await file.text();
+          return {
+            path: normalizedPath,
+            name: file.name,
+            content,
+            mimeType: mimeType || "text/plain",
+          };
+        }
+        const contentBase64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = String(reader.result || "");
+            resolve(result.split(",")[1] || "");
+          };
+          reader.onerror = () => reject(reader.error);
+          reader.readAsDataURL(file);
+        });
+        return {
+          path: normalizedPath,
+          name: file.name,
+          contentBase64,
+          mimeType: mimeType || "application/octet-stream",
+        };
       }
       async function processMarketplaceUploadFiles(files = []) {
         const fileList = Array.from(files || []);
@@ -1184,6 +1484,27 @@
         }
         const folderName = String(entryFile.path.split("/")[0] || "uploaded-project").trim();
         const html = await entryFile.file.text();
+        const filesToSerialize = normalized.slice(0, 120);
+        const serializedFiles = [];
+        setMarketplaceUploadState({
+          active: true,
+          percent: 2,
+          current: 0,
+          total: filesToSerialize.length,
+          message: "Scanning project files...",
+        });
+        for (let index = 0; index < filesToSerialize.length; index += 1) {
+          const item = filesToSerialize[index];
+          const serialized = await readMarketplaceUploadFile(item.file, item.path);
+          serializedFiles.push(serialized);
+          setMarketplaceUploadState({
+            active: true,
+            current: index + 1,
+            total: filesToSerialize.length,
+            percent: Math.round(((index + 1) / Math.max(filesToSerialize.length, 1)) * 100),
+            message: `Packaging ${item.name || item.path}...`,
+          });
+        }
         marketplaceDraftListing = {
           ...marketplaceDraftListing,
           projectId: `upload:${folderName}`,
@@ -1192,22 +1513,25 @@
           sourceEntryPath: entryFile.path.includes("/")
             ? entryFile.path.split("/").slice(1).join("/")
             : entryFile.path,
-          sourceFiles: normalized.slice(0, 120).map((item) => ({
-            path: item.path,
-            name: item.file.name,
-          })),
+          sourceFiles: serializedFiles,
+          title: marketplaceDraftListing.title || folderName,
         };
+        marketplaceUploadState = createEmptyMarketplaceUploadState();
         mountMarketplaceTool();
         showBuilderSnackbar("Project folder prepared for marketplace listing.", "success");
       }
       function handleMarketplaceUploadFolderInput(input) {
         processMarketplaceUploadFiles(Array.from(input?.files || [])).catch(() => {
+          marketplaceUploadState = createEmptyMarketplaceUploadState();
+          if (currentStudioToolId === "marketplace") mountMarketplaceTool();
           showBuilderSnackbar("Could not read that project folder.", "error");
         });
       }
       function handleMarketplaceUploadDrop(event) {
         event.preventDefault();
         processMarketplaceUploadFiles(Array.from(event.dataTransfer?.files || [])).catch(() => {
+          marketplaceUploadState = createEmptyMarketplaceUploadState();
+          if (currentStudioToolId === "marketplace") mountMarketplaceTool();
           showBuilderSnackbar("Could not read that project folder.", "error");
         });
       }
@@ -1308,6 +1632,25 @@
           showLogin();
           return;
         }
+        const sourceItem =
+          (currentMarketplaceItem?._id === id ? currentMarketplaceItem : null) ||
+          marketplaceItems.find((item) => item._id === id) ||
+          marketplaceMySales.find((item) => item._id === id) ||
+          marketplacePurchasedItems.find((item) => item._id === id) ||
+          null;
+        const access = canInteractWithMarketplaceItem(sourceItem);
+        if (!access.approved) {
+          showBuilderSnackbar("This project is still pending approval. Rating unlocks after approval.", "error");
+          return;
+        }
+        if (access.isOwner) {
+          showBuilderSnackbar("You cannot rate your own project.", "error");
+          return;
+        }
+        if (!access.canRate && sourceItem?.viewerHasRated) {
+          showBuilderSnackbar("You have already rated this marketplace project.", "error");
+          return;
+        }
         try {
           const res = await fetch(`/api/marketplace/${encodeURIComponent(id)}/rate`, {
             method: "POST",
@@ -1340,27 +1683,110 @@
           return;
         }
         beginUniversalProgress("Submitting marketplace listing for review...", 18, 92);
+        setMarketplaceSubmitState({
+          active: true,
+          percent: 12,
+          message: "Preparing your project package...",
+        });
         try {
+          setMarketplaceSubmitState({
+            active: true,
+            percent: 34,
+            message: "Uploading sale details and preview assets...",
+          });
           const res = await fetch("/api/marketplace", {
             method: "POST",
             credentials: "include",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(marketplaceDraftListing),
           });
+          setMarketplaceSubmitState({
+            active: true,
+            percent: 74,
+            message: "Finalizing your review submission...",
+          });
           const data = await res.json();
           if (!res.ok || !data.success) {
             throw new Error(data.message || "Could not submit the listing.");
           }
           completeUniversalProgress("Marketplace listing submitted.");
+          setMarketplaceSubmitState({
+            active: true,
+            percent: 100,
+            message: "Submission complete. Opening My Sales...",
+          });
           marketplaceDraftListing = createEmptyMarketplaceDraftListing();
+          marketplaceUploadState = createEmptyMarketplaceUploadState();
           marketplaceCreateStep = 1;
           marketplaceActiveTab = "mine";
           await refreshMarketplaceData();
+          marketplaceSubmitState = createEmptyMarketplaceSubmitState();
           mountMarketplaceTool();
           showBuilderSnackbar("Project submitted for marketplace review.", "success");
         } catch (error) {
           failUniversalProgress("Marketplace submit failed.");
+          marketplaceSubmitState = createEmptyMarketplaceSubmitState();
+          mountMarketplaceTool();
           showBuilderSnackbar(error.message || "Could not submit this marketplace listing.", "error");
+        }
+      }
+      function openMarketplaceRemoveModal(id = "") {
+        pendingMarketplaceRemovalId = String(id || "").trim();
+        const modal = document.getElementById("marketplace-remove-modal");
+        if (!modal) return;
+        const defaultRadio = modal.querySelector(
+          'input[name="marketplace-remove-reason"][value="No buyers"]',
+        );
+        if (defaultRadio) defaultRadio.checked = true;
+        const otherInput = document.getElementById("marketplace-remove-other");
+        if (otherInput) otherInput.value = "";
+        modal.classList.remove("hidden");
+        modal.classList.add("flex");
+      }
+      function closeMarketplaceRemoveModal() {
+        pendingMarketplaceRemovalId = "";
+        const modal = document.getElementById("marketplace-remove-modal");
+        modal?.classList.add("hidden");
+        modal?.classList.remove("flex");
+      }
+      async function submitMarketplaceRemoval() {
+        const itemId = String(pendingMarketplaceRemovalId || "").trim();
+        if (!itemId) return;
+        const selectedReason =
+          document.querySelector('input[name="marketplace-remove-reason"]:checked')?.value ||
+          "No buyers";
+        const otherText = String(
+          document.getElementById("marketplace-remove-other")?.value || "",
+        ).trim();
+        const reason =
+          selectedReason === "Other" && otherText ? otherText : selectedReason;
+        const submitBtn = document.getElementById("marketplace-remove-submit");
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.textContent = "Removing...";
+        }
+        try {
+          const res = await fetch(`/api/marketplace/${encodeURIComponent(itemId)}/remove`, {
+            method: "PATCH",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ reason }),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            throw new Error(data.message || "Could not remove this sale.");
+          }
+          closeMarketplaceRemoveModal();
+          await refreshMarketplaceData();
+          if (currentStudioToolId === "marketplace") mountMarketplaceTool();
+          showBuilderSnackbar("Marketplace sale removed.", "success");
+        } catch (error) {
+          showBuilderSnackbar(error.message || "Could not remove this sale.", "error");
+        } finally {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = "Remove Sale";
+          }
         }
       }
       function closeMarketplaceDetail() {
@@ -1373,6 +1799,7 @@
         const title = document.getElementById("marketplace-detail-title");
         const subtitle = document.getElementById("marketplace-detail-subtitle");
         if (!body || !title || !subtitle || !item) return;
+        const access = canInteractWithMarketplaceItem(item);
         title.textContent = item.title || "Marketplace Project";
         subtitle.textContent = `${item.category || "General"} project by ${item.authorName || "MediaLab Creator"}`;
         const gallery = (Array.isArray(item.screenshots) && item.screenshots.length
@@ -1411,16 +1838,21 @@
                 <div class="flex items-start justify-between gap-4">
                   <div>
                     <p class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Price</p>
-                    <p class="mt-2 text-3xl font-black text-white">${formatMarketplacePrice(item.price)}</p>
+                    <p class="mt-2 text-3xl font-black">${renderMarketplacePriceValue(item.price)}</p>
                   </div>
                   ${getMarketplaceStatusBadge(item.status)}
                 </div>
                 <div class="mt-4 flex items-center gap-2 text-sm">${renderMarketplaceRating(item.averageRating || 0)}<span class="ml-2 text-slate-400">${Number(item.ratingPercent || 0).toFixed(0)}% rating from ${item.ratingCount || 0} users</span></div>
-                <button onclick="rateMarketplaceItem('${item._id}')" class="mt-4 inline-flex items-center gap-2 rounded-2xl border ${item.viewerHasRated ? "border-amber-400/30 bg-amber-500/10 text-amber-300" : "border-white/10 bg-white/5 text-slate-200"} px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em]">
+                ${!access.approved ? `<div class="mt-4 rounded-2xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">This project is still pending approval. Rating and purchase unlock after approval.</div>` : access.isOwner ? `<div class="mt-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">You are the owner of this project, so rating and purchase are disabled.</div>` : ``}
+                <button onclick="rateMarketplaceItem('${item._id}')" class="mt-4 inline-flex items-center gap-2 rounded-2xl border ${!access.canRate ? "border-white/10 bg-white/[0.04] text-slate-500 cursor-not-allowed" : item.viewerHasRated ? "border-amber-400/30 bg-amber-500/10 text-amber-300" : "border-white/10 bg-white/5 text-slate-200"} px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em]">
                   <i class="fas fa-star"></i>
                   ${item.viewerHasRated ? "Rated" : "Rate Project"}
                 </button>
-                <button onclick="purchaseMarketplaceItem('${item._id}')" class="mt-5 w-full rounded-2xl bg-emerald-400 px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-slate-950 hover:bg-emerald-300">Purchase Project</button>
+                ${
+                  item.viewerPurchaseStatus
+                    ? `<div class="mt-5 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm ${String(item.viewerPurchaseStatus || "").toLowerCase() === "approved" ? "text-emerald-300" : String(item.viewerPurchaseStatus || "").toLowerCase() === "failed" ? "text-rose-300" : "text-amber-300"}">${escapeHtmlText(item.viewerPurchaseMessage || "Purchase recorded.")}</div>`
+                    : `<button onclick="purchaseMarketplaceItem('${item._id}')" class="mt-5 w-full rounded-2xl ${access.canPurchase ? "bg-emerald-400 text-slate-950 hover:bg-emerald-300" : "bg-slate-700 text-slate-400 cursor-not-allowed"} px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em]">Purchase Project</button>`
+                }
               </div>
               <div class="rounded-[1.8rem] border border-white/10 bg-slate-900/85 p-5">
                 <p class="text-[10px] font-black uppercase tracking-[0.18em] text-cyan-300">About the Author</p>
@@ -1435,27 +1867,34 @@
                 </div>
               </div>
               <div class="rounded-[1.8rem] border border-white/10 bg-slate-900/85 p-5">
-                <p class="text-[10px] font-black uppercase tracking-[0.18em] text-cyan-300">Comments</p>
+                <div class="flex items-center justify-between gap-4">
+                  <p class="text-[10px] font-black uppercase tracking-[0.18em] text-cyan-300">Comments</p>
+                  ${(item.comments || []).length > 3 ? `<button onclick="openMarketplaceCommentsModal()" class="text-xs font-semibold text-cyan-300 hover:text-cyan-200">View more</button>` : ``}
+                </div>
                 <div class="mt-4 space-y-3 max-h-[280px] overflow-y-auto pr-1">
-                  ${(item.comments || []).length ? item.comments.map((comment) => `<div class="rounded-[1.3rem] border border-white/10 bg-white/[0.03] p-4">
+                  ${(item.comments || []).length ? item.comments.slice(0, 3).map((comment) => `<div class="rounded-[1.3rem] border border-white/10 bg-white/[0.03] p-4">
                     <div class="flex items-center justify-between gap-3">
                       <p class="text-sm font-semibold text-white">${escapeHtmlText(comment.name || "MediaLab user")}</p>
                       <div class="flex items-center gap-1 text-[11px]">${renderMarketplaceRating(comment.rating || 5)}</div>
                     </div>
                     <p class="mt-2 text-sm leading-6 text-slate-400">${escapeHtmlText(comment.text || "")}</p>
+                    ${(comment.replies || []).length ? `<div class="mt-3 border-l border-cyan-400/20 pl-3 space-y-2">${comment.replies.slice(-1).map((reply) => `<div class="rounded-2xl bg-slate-950/55 px-3 py-2">
+                      <p class="text-xs font-semibold text-cyan-200">${escapeHtmlText(reply.name || "MediaLab user")}</p>
+                      <p class="mt-1 text-xs leading-5 text-slate-400">${escapeHtmlText(reply.text || "")}</p>
+                    </div>`).join("")}</div>` : ``}
                   </div>`).join("") : `<p class="text-sm text-slate-400">No comments yet. Be the first to review this project.</p>`}
                 </div>
                 <div class="mt-4 grid grid-cols-[110px_minmax(0,1fr)] gap-3">
-                  <select id="marketplace-comment-rating" class="rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-white outline-none">
+                <select id="marketplace-comment-rating" ${!access.approved || access.isOwner ? "disabled" : ""} class="rounded-2xl border border-slate-200 bg-white px-3 py-3 text-slate-950 outline-none disabled:opacity-50">
                     <option value="5">5 Stars</option>
                     <option value="4">4 Stars</option>
                     <option value="3">3 Stars</option>
                     <option value="2">2 Stars</option>
                     <option value="1">1 Star</option>
                   </select>
-                  <textarea id="marketplace-comment-text" rows="3" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none resize-none focus:border-cyan-400" placeholder="Leave a professional review"></textarea>
+                  <textarea id="marketplace-comment-text" rows="3" ${!access.approved || access.isOwner ? "disabled" : ""} class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none resize-none focus:border-cyan-400 disabled:opacity-50" placeholder="${!access.approved ? "Reviews unlock after approval" : access.isOwner ? "You cannot review your own project" : "Leave a professional review"}"></textarea>
                 </div>
-                <button onclick="submitMarketplaceComment()" class="mt-4 rounded-2xl border border-cyan-400/20 bg-cyan-500/10 px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-cyan-200 hover:bg-cyan-500/15">Post Comment</button>
+                <button onclick="submitMarketplaceComment()" class="mt-4 rounded-2xl border ${!access.approved || access.isOwner ? "border-white/10 bg-white/[0.04] text-slate-500 cursor-not-allowed" : "border-cyan-400/20 bg-cyan-500/10 text-cyan-200 hover:bg-cyan-500/15"} px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em]">Post Comment</button>
               </div>
             </div>
           </div>`;
@@ -1486,10 +1925,64 @@
         marketplacePreviewVisible = !marketplacePreviewVisible;
         if (currentMarketplaceItem) renderMarketplaceDetail(currentMarketplaceItem);
       }
+      function renderMarketplaceCommentsModal(item = currentMarketplaceItem) {
+        const body = document.getElementById("marketplace-comments-modal-body");
+        if (!body || !item) return;
+        const access = canInteractWithMarketplaceItem(item);
+        body.innerHTML = `<div class="space-y-4">
+          ${((item.comments || []).length ? item.comments : []).map((comment) => `<div class="rounded-[1.4rem] border border-white/10 bg-white/[0.03] p-4">
+            <div class="flex items-center justify-between gap-3">
+              <p class="text-sm font-semibold text-white">${escapeHtmlText(comment.name || "MediaLab user")}</p>
+              <div class="flex items-center gap-1 text-[11px]">${renderMarketplaceRating(comment.rating || 5)}</div>
+            </div>
+            <p class="mt-2 text-sm leading-6 text-slate-300">${escapeHtmlText(comment.text || "")}</p>
+            ${(comment.replies || []).length ? `<div class="mt-4 space-y-2 border-l border-cyan-400/20 pl-3">${comment.replies.map((reply) => `<div class="rounded-2xl bg-slate-950/60 px-3 py-2">
+              <p class="text-xs font-semibold text-cyan-200">${escapeHtmlText(reply.name || "MediaLab user")}</p>
+              <p class="mt-1 text-xs leading-5 text-slate-400">${escapeHtmlText(reply.text || "")}</p>
+            </div>`).join("")}</div>` : ``}
+            <div class="mt-4 flex flex-col gap-3 sm:flex-row">
+              <textarea id="marketplace-reply-${comment._id}" rows="2" ${!access.approved || access.isOwner ? "disabled" : ""} class="min-h-[76px] flex-1 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none resize-none focus:border-cyan-400 disabled:opacity-50" placeholder="${!access.approved ? "Replies unlock after approval" : access.isOwner ? "You cannot reply to your own project thread" : "Reply to this comment"}"></textarea>
+              <button onclick="submitMarketplaceReply('${comment._id}')" class="rounded-2xl border ${!access.approved || access.isOwner ? "border-white/10 bg-white/[0.04] text-slate-500 cursor-not-allowed" : "border-cyan-400/20 bg-cyan-500/10 text-cyan-200 hover:bg-cyan-500/15"} px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em]">Reply</button>
+            </div>
+          </div>`).join("") || `<p class="text-sm text-slate-400">No comments yet. Be the first to review this project.</p>`}
+        </div>`;
+      }
+      function openMarketplaceCommentsModal() {
+        if (!currentMarketplaceItem) return;
+        document.getElementById("marketplace-comments-modal")?.classList.remove("hidden");
+        renderMarketplaceCommentsModal(currentMarketplaceItem);
+      }
+      function closeMarketplaceCommentsModal() {
+        document.getElementById("marketplace-comments-modal")?.classList.add("hidden");
+      }
+      function canInteractWithMarketplaceItem(item = currentMarketplaceItem) {
+        const normalizedStatus = String(item?.status || "").toLowerCase();
+        const isOwner =
+          Boolean(item?.viewerIsOwner) ||
+          String(item?.authorId || "") === String(currentUser?._id || "");
+        return {
+          approved: normalizedStatus === "approved",
+          isOwner,
+          canRate: normalizedStatus === "approved" && !isOwner && !Boolean(item?.viewerHasRated),
+          canPurchase:
+            normalizedStatus === "approved" &&
+            !isOwner &&
+            !String(item?.viewerPurchaseStatus || "").trim(),
+        };
+      }
       async function submitMarketplaceComment() {
         if (!currentMarketplaceItem?._id) return;
         if (!loggedIn) {
           showLogin();
+          return;
+        }
+        const access = canInteractWithMarketplaceItem(currentMarketplaceItem);
+        if (!access.approved) {
+          showBuilderSnackbar("This listing is still pending approval. Reviews unlock after approval.", "error");
+          return;
+        }
+        if (access.isOwner) {
+          showBuilderSnackbar("You cannot review your own marketplace project.", "error");
           return;
         }
         const text = String(document.getElementById("marketplace-comment-text")?.value || "").trim();
@@ -1518,9 +2011,75 @@
           showBuilderSnackbar(error.message || "Could not post that comment.", "error");
         }
       }
+      async function submitMarketplaceReply(commentId = "") {
+        if (!currentMarketplaceItem?._id) return;
+        if (!loggedIn) {
+          showLogin();
+          return;
+        }
+        const access = canInteractWithMarketplaceItem(currentMarketplaceItem);
+        if (!access.approved) {
+          showBuilderSnackbar("This listing is still pending approval. Replies unlock after approval.", "error");
+          return;
+        }
+        if (access.isOwner) {
+          showBuilderSnackbar("You cannot reply inside your own project thread.", "error");
+          return;
+        }
+        const field = document.getElementById(`marketplace-reply-${commentId}`);
+        const text = String(field?.value || "").trim();
+        if (!text) {
+          showBuilderSnackbar("Write a reply first.", "error");
+          return;
+        }
+        try {
+          const res = await fetch(`/api/marketplace/${encodeURIComponent(currentMarketplaceItem._id)}/comments/${encodeURIComponent(commentId)}/reply`, {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text }),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            throw new Error(data.message || "Could not post your reply.");
+          }
+          currentMarketplaceItem = data.item;
+          renderMarketplaceDetail(currentMarketplaceItem);
+          renderMarketplaceCommentsModal(currentMarketplaceItem);
+          await refreshMarketplaceData();
+          if (currentStudioToolId === "marketplace") mountMarketplaceTool();
+          showBuilderSnackbar("Reply posted.", "success");
+        } catch (error) {
+          showBuilderSnackbar(error.message || "Could not post that reply.", "error");
+        }
+      }
       async function purchaseMarketplaceItem(id) {
         if (!loggedIn) {
           showLogin();
+          return;
+        }
+        const sourceItem =
+          (currentMarketplaceItem?._id === id ? currentMarketplaceItem : null) ||
+          marketplaceItems.find((item) => item._id === id) ||
+          marketplaceMySales.find((item) => item._id === id) ||
+          marketplacePurchasedItems.find((item) => item._id === id) ||
+          null;
+        const access = canInteractWithMarketplaceItem(sourceItem);
+        if (!access.approved) {
+          showBuilderSnackbar("This listing is pending approval. Purchase unlocks after approval.", "error");
+          return;
+        }
+        if (access.isOwner) {
+          showBuilderSnackbar("Unauthorized purchase. You cannot purchase your own project.", "error");
+          return;
+        }
+        if (!access.canPurchase && String(sourceItem?.viewerPurchaseStatus || "").trim()) {
+          showBuilderSnackbar(
+            String(sourceItem?.viewerPurchaseStatus || "").toLowerCase() === "approved"
+              ? "This project is already in your purchased items."
+              : "Your purchase request is already pending approval.",
+            "error",
+          );
           return;
         }
         const confirmed = await openAppDialog({
@@ -1546,7 +2105,21 @@
           completeUniversalProgress("Purchase request sent.");
           await refreshMarketplaceData();
           if (currentStudioToolId === "marketplace") mountMarketplaceTool();
-          showBuilderSnackbar("Purchase request is pending admin approval.", "success");
+          showBuilderSnackbar(
+            data.message ||
+              "Your purchase will be processed within 24 hours.",
+            "success",
+          );
+          if (data.transfer && loggedIn && currentUser) {
+            const draftsRes = await fetch("/api/builder-drafts", {
+              credentials: "include",
+            });
+            const draftsData = await draftsRes.json();
+            if (draftsData?.success && currentUser) {
+              currentUser.builderDrafts = draftsData.drafts || [];
+              renderBuilderDrafts();
+            }
+          }
         } catch (error) {
           failUniversalProgress("Purchase failed.");
           showBuilderSnackbar(error.message || "Could not process this purchase.", "error");
@@ -3162,12 +3735,15 @@
         alert(message);
       }
       async function setupGithubRepository() {
+        return setupGithubRepositoryInternal(false);
+      }
+      async function setupGithubRepositoryInternal(silent = false) {
         if (!loggedIn || !currentUser) {
-          showLogin();
+          if (!silent) showLogin();
           return;
         }
         const trigger = document.getElementById("github-storage-init-btn");
-        if (trigger) {
+        if (trigger && !silent) {
           trigger.disabled = true;
           trigger.innerHTML = `<i class="fas fa-spinner animate-spin"></i> Initializing...`;
         }
@@ -3187,20 +3763,31 @@
             "github-storage-active",
             "initialized GitHub cloud storage",
             "github",
-            { repo: data.storage?.repo || "medialab" },
+            { repo: data.storage?.repo || currentUser?.githubRepoName || getGithubRepoLabel() },
           );
-          showStudioStatusSnackbar(
-            data.message || "GitHub hosting is live and ready for exports.",
-            "success",
-          );
+          if (!silent) {
+            showStudioStatusSnackbar(
+              data.message || "GitHub hosting is live and ready for exports.",
+              "success",
+            );
+          }
         } catch (error) {
-          showStudioStatusSnackbar(
-            error.message || "Could not initialize GitHub hosting right now.",
-            "error",
-          );
+          if (!silent) {
+            showStudioStatusSnackbar(
+              error.message || "Could not initialize GitHub hosting right now.",
+              "error",
+            );
+          }
         } finally {
           renderGithubStorageStatus();
         }
+      }
+      function getGithubRepoLabel() {
+        return String(currentUser?.githubRepoName || "").trim() || "your GitHub repo";
+      }
+      function ensureGithubRepositoryInBackground() {
+        if (!loggedIn || !currentUser?.githubUsername) return;
+        setupGithubRepositoryInternal(true).catch(() => {});
       }
       function getCurrentBalance() {
         return Number(currentUser?.accountBalance || 0);
@@ -4460,10 +5047,50 @@
       function storePendingReferralFromUrl() {
         try {
           const url = new URL(window.location.href);
-          const ref = String(url.searchParams.get("ref") || "").trim();
+          const queryRef = String(url.searchParams.get("ref") || "").trim();
+          const pathRef = String(url.pathname || "")
+            .replace(/^\/+|\/+$/g, "")
+            .trim();
+          const reservedPaths = new Set([
+            "",
+            "admin",
+            "admin/marketplace",
+            "privacy-policy.html",
+            "terms-and-services.html",
+            "contact-support.html",
+          ]);
+          const ref =
+            queryRef ||
+            (!pathRef.includes("/") &&
+            !pathRef.includes(".") &&
+            !reservedPaths.has(pathRef) &&
+            /^[a-zA-Z0-9_-]{4,64}$/.test(pathRef)
+              ? pathRef
+              : "");
           if (!ref) return;
           localStorage.setItem("medialab_pending_referral_code", ref);
+          if (pathRef === ref || queryRef === ref) {
+            window.history.replaceState({}, document.title, "/");
+          }
         } catch {}
+      }
+      async function syncInstalledReferralIfNeeded() {
+        if (!loggedIn || !currentUser) return;
+        const installConfirmed =
+          localStorage.getItem("pwaInstalled") === "true" || isInstalled();
+        if (!installConfirmed) return;
+        if (localStorage.getItem("medialab_install_sync_complete") === "true") return;
+        try {
+          const data = await recordDownloadActivity("pwa", "install-sync", {
+            installState: "installed",
+            syncReason: "session-restored",
+          });
+          if (data?.success) {
+            localStorage.setItem("medialab_install_sync_complete", "true");
+          }
+        } catch (error) {
+          console.warn("Install sync skipped:", error);
+        }
       }
       async function claimPendingReferralIfNeeded() {
         if (!loggedIn || !currentUser) return;
@@ -4512,12 +5139,15 @@
             startAdsenseStatusSyncLoop();
             startUserWalletRefreshLoop();
             await claimPendingReferralIfNeeded();
+            await syncInstalledReferralIfNeeded();
             await fetchReferralStatus();
             if (currentUser.projects) {
               updateSidebarHistory(currentUser.projects);
             }
             currentUser.builderDrafts = currentUser.builderDrafts || [];
             renderBuilderDrafts();
+            scheduleFeedbackPrompt();
+            setTimeout(() => ensureGithubRepositoryInBackground(), 150);
             await logUsageActivity(
               "session-restored",
               "restored logged-in session",
@@ -4531,6 +5161,7 @@
         } catch (e) {
           console.error("Auth check failed:", e);
         }
+        scheduleFeedbackPrompt();
       }
       // Optimized Sidebar History Renderer
       // ====================== UNDO / REDO ======================
@@ -7714,6 +8345,7 @@
         console.log("✨ MediaLab installed successfully!");
         if (installBanner) installBanner.classList.add("hidden");
         localStorage.setItem("pwaInstalled", "true");
+        localStorage.removeItem("medialab_install_sync_complete");
         recordDownloadActivity("pwa", "install-banner", {
           installState: "installed",
         });
@@ -7797,6 +8429,7 @@
       let builderConfirmSecondaryAction = null;
       let feedbackRating = 5;
       let feedbackExitPending = false;
+      let feedbackPromptTimer = null;
       let activeDesignModalMode = "templates";
       const BUILDER_GRID_SIZE = 20;
       let guestBuilderDrafts = [];
@@ -8215,6 +8848,9 @@
         hideStudioMenu();
         hideBuilderPanels();
         document.getElementById("feedback-modal")?.classList.remove("hidden");
+        if (!feedbackExitPending) {
+          markFeedbackPromptShown();
+        }
       }
       function closeFeedbackModal() {
         document.getElementById("feedback-modal")?.classList.add("hidden");
@@ -8233,12 +8869,58 @@
           star.classList.toggle("active", index < value);
         });
       }
+      function getFeedbackPromptStorageKey() {
+        return "medialab_feedback_prompt_last_shown";
+      }
+      function getLastFeedbackPromptAt() {
+        const localValue = localStorage.getItem(getFeedbackPromptStorageKey()) || "";
+        const localDate = localValue ? new Date(localValue) : null;
+        const serverDate = currentUser?.feedbackPromptLastShownAt
+          ? new Date(currentUser.feedbackPromptLastShownAt)
+          : null;
+        if (serverDate && (!localDate || serverDate > localDate)) return serverDate;
+        return localDate;
+      }
+      function shouldScheduleFeedbackPrompt() {
+        const cooldownMs = 4 * 24 * 60 * 60 * 1000;
+        const lastShown = getLastFeedbackPromptAt();
+        if (lastShown && Date.now() - lastShown.getTime() < cooldownMs) return false;
+        return true;
+      }
+      async function markFeedbackPromptShown() {
+        const nowIso = new Date().toISOString();
+        localStorage.setItem(getFeedbackPromptStorageKey(), nowIso);
+        if (currentUser) currentUser.feedbackPromptLastShownAt = nowIso;
+        if (!loggedIn || !currentUser) return;
+        try {
+          const res = await fetch("/api/feedback-prompt/shown", {
+            method: "POST",
+            credentials: "include",
+          });
+          const data = await res.json();
+          if (data?.success && data.user) {
+            currentUser = { ...(currentUser || {}), ...(data.user || {}) };
+          }
+        } catch (error) {
+          console.warn("Feedback prompt sync skipped:", error);
+        }
+      }
+      function scheduleFeedbackPrompt() {
+        clearTimeout(feedbackPromptTimer);
+        if (!shouldScheduleFeedbackPrompt()) return;
+        const delay = 45000 + Math.floor(Math.random() * 75000);
+        feedbackPromptTimer = setTimeout(() => {
+          const modal = document.getElementById("feedback-modal");
+          if (!modal || !modal.classList.contains("hidden")) return;
+          openFeedbackModal();
+        }, delay);
+      }
       async function submitCommunityFeedback() {
         const feedbackField = document.getElementById("feedback-text");
         const submitBtn = document.getElementById("feedback-submit-btn");
         const feedbackText = feedbackField?.value?.trim();
         if (!feedbackText) {
-          alert("Please write a short suggestion before sending.");
+          showBuilderSnackbar("Please write a short suggestion before sending.", "error");
           return;
         }
         if (submitBtn) {
@@ -8260,13 +8942,19 @@
           if (!data.success)
             throw new Error(data.message || "Feedback could not be saved.");
           const shouldExit = feedbackExitPending;
+          const nowIso = new Date().toISOString();
+          localStorage.setItem(getFeedbackPromptStorageKey(), nowIso);
+          if (currentUser) {
+            currentUser.feedbackPromptLastShownAt = nowIso;
+            currentUser.feedbackPromptLastSubmittedAt = nowIso;
+          }
           closeFeedbackModal();
-          alert("Thank you. Your feedback has been saved.");
+          showBuilderSnackbar("Thank you. Your feedback has been saved.", "success");
           if (shouldExit) {
             performExitStudio();
           }
         } catch (error) {
-          alert(error.message || "Could not save feedback right now.");
+          showBuilderSnackbar(error.message || "Could not save feedback right now.", "error");
         } finally {
           if (submitBtn) {
             submitBtn.disabled = false;
@@ -11698,7 +12386,9 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
         }
         const modal = document.getElementById("builder-publish-modal");
         const input = document.getElementById("builder-publish-name-input");
+        const repoLabel = document.getElementById("builder-publish-repo-label");
         if (!modal || !input) return;
+        if (repoLabel) repoLabel.textContent = getGithubRepoLabel();
         const firstText =
           document
             .querySelector("#web-canvas .canvas-element .ml-content")
@@ -11785,6 +12475,8 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
       }
       async function confirmBuilderPublish() {
         const input = document.getElementById("builder-publish-name-input");
+        const descriptionInput = document.getElementById("builder-publish-description-input");
+        const typeSelect = document.getElementById("builder-publish-type-select");
         const projectName = String(input?.value || "").trim();
         if (!projectName) {
           showBuilderSnackbar("Enter a project name first.", "error");
@@ -11792,9 +12484,12 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
           return;
         }
         closeBuilderPublishModal();
-        await publishToWeb(projectName);
+        await publishToWeb(projectName, {
+          description: String(descriptionInput?.value || "").trim(),
+          keywords: String(typeSelect?.value || "").trim(),
+        });
       }
-      async function publishToWeb(projectName = "My MediaLab Page") {
+      async function publishToWeb(projectName = "My MediaLab Page", publishMeta = {}) {
         if (!loggedIn || !currentUser) {
           showLogin();
           return;
@@ -11843,11 +12538,15 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
           const requestBody = isFolderProject
             ? {
                 projectName,
+                description: String(publishMeta?.description || "").trim(),
+                keywords: String(publishMeta?.keywords || "").trim(),
                 entryPath: builderImportedProject.entryPath || "index.html",
                 files: folderFiles,
               }
             : {
                 projectName,
+                description: String(publishMeta?.description || "").trim(),
+                keywords: String(publishMeta?.keywords || "").trim(),
                 htmlContent: payload.body || "",
                 cssContent: payload.css || "",
                 interactionScript: payload.interactionScript || "",
