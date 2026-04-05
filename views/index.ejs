@@ -4607,6 +4607,78 @@
           percentLabel.innerText = data.percent + "%";
         }
       });
+      function getClientDeviceSnapshot() {
+        const ua = String(navigator.userAgent || "").toLowerCase();
+        const platform =
+          navigator.userAgentData?.platform || navigator.platform || "unknown";
+        const mobileHint = Boolean(navigator.userAgentData?.mobile);
+        const maxTouchPoints = Number(navigator.maxTouchPoints || 0);
+        const coarsePointer = Boolean(
+          window.matchMedia?.("(pointer: coarse)")?.matches,
+        );
+        const hoverCapable = Boolean(
+          window.matchMedia?.("(hover: hover)")?.matches,
+        );
+        const viewportWidth =
+          window.innerWidth || document.documentElement.clientWidth || 0;
+        const viewportHeight =
+          window.innerHeight || document.documentElement.clientHeight || 0;
+        const screenWidth = window.screen?.width || 0;
+        const screenHeight = window.screen?.height || 0;
+        const shortestSide = Math.min(
+          viewportWidth || screenWidth || 0,
+          viewportHeight || screenHeight || 0,
+        );
+        const longestSide = Math.max(
+          viewportWidth || screenWidth || 0,
+          viewportHeight || screenHeight || 0,
+        );
+        const desktopPlatform = /win|mac|linux|x11|cros/i.test(String(platform));
+        const tabletLikeApple =
+          /ipad/.test(ua) || (/mac/i.test(String(platform)) && maxTouchPoints > 1);
+        const uaSuggestsTablet =
+          /tablet|ipad/.test(ua) || (/android/.test(ua) && !/mobile/.test(ua));
+        const uaSuggestsPhone =
+          /iphone|ipod|mobile/.test(ua) || (/android/.test(ua) && /mobile/.test(ua));
+        let clientDeviceClass = "Laptop";
+        if (tabletLikeApple || uaSuggestsTablet) {
+          clientDeviceClass = "Tablet";
+        } else if (uaSuggestsPhone || (mobileHint && !desktopPlatform)) {
+          clientDeviceClass = "Phone";
+        } else if (
+          !desktopPlatform &&
+          coarsePointer &&
+          maxTouchPoints > 0 &&
+          shortestSide > 0 &&
+          shortestSide < 600
+        ) {
+          clientDeviceClass = "Phone";
+        } else if (
+          !desktopPlatform &&
+          coarsePointer &&
+          maxTouchPoints > 0 &&
+          shortestSide >= 600 &&
+          shortestSide <= 1100
+        ) {
+          clientDeviceClass = "Tablet";
+        }
+        return {
+          viewportWidth,
+          viewportHeight,
+          screenWidth,
+          screenHeight,
+          devicePixelRatio: Number(window.devicePixelRatio || 1),
+          platform: String(platform || "unknown"),
+          maxTouchPoints,
+          coarsePointer,
+          hoverCapable,
+          mobileHint,
+          clientDeviceClass,
+          userAgent: navigator.userAgent || "",
+          shortestSide,
+          longestSide,
+        };
+      }
       async function logUsageActivity(
         action,
         summary,
@@ -4627,11 +4699,8 @@
               name: currentUser?.name || "",
               isPro: Boolean(currentUser?.isPro),
               metadata: {
+                ...getClientDeviceSnapshot(),
                 ...(metadata && typeof metadata === "object" ? metadata : {}),
-                viewportWidth: window.innerWidth || document.documentElement.clientWidth || 0,
-                viewportHeight: window.innerHeight || document.documentElement.clientHeight || 0,
-                screenWidth: window.screen?.width || 0,
-                screenHeight: window.screen?.height || 0,
               },
             }),
           });
@@ -4697,6 +4766,7 @@
           name: currentUser?.name || "",
           isPro: Boolean(currentUser?.isPro),
           metadata: {
+            ...getClientDeviceSnapshot(),
             tool: currentStudioToolId || "home",
             builderMode: document.body.classList.contains("builder-mode"),
           },

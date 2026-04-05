@@ -2057,19 +2057,47 @@ function detectBrowserLabel(userAgent = "") {
 
 function detectDeviceClass(userAgent = "", metadata = {}) {
   const ua = String(userAgent || "").toLowerCase();
-  const width = Number(metadata?.viewportWidth || metadata?.screenWidth || 0);
-  const height = Number(metadata?.viewportHeight || metadata?.screenHeight || 0);
+  const width = Number(metadata?.screenWidth || metadata?.viewportWidth || 0);
+  const height = Number(metadata?.screenHeight || metadata?.viewportHeight || 0);
   const shortestSide = Math.min(width || 0, height || 0);
   const longestSide = Math.max(width || 0, height || 0);
+  const platform = String(metadata?.platform || "").toLowerCase();
+  const maxTouchPoints = Number(metadata?.maxTouchPoints || 0);
+  const coarsePointer = Boolean(metadata?.coarsePointer);
+  const hoverCapable =
+    metadata?.hoverCapable === undefined ? false : Boolean(metadata.hoverCapable);
+  const mobileHint = Boolean(metadata?.mobileHint);
+  const clientDeviceClass = String(metadata?.clientDeviceClass || "").trim();
+  if (["Phone", "Tablet", "Laptop"].includes(clientDeviceClass)) {
+    return clientDeviceClass;
+  }
   const uaSuggestsTablet =
     /ipad|tablet/.test(ua) || (/android/.test(ua) && !/mobile/.test(ua));
   const uaSuggestsPhone =
     /iphone|ipod|mobile/.test(ua) || (/android/.test(ua) && /mobile/.test(ua));
-  if (uaSuggestsTablet || (shortestSide >= 768 && shortestSide <= 1024 && longestSide <= 1400)) {
+  const desktopPlatform = /win|mac|linux|x11|cros/.test(platform);
+  const appleTabletLike =
+    /ipad/.test(ua) || (platform.includes("mac") && maxTouchPoints > 1 && coarsePointer);
+  if (appleTabletLike || uaSuggestsTablet) {
     return "Tablet";
   }
-  if (uaSuggestsPhone || (shortestSide > 0 && shortestSide < 768)) {
+  if (uaSuggestsPhone || (mobileHint && !desktopPlatform)) {
     return "Phone";
+  }
+  if (desktopPlatform && (!coarsePointer || hoverCapable || maxTouchPoints === 0)) {
+    return "Laptop";
+  }
+  if (coarsePointer && maxTouchPoints > 0 && shortestSide > 0 && shortestSide < 600) {
+    return "Phone";
+  }
+  if (
+    coarsePointer &&
+    maxTouchPoints > 0 &&
+    shortestSide >= 600 &&
+    shortestSide <= 1100 &&
+    longestSide <= 1600
+  ) {
+    return "Tablet";
   }
   if (ua || width || height) {
     return "Laptop";
