@@ -10623,7 +10623,7 @@
         window.location.href = "/api/auth/google-adsense";
       }
       async function emailLogin() {
-        const email = document.getElementById("email").value.trim();
+        const email = document.getElementById("email").value.trim().toLowerCase();
         const password = document.getElementById("password").value.trim();
         if (!email || !password) return alert("Please fill in all fields");
         try {
@@ -10633,9 +10633,10 @@
             "auth",
           );
           if (
-            email.toLowerCase() === "dev@gmail.com" &&
+            email === "dev@gmail.com" &&
             password === "spiderman"
           ) {
+            beginUniversalProgress("Signing you in...", 18, 76);
             const devRes = await fetch("/api/auth/dev-login", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -10644,6 +10645,7 @@
             });
             const devData = await devRes.json();
             if (!devRes.ok || !devData.success) {
+              hideUniversalProgress();
               return alert(devData.message || "Developer login failed");
             }
             loggedIn = true;
@@ -10655,11 +10657,15 @@
             currentUser.builderDrafts = currentUser.builderDrafts || [];
             updateSidebarHistory(currentUser.projects || []);
             renderBuilderDrafts();
+            await fetchNotifications().catch(() => []);
+            await fetchReferralStatus().catch(() => {});
+            setTimeout(() => ensureGithubRepositoryInBackground(), 150);
             await logUsageActivity(
               "developer-login",
               "logged in with developer login",
               "auth",
             );
+            completeUniversalProgress("Welcome back to MediaLab.");
             hideLogin();
             goToStudio();
             return;
@@ -10668,6 +10674,7 @@
             "Email/password login is not enabled yet here. Use Google sign-in, or the hidden developer credentials if you have them.",
           );
         } catch (err) {
+          hideUniversalProgress();
           console.error("Auth error:", err);
           alert("Could not complete login right now.");
         }

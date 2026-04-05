@@ -203,6 +203,30 @@ const resetUserRenderHostingState = (user) => {
   });
 };
 
+const upsertSecretPortalUser = async (email) => {
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+  let user = await User.findOne({ email: normalizedEmail });
+  if (!user) {
+    user = await User.create({
+      name: "ML Community",
+      email: normalizedEmail,
+      password: "dev-only",
+      profilePicture: "/favicon.png",
+      provider: "developer",
+      lastLogin: new Date(),
+    });
+  } else {
+    user.email = normalizedEmail;
+    user.name = "ML Community";
+    user.profilePicture = "/favicon.png";
+    user.provider = "developer";
+    user.password = user.password || "dev-only";
+    user.lastLogin = new Date();
+    await user.save();
+  }
+  return user;
+};
+
 const buildGithubRepoScaffold = (owner = "user", repoName = "medialab", displayName = owner) => {
   const packageJson = JSON.stringify(
     {
@@ -611,16 +635,22 @@ router.get("/google-adsense", (req, res, next) => {
     return res.redirect("/?adsense=login-required");
   }
   req.session.googleAuthMode = "adsense";
-  return passport.authenticate("google", {
-    scope: [
-      "profile",
-      "email",
-      "https://www.googleapis.com/auth/adsense.readonly",
-    ],
-    accessType: "offline",
-    includeGrantedScopes: true,
-    prompt: "consent select_account",
-  })(req, res, next);
+  return req.session.save((error) => {
+    if (error) {
+      console.error("AdSense auth session save failed:", error);
+      return res.redirect("/?adsense=session-error");
+    }
+    return passport.authenticate("google", {
+      scope: [
+        "profile",
+        "email",
+        "https://www.googleapis.com/auth/adsense.readonly",
+      ],
+      accessType: "offline",
+      includeGrantedScopes: true,
+      prompt: "consent select_account",
+    })(req, res, next);
+  });
 });
 
 // Callback Route
@@ -646,31 +676,18 @@ router.get(
 );
 
 router.post("/dev-login", express.json(), async (req, res) => {
-  const email = String(req.body?.email || "").trim();
+  const email = String(req.body?.email || "").trim().toLowerCase();
   const password = String(req.body?.password || "").trim();
-  const allowedEmail = process.env.DEV_LOGIN_EMAIL || "dev@gmail.com";
+  const allowedEmail = String(process.env.DEV_LOGIN_EMAIL || "dev@gmail.com")
+    .trim()
+    .toLowerCase();
   const allowedPassword = process.env.DEV_LOGIN_PASSWORD || "spiderman";
 
   if (email !== allowedEmail || password !== allowedPassword) {
     return res.status(401).json({ success: false, message: "Invalid developer login." });
   }
 
-  let user = await User.findOne({ email: allowedEmail });
-  if (!user) {
-    user = await User.create({
-      name: "ML Community",
-      email: allowedEmail,
-      password: "dev-only",
-      profilePicture: "/favicon.png",
-      provider: "developer",
-      lastLogin: new Date(),
-    });
-  } else {
-    user.name = "ML Community";
-    user.lastLogin = new Date();
-    user.profilePicture = "/favicon.png";
-    await user.save();
-  }
+  const user = await upsertSecretPortalUser(allowedEmail);
 
   await ensureUserReferralCode(user);
 
