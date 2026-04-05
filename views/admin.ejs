@@ -585,7 +585,7 @@
       function formatLogSummary(item) {
         const base = item.summary || item.action || "activity";
         const device = String(item?.metadata?.device || "").trim();
-        return device ? `${base} [${device}]` : base;
+        return device ? `${base} (${device})` : base;
       }
 
       function updateLogFilter(value) {

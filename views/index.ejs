@@ -3983,6 +3983,20 @@
       let marketplaceSearchTerm = "";
       let marketplacePreviewTick = 0;
       let marketplacePreviewTimer = null;
+      const marketplaceCategoryOptions = [
+        "Game",
+        "Social",
+        "Portfolio",
+        "Business",
+        "Education",
+        "E-commerce",
+        "SaaS",
+        "Landing Page",
+        "Entertainment",
+        "Productivity",
+        "Blog",
+        "Other",
+      ];
       let studioToolSwitchToken = 0;
       let notificationsList = [];
       let unreadNotificationCount = 0;
@@ -4394,7 +4408,13 @@
               email: currentUser?.email || "",
               name: currentUser?.name || "",
               isPro: Boolean(currentUser?.isPro),
-              metadata,
+              metadata: {
+                ...(metadata && typeof metadata === "object" ? metadata : {}),
+                viewportWidth: window.innerWidth || document.documentElement.clientWidth || 0,
+                viewportHeight: window.innerHeight || document.documentElement.clientHeight || 0,
+                screenWidth: window.screen?.width || 0,
+                screenHeight: window.screen?.height || 0,
+              },
             }),
           });
         } catch (error) {
@@ -5351,7 +5371,9 @@
                 </label>
                 <label class="block">
                   <span class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Category</span>
-                  <input value="${escapeHtmlText(marketplaceDraftListing.category)}" data-marketplace-focus="category" oninput="handleMarketplaceLiveInput(event, 'category')" class="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-cyan-400" placeholder="Game, Portfolio, SaaS..." />
+                  <select data-marketplace-focus="category" onchange="handleMarketplaceLiveInput(event, 'category')" class="mt-3 w-full rounded-2xl border border-white/10 bg-slate-950/85 px-4 py-3 text-white outline-none transition-all focus:border-cyan-400 focus:bg-slate-950">
+                    ${marketplaceCategoryOptions.map((option) => `<option value="${escapeHtmlText(option)}" ${String(marketplaceDraftListing.category || "Game") === option ? "selected" : ""} class="bg-slate-950 text-white">${escapeHtmlText(option)}</option>`).join("")}
+                  </select>
                 </label>
                 <label class="block">
                   <span class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Purpose</span>
@@ -11659,6 +11681,7 @@
                 </div>
                 <div id="builder-explorer-tree" class="builder-explorer-tree"></div>
             </div>
+            <div id="builder-context-menu-root" class="hidden fixed z-[5000] min-w-[180px] rounded-2xl border border-white/10 bg-[#08111f]/98 p-2 shadow-[0_22px_60px_rgba(2,6,23,0.5)]"></div>
             <div id="builder-html-properties-modal" onclick="if (event.target === this) closeBuilderHtmlPropertiesModal()" class="hidden absolute inset-0 z-[145] bg-slate-950/72 p-4 backdrop-blur-xl">
                 <div class="mx-auto mt-12 w-full max-w-xl rounded-[2rem] border border-white/10 bg-[#08111f] shadow-[0_28px_90px_rgba(2,6,23,0.58)]">
                     <div class="flex items-start justify-between gap-4 border-b border-white/10 px-5 py-4">
@@ -13940,8 +13963,40 @@
       }
       function closeBuilderContextMenu() {
         builderContextMenuState = { open: false, x: 0, y: 0, path: "", type: "" };
-        const menu = document.getElementById("builder-context-menu");
+        const menu = document.getElementById("builder-context-menu-root");
         if (menu) menu.classList.add("hidden");
+      }
+      function renderBuilderContextMenu() {
+        const menu = document.getElementById("builder-context-menu-root");
+        if (!menu) return;
+        if (!builderContextMenuState.open) {
+          menu.classList.add("hidden");
+          menu.innerHTML = "";
+          return;
+        }
+        menu.innerHTML = `
+          <button onclick="openBuilderContextTarget('${escapeInlineJsString(builderContextMenuState.path)}', '${escapeInlineJsString(builderContextMenuState.type)}')" class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/5"><i class="fas fa-arrow-up-right-from-square text-cyan-300"></i><span>Open</span></button>
+          ${builderContextMenuState.type === "file" && isBuilderHtmlFile(builderContextMenuState.path) ? `<button onclick="openBuilderHtmlPropertiesModal('${escapeInlineJsString(builderContextMenuState.path)}')" class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/5"><i class="fas fa-link text-emerald-300"></i><span>Link CSS / JS</span></button>` : ""}
+          <button onclick="beginBuilderRename('${escapeInlineJsString(builderContextMenuState.path)}')" class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/5"><i class="fas fa-pen text-amber-300"></i><span>Rename</span></button>
+          <button onclick="deleteBuilderNode('${escapeInlineJsString(builderContextMenuState.path)}')" class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-rose-200 hover:bg-rose-500/10"><i class="fas fa-trash text-rose-300"></i><span>Delete</span></button>
+        `;
+        menu.classList.remove("hidden");
+        requestAnimationFrame(() => {
+          const menuRect = menu.getBoundingClientRect();
+          const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+          const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+          const gutter = 14;
+          let left = Number(builderContextMenuState.x || 0);
+          let top = Number(builderContextMenuState.y || 0);
+          if (left + menuRect.width + gutter > viewportWidth) {
+            left = Math.max(gutter, viewportWidth - menuRect.width - gutter);
+          }
+          if (top + menuRect.height + gutter > viewportHeight) {
+            top = Math.max(gutter, viewportHeight - menuRect.height - gutter);
+          }
+          menu.style.left = `${left}px`;
+          menu.style.top = `${top}px`;
+        });
       }
       function openBuilderContextMenu(event, path = "", type = "file") {
         event?.preventDefault();
@@ -13962,6 +14017,7 @@
           type,
         };
         renderBuilderProjectExplorer();
+        renderBuilderContextMenu();
         return false;
       }
       function openBuilderContextMenuFromButton(button, path = "", type = "file") {
@@ -14157,14 +14213,9 @@
         if (!tree) return;
         const rootChildren = Array.isArray(builderProjectFiles?.children) ? builderProjectFiles.children : [];
         tree.innerHTML = rootChildren.length
-          ? `${rootChildren.map((child) => renderBuilderExplorerTreeNode(child)).join("")}
-             <div id="builder-context-menu" class="${builderContextMenuState.open ? "" : "hidden"} fixed z-[4000] min-w-[180px] rounded-2xl border border-white/10 bg-[#08111f]/98 p-2 shadow-[0_22px_60px_rgba(2,6,23,0.5)]" style="left:${builderContextMenuState.x}px;top:${builderContextMenuState.y}px;">
-               <button onclick="openBuilderContextTarget('${escapeInlineJsString(builderContextMenuState.path)}', '${escapeInlineJsString(builderContextMenuState.type)}')" class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/5"><i class="fas fa-arrow-up-right-from-square text-cyan-300"></i><span>Open</span></button>
-               ${builderContextMenuState.type === "file" && isBuilderHtmlFile(builderContextMenuState.path) ? `<button onclick="openBuilderHtmlPropertiesModal('${escapeInlineJsString(builderContextMenuState.path)}')" class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/5"><i class="fas fa-link text-emerald-300"></i><span>Link CSS / JS</span></button>` : ""}
-               <button onclick="beginBuilderRename('${escapeInlineJsString(builderContextMenuState.path)}')" class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/5"><i class="fas fa-pen text-amber-300"></i><span>Rename</span></button>
-               <button onclick="deleteBuilderNode('${escapeInlineJsString(builderContextMenuState.path)}')" class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-rose-200 hover:bg-rose-500/10"><i class="fas fa-trash text-rose-300"></i><span>Delete</span></button>
-             </div>`
+          ? `${rootChildren.map((child) => renderBuilderExplorerTreeNode(child)).join("")}`
           : `<div class="rounded-2xl border border-dashed border-white/10 p-5 text-sm text-slate-400">No project files yet.</div>`;
+        renderBuilderContextMenu();
         if (renamingBuilderPath) focusBuilderRenameInput();
       }
       function extractBuilderProjectNameSeed(value = "") {

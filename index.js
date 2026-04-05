@@ -1908,6 +1908,69 @@ function buildUsageIdentity(req) {
   };
 }
 
+function detectBrowserLabel(userAgent = "") {
+  const ua = String(userAgent || "").toLowerCase();
+  if (!ua) return "Browser";
+  if (/edg\//.test(ua)) return "Edge";
+  if (/opr\//.test(ua) || /opera/.test(ua)) return "Opera";
+  if (/firefox\//.test(ua)) return "Firefox";
+  if (/chrome\//.test(ua)) return "Chrome";
+  if (/safari\//.test(ua) && !/chrome\//.test(ua)) return "Safari";
+  return "Browser";
+}
+
+function detectDeviceClass(userAgent = "", metadata = {}) {
+  const ua = String(userAgent || "").toLowerCase();
+  const width = Number(metadata?.viewportWidth || metadata?.screenWidth || 0);
+  const height = Number(metadata?.viewportHeight || metadata?.screenHeight || 0);
+  const shortestSide = Math.min(width || 0, height || 0);
+  const longestSide = Math.max(width || 0, height || 0);
+  const uaSuggestsTablet =
+    /ipad|tablet/.test(ua) || (/android/.test(ua) && !/mobile/.test(ua));
+  const uaSuggestsPhone =
+    /iphone|ipod|mobile/.test(ua) || (/android/.test(ua) && /mobile/.test(ua));
+  if (uaSuggestsTablet || (shortestSide >= 768 && shortestSide <= 1024 && longestSide <= 1400)) {
+    return "Tablet";
+  }
+  if (uaSuggestsPhone || (shortestSide > 0 && shortestSide < 768)) {
+    return "Phone";
+  }
+  if (ua || width || height) {
+    return "Laptop";
+  }
+  return "Unknown Device";
+}
+
+function enrichUsageMetadata(rawMetadata = {}, userAgent = "", req = null) {
+  const metadata = rawMetadata && typeof rawMetadata === "object" ? { ...rawMetadata } : {};
+  metadata.userAgent = String(metadata.userAgent || userAgent || "").trim();
+  metadata.ip = String(metadata.ip || extractClientIp(req) || "").trim();
+  const viewportWidth = Number(metadata.viewportWidth || 0);
+  const viewportHeight = Number(metadata.viewportHeight || 0);
+  const screenWidth = Number(metadata.screenWidth || 0);
+  const screenHeight = Number(metadata.screenHeight || 0);
+  if (viewportWidth > 0) metadata.viewportWidth = viewportWidth;
+  if (viewportHeight > 0) metadata.viewportHeight = viewportHeight;
+  if (screenWidth > 0) metadata.screenWidth = screenWidth;
+  if (screenHeight > 0) metadata.screenHeight = screenHeight;
+  metadata.browser = detectBrowserLabel(metadata.userAgent);
+  metadata.device = detectDeviceClass(metadata.userAgent, metadata);
+  metadata.deviceLabel = metadata.device;
+  return metadata;
+}
+
+function buildRichUsageIdentity(req) {
+  const userAgent = String(req.headers["user-agent"] || "").trim();
+  return {
+    user: req.user || null,
+    email: req.user?.email || "",
+    name: req.user?.name || "",
+    isAnonymous: !req.user,
+    isPro: Boolean(req.user?.isPro),
+    usageMetadata: enrichUsageMetadata({}, userAgent, req),
+  };
+}
+
 async function ensureUserReferralCode(user) {
   if (!user) return user;
   if (String(user.referralCode || "").trim()) return user;
@@ -1975,6 +2038,11 @@ app.post("/api/usage-log", async (req, res) => {
     const fallbackName = String(req.body?.name || "").trim();
     const fallbackIsPro = Boolean(req.body?.isPro);
     const hasFallbackIdentity = Boolean(fallbackEmail && fallbackName);
+    const requestMetadata = enrichUsageMetadata(
+      req.body?.metadata || {},
+      String(req.headers["user-agent"] || "").trim(),
+      req,
+    );
     const payload = await createUsageLog({
       user: req.user || null,
       email: req.user?.email || fallbackEmail,
@@ -1985,7 +2053,7 @@ app.post("/api/usage-log", async (req, res) => {
       summary,
       source: String(req.body?.source || "web").trim(),
       kind: req.body?.kind === "error" ? "error" : "activity",
-      metadata: req.body?.metadata || {},
+      metadata: requestMetadata,
     });
     res.json({ success: true, log: payload });
   } catch (error) {
