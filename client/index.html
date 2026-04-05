@@ -646,6 +646,121 @@
         background: rgba(34, 211, 238, 0.12);
         border-color: rgba(34, 211, 238, 0.2);
       }
+      .builder-explorer-shell {
+        position: absolute;
+        top: 5.25rem;
+        right: 0.75rem;
+        z-index: 620;
+        width: min(320px, calc(100vw - 1.5rem));
+        max-height: calc(100vh - 7.25rem);
+        display: flex;
+        flex-direction: column;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: linear-gradient(180deg, rgba(10, 14, 22, 0.92), rgba(2, 6, 23, 0.94));
+        backdrop-filter: blur(24px);
+        border-radius: 1.6rem;
+        box-shadow: 0 24px 80px rgba(2, 6, 23, 0.45);
+        overflow: visible;
+      }
+      .builder-explorer-tree {
+        overflow-y: auto;
+        overflow-x: visible;
+        padding: 0.75rem 0.85rem 0.9rem;
+        max-height: calc(100vh - 10.5rem);
+      }
+      .builder-tree-node {
+        position: relative;
+        margin-top: 0.2rem;
+      }
+      .builder-tree-children {
+        margin-left: 0.9rem;
+        padding-left: 0.85rem;
+        border-left: 1px solid rgba(34, 211, 238, 0.2);
+      }
+      .builder-tree-branch {
+        display: flex;
+        align-items: center;
+        gap: 0.55rem;
+        width: 100%;
+        min-width: 0;
+        border-radius: 1rem;
+        border: 1px solid transparent;
+        background: transparent;
+        padding: 0.6rem 0.75rem;
+        color: #cbd5e1;
+        transition: all 0.2s ease;
+      }
+      .builder-tree-branch:hover {
+        background: rgba(255, 255, 255, 0.05);
+        border-color: rgba(255, 255, 255, 0.08);
+      }
+      .builder-tree-branch.is-active {
+        background: rgba(34, 211, 238, 0.12);
+        border-color: rgba(34, 211, 238, 0.24);
+        color: #ecfeff;
+        box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.08);
+      }
+      .builder-tree-label {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 0.86rem;
+        font-weight: 600;
+      }
+      .builder-tree-meta {
+        font-size: 0.62rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: rgba(148, 163, 184, 0.75);
+      }
+      .builder-tree-folder > .builder-tree-branch {
+        color: #f8fafc;
+      }
+      .builder-tree-folder-toggle {
+        display: inline-flex;
+        height: 1.35rem;
+        width: 1.35rem;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.03);
+        color: rgba(226, 232, 240, 0.9);
+        flex-shrink: 0;
+      }
+      .builder-tree-actions {
+        margin-left: auto;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        height: 1.9rem;
+        width: 1.9rem;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.03);
+        color: rgba(226, 232, 240, 0.84);
+        flex-shrink: 0;
+        transition: all 0.18s ease;
+      }
+      .builder-tree-actions:hover {
+        background: rgba(255, 255, 255, 0.08);
+        color: #ffffff;
+        border-color: rgba(34, 211, 238, 0.24);
+      }
+      .builder-tree-branch.is-selected-folder {
+        background: rgba(168, 85, 247, 0.12);
+        border-color: rgba(168, 85, 247, 0.24);
+        color: #f5d0fe;
+      }
+      @media (max-width: 767px) {
+        .builder-explorer-shell {
+          top: 4.75rem;
+          right: 0.5rem;
+          width: min(92vw, 320px);
+          max-height: 52vh;
+        }
+      }
       .ribbon-group {
         display: flex;
         flex-wrap: wrap;
@@ -3877,6 +3992,7 @@
         return {
           sourceType: "",
           listingKind: "sale",
+          allowTest: false,
           projectId: "",
           projectLabel: "",
           sourceHtml: "",
@@ -3914,6 +4030,7 @@
       let marketplaceSubmitState = createEmptyMarketplaceSubmitState();
       let marketplaceSubmitProgressTimer = null;
       let marketplacePreviewVisible = false;
+      let marketplacePreviewAutoCloseTimer = null;
       let pendingMarketplaceRemovalId = "";
       let currentAppDialogResolver = null;
       const LOGIN_REQUIRED_TOOL_IDS = ["image-pdf"];
@@ -4203,17 +4320,23 @@
       socket.on("connect", () => {
         clientSocketId = socket.id;
         console.log("Connected to AI Engine. ID:", clientSocketId);
+        if (loggedIn && currentUser?._id) {
+          fetchNotifications().catch(() => {});
+        }
       });
       socket.on("user:notification", (payload) => {
         if (!loggedIn || !currentUser?._id) return;
         if (String(payload?.userId || "") !== String(currentUser._id || "")) return;
-        fetchNotifications().then(() => {
-          const dropdown = document.getElementById("notification-dropdown");
-          if (dropdown && !dropdown.classList.contains("hidden")) {
-            markAllNotificationsRead({ silent: true });
-          }
-        });
+        upsertNotificationFromSocket(payload);
+        const dropdown = document.getElementById("notification-dropdown");
+        if (dropdown && !dropdown.classList.contains("hidden")) {
+          markAllNotificationsRead({ silent: true });
+        }
       });
+      setInterval(() => {
+        if (!loggedIn || !currentUser?._id || document.hidden) return;
+        fetchNotifications().catch(() => {});
+      }, 30000);
       // UNIVERSAL PROGRESS LISTENER
       socket.on("conversion-progress", (data) => {
         const type = data.type; // 'video' or 'voice'
@@ -5277,6 +5400,13 @@
                   <p class="mt-1">Price: ${renderMarketplacePriceValue(marketplaceDraftListing.price, "font-semibold")}</p>
                   <p class="mt-1">Screenshots: ${(marketplaceDraftListing.screenshots || []).length}/4</p>
                 </div>
+                <label class="flex items-start gap-3 rounded-[1.6rem] border border-emerald-400/15 bg-emerald-500/[0.06] p-4">
+                  <input type="checkbox" ${marketplaceDraftListing.allowTest ? "checked" : ""} onchange="toggleMarketplaceAllowTest(this.checked)" class="mt-1 h-4 w-4 rounded border-white/20 bg-slate-950 text-emerald-400 accent-emerald-400" />
+                  <span class="min-w-0">
+                    <span class="block text-[11px] font-black uppercase tracking-[0.18em] text-emerald-200">Allow Test</span>
+                    <span class="mt-2 block text-sm leading-6 text-slate-300">Let people run this sale project for 30 seconds from its marketplace dashboard before they decide.</span>
+                  </span>
+                </label>
                 <label class="flex items-start gap-3 rounded-[1.6rem] border border-fuchsia-400/15 bg-fuchsia-500/[0.06] p-4">
                   <input type="checkbox" ${marketplaceDraftListing.listingKind === "template" ? "checked" : ""} onchange="toggleMarketplaceTemplateMode(this.checked)" class="mt-1 h-4 w-4 rounded border-white/20 bg-slate-950 text-fuchsia-400 accent-fuchsia-400" />
                   <span class="min-w-0">
@@ -5501,6 +5631,15 @@
             listingKind: "sale",
           };
         }
+        if (currentStudioToolId === "marketplace" && marketplaceActiveTab === "create") {
+          mountMarketplaceTool();
+        }
+      }
+      function toggleMarketplaceAllowTest(enabled = false) {
+        marketplaceDraftListing = {
+          ...marketplaceDraftListing,
+          allowTest: Boolean(enabled),
+        };
         if (currentStudioToolId === "marketplace" && marketplaceActiveTab === "create") {
           mountMarketplaceTool();
         }
@@ -6131,7 +6270,14 @@
           }
         }
       }
+      function stopMarketplaceTimedPreview() {
+        if (marketplacePreviewAutoCloseTimer) {
+          clearTimeout(marketplacePreviewAutoCloseTimer);
+          marketplacePreviewAutoCloseTimer = null;
+        }
+      }
       function closeMarketplaceDetail() {
+        stopMarketplaceTimedPreview();
         currentMarketplaceItem = null;
         marketplacePreviewVisible = false;
         document.getElementById("marketplace-detail-modal")?.classList.add("hidden");
@@ -6157,16 +6303,16 @@
                 <div class="flex flex-wrap items-center justify-between gap-4">
                   <div>
                     <p class="text-[10px] font-black uppercase tracking-[0.18em] text-cyan-300">Live Preview</p>
-                    <p class="mt-2 text-sm text-slate-400">Test the hosted project before you decide.</p>
+                    <p class="mt-2 text-sm text-slate-400">${item.allowTest ? "Run this hosted project for up to 30 seconds before you decide." : "The seller did not enable public test mode for this project."}</p>
                   </div>
                   <div class="flex gap-2">
-                    <button onclick="toggleMarketplacePreview()" class="rounded-2xl border border-cyan-400/20 bg-cyan-500/10 px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-cyan-200">Live Preview</button>
-                    <button onclick="window.open('${escapeInlineJsString(item.liveUrl || "")}', '_blank', 'noopener')" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-slate-100">Open Site</button>
+                    ${item.allowTest && item.liveUrl ? `<button onclick="toggleMarketplacePreview()" class="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-emerald-200 hover:bg-emerald-500/15">Run Test</button>` : ``}
                   </div>
                 </div>
                 <div id="marketplace-preview-wrap" class="${marketplacePreviewVisible ? "" : "hidden"} mt-4 overflow-hidden rounded-[1.5rem] border border-white/10 bg-slate-950">
                   <iframe src="${escapeHtmlText(item.liveUrl || "")}" class="h-[420px] w-full bg-white" title="Marketplace preview"></iframe>
                 </div>
+                ${marketplacePreviewVisible && item.allowTest ? `<p class="mt-3 text-xs text-amber-200">Test mode will close automatically after 30 seconds.</p>` : ``}
               </div>
               <div class="rounded-[1.8rem] border border-white/10 bg-slate-900/80 p-5">
                 <p class="text-[10px] font-black uppercase tracking-[0.18em] text-cyan-300">Professional Description</p>
@@ -6283,7 +6429,19 @@
         }
       }
       function toggleMarketplacePreview() {
+        if (!currentMarketplaceItem?.allowTest) {
+          showBuilderSnackbar("This seller did not enable public test mode for this project.", "error");
+          return;
+        }
         marketplacePreviewVisible = !marketplacePreviewVisible;
+        stopMarketplaceTimedPreview();
+        if (marketplacePreviewVisible) {
+          marketplacePreviewAutoCloseTimer = setTimeout(() => {
+            marketplacePreviewVisible = false;
+            if (currentMarketplaceItem) renderMarketplaceDetail(currentMarketplaceItem);
+            showBuilderSnackbar("Marketplace test session ended after 30 seconds.", "success");
+          }, 30000);
+        }
         if (currentMarketplaceItem) renderMarketplaceDetail(currentMarketplaceItem);
       }
       function renderMarketplaceCommentsModal(item = currentMarketplaceItem) {
@@ -8086,6 +8244,22 @@
               <p class="mt-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">${escapeHtmlText(formatDate(item.createdAt || item.date || new Date()))}</p>
             </button>`)
           .join("");
+      }
+      function upsertNotificationFromSocket(payload = {}) {
+        if (!payload?._id) return;
+        const existingIndex = notificationsList.findIndex(
+          (item) => String(item?._id || "") === String(payload._id || ""),
+        );
+        const nextItem = {
+          ...payload,
+          isRead: false,
+        };
+        if (existingIndex >= 0) {
+          notificationsList.splice(existingIndex, 1);
+        }
+        notificationsList = [nextItem, ...notificationsList].slice(0, 10);
+        unreadNotificationCount = notificationsList.filter((item) => !item.isRead).length;
+        renderNotificationsUi();
       }
       async function fetchNotifications() {
         if (!loggedIn || !currentUser) {
@@ -11445,7 +11619,7 @@
                     </div>
                     <div id="builder-panel-templates" class="builder-popover hidden">
                         <div class="builder-popover-grid">
-                            <button onclick="handleCandyCrushTemplateSelection(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-candy-cane text-pink-400"></i><span>Candy Crush Game<small>Playable free game template</small></span></button>
+                            <button id="builder-template-candycrush" onclick="handleCandyCrushTemplateSelection(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-candy-cane text-pink-400"></i><span>Candy Crush Game<small>Playable free game template</small></span></button>
                             <button id="builder-template-login" onclick="insertStarterBlock('login'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-right-to-bracket text-cyan-400"></i><span>Login Form<small>Auth page starter</small></span></button>
                             <button onclick="loadBuilderSiteTemplate('portfolio'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-user-astronaut text-cyan-400"></i><span>Portfolio Site<small>Personal brand website</small></span></button>
                             <button onclick="loadBuilderSiteTemplate('arcade'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-gamepad text-cyan-400"></i><span>Game Launch<small>Arcade landing page</small></span></button>
@@ -11465,6 +11639,45 @@
                     </div>
                 </div>
             </div>
+            <div id="builder-explorer-shell" class="builder-explorer-shell hidden">
+                <div class="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
+                    <div class="min-w-0">
+                        <p class="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-400">Project Explorer</p>
+                        <p id="builder-explorer-project-name" class="mt-1 truncate text-sm font-semibold text-white">MediaLab Project</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="promptAddBuilderFile()" class="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-200 hover:border-cyan-400/25 hover:text-cyan-200 transition-all">
+                            <i class="fas fa-file-circle-plus"></i>
+                        </button>
+                        <button onclick="promptAddBuilderFolder()" class="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-200 hover:border-cyan-400/25 hover:text-cyan-200 transition-all">
+                            <i class="fas fa-folder-plus"></i>
+                        </button>
+                        <button onclick="toggleBuilderExplorer(false)" class="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+                <div id="builder-explorer-tree" class="builder-explorer-tree"></div>
+            </div>
+            <div id="builder-html-properties-modal" onclick="if (event.target === this) closeBuilderHtmlPropertiesModal()" class="hidden absolute inset-0 z-[145] bg-slate-950/72 p-4 backdrop-blur-xl">
+                <div class="mx-auto mt-12 w-full max-w-xl rounded-[2rem] border border-white/10 bg-[#08111f] shadow-[0_28px_90px_rgba(2,6,23,0.58)]">
+                    <div class="flex items-start justify-between gap-4 border-b border-white/10 px-5 py-4">
+                        <div>
+                            <p class="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-300">HTML Properties</p>
+                            <h3 id="builder-html-properties-title" class="mt-2 text-xl font-semibold text-white">index.html</h3>
+                            <p class="mt-1 text-sm text-slate-400">Link CSS in the head and JavaScript before the closing body tag.</p>
+                        </div>
+                        <button onclick="closeBuilderHtmlPropertiesModal()" class="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div id="builder-html-properties-body" class="space-y-6 px-5 py-5"></div>
+                    <div class="flex items-center justify-end gap-3 border-t border-white/10 px-5 py-4">
+                        <button onclick="closeBuilderHtmlPropertiesModal()" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-slate-200 hover:bg-white/10">Close</button>
+                        <button onclick="applyBuilderHtmlProperties()" class="rounded-2xl bg-cyan-500 px-4 py-3 text-sm font-black text-slate-950 hover:bg-cyan-400">Apply Links</button>
+                    </div>
+                </div>
+            </div>
             <div id="code-mode-panel" class="hidden flex-1 px-2 sm:px-4 pt-2 sm:pt-4 pb-2 sm:pb-4">
                 <div class="code-mode-shell w-full max-w-[1680px] mx-auto">
                     <div class="flex flex-wrap items-center justify-between gap-3 px-1">
@@ -11474,7 +11687,6 @@
                         </div>
                         <div class="flex gap-2">
                             <button onclick="copyBuilderCode()" class="px-4 py-2.5 rounded-xl bg-white/5 text-[10px] font-black uppercase tracking-[0.16em] text-gray-300 hover:bg-white/10 transition-all">Copy Code</button>
-                            <button onclick="refreshBuilderCodeMode()" class="px-4 py-2.5 rounded-xl bg-white/5 text-[10px] font-black uppercase tracking-[0.16em] text-gray-300 hover:bg-white/10 transition-all">Refresh</button>
                             <button onclick="applyCodeModeToCanvas()" class="px-4 py-2.5 rounded-xl bg-cyan-600 text-[10px] font-black uppercase tracking-[0.16em] text-white hover:bg-cyan-500 transition-all">Apply to Canvas</button>
                             <button onclick="toggleBuilderCodeMode()" class="px-4 py-2.5 rounded-xl bg-white/5 text-[10px] font-black uppercase tracking-[0.16em] text-gray-300 hover:bg-white/10 transition-all">Visual Mode</button>
                         </div>
@@ -11486,7 +11698,7 @@
                                 <span class="code-dot bg-yellow-400"></span>
                                 <span class="code-dot bg-green-400"></span>
                             </div>
-                            <div class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">medialab-page.html</div>
+                            <div id="builder-code-file-label" class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">index.html</div>
                         </div>
                         <div class="code-editor-stage">
                             <pre id="builder-code-lines" class="code-line-gutter"></pre>
@@ -11497,6 +11709,11 @@
                         </div>
                     </div>
                 </div>
+            </div>
+            <div class="pointer-events-none fixed right-4 top-[5.3rem] z-[117] sm:right-6 sm:top-[6.1rem]">
+                <button id="builder-explorer-toggle" onclick="toggleBuilderExplorer()" class="pointer-events-auto w-11 h-11 flex items-center justify-center text-cyan-300 hover:text-white border border-cyan-400/20 rounded-2xl bg-[#08111f]/90 backdrop-blur-2xl transition-colors shadow-[0_18px_55px_rgba(2,6,23,0.45)]">
+                    <i class="fas fa-sitemap text-sm"></i>
+                </button>
             </div>
             <div id="canvas-container" onclick="deselectAll(event)" class="flex-1 overflow-y-auto overflow-x-hidden flex justify-center items-start px-2 sm:px-4 pt-2 sm:pt-4 pb-20 sm:pb-28 cursor-default custom-scrollbar" style="touch-action: pan-x pan-y pinch-zoom;">
                 <div class="flex w-full max-w-[1680px] flex-col items-center">
@@ -13305,6 +13522,774 @@
       };
       let builderInteractionDraft = null;
       let builderInteractionPickMode = false;
+      let builderProjectFiles = null;
+      let activeBuilderFilePath = "index.html";
+      let selectedBuilderFilePath = "index.html";
+      let builderProjectName = "MediaLab Project";
+      let builderExplorerOpen = false;
+      let selectedBuilderFolderPath = "";
+      let collapsedBuilderFolders = new Set();
+      let renamingBuilderPath = "";
+      let builderContextMenuState = { open: false, x: 0, y: 0, path: "", type: "" };
+      let builderHtmlPropertiesState = {
+        path: "",
+        cssLinks: [],
+        jsLinks: [],
+      };
+      function createDefaultBuilderProjectFiles() {
+        return {
+          name: "root",
+          type: "folder",
+          children: [
+            {
+              name: "index.html",
+              type: "file",
+              content: "",
+            },
+          ],
+        };
+      }
+      function normalizeBuilderFilePath(path = "") {
+        return String(path || "")
+          .replace(/\\/g, "/")
+          .replace(/^\/+/, "")
+          .replace(/\/+/g, "/")
+          .trim();
+      }
+      function getBuilderFileExtension(path = "") {
+        const normalized = normalizeBuilderFilePath(path);
+        const dotIndex = normalized.lastIndexOf(".");
+        return dotIndex >= 0 ? normalized.slice(dotIndex + 1).toLowerCase() : "";
+      }
+      function isBuilderHtmlFile(path = "") {
+        return ["html", "htm"].includes(getBuilderFileExtension(path));
+      }
+      function isBuilderCodeOnlyFile(path = "") {
+        return ["css", "js"].includes(getBuilderFileExtension(path));
+      }
+      function splitBuilderFilePath(path = "") {
+        return normalizeBuilderFilePath(path)
+          .split("/")
+          .map((part) => String(part || "").trim())
+          .filter(Boolean);
+      }
+      function cloneBuilderProjectFiles(node = null) {
+        return node ? JSON.parse(JSON.stringify(node)) : createDefaultBuilderProjectFiles();
+      }
+      function ensureBuilderProjectFiles() {
+        if (!builderProjectFiles || builderProjectFiles.type !== "folder") {
+          builderProjectFiles = createDefaultBuilderProjectFiles();
+        }
+        const hasIndex = Array.isArray(builderProjectFiles.children)
+          ? builderProjectFiles.children.some(
+              (child) =>
+                child?.type === "file" &&
+                String(child?.name || "").trim().toLowerCase() === "index.html",
+            )
+          : false;
+        if (!hasIndex) {
+          builderProjectFiles.children = Array.isArray(builderProjectFiles.children)
+            ? builderProjectFiles.children
+            : [];
+          builderProjectFiles.children.unshift({
+            name: "index.html",
+            type: "file",
+            content: "",
+          });
+        }
+        return builderProjectFiles;
+      }
+      function findBuilderNodeByPath(path = "", node = ensureBuilderProjectFiles(), currentPath = "") {
+        const normalized = normalizeBuilderFilePath(path);
+        if (!normalized) return node;
+        const nodePath = normalizeBuilderFilePath(currentPath);
+        if (nodePath === normalized) return node;
+        if (node?.type !== "folder") return null;
+        const children = Array.isArray(node.children) ? node.children : [];
+        for (const child of children) {
+          const childPath = normalizeBuilderFilePath(nodePath ? `${nodePath}/${child.name}` : child.name);
+          if (childPath === normalized) return child;
+          if (child.type === "folder") {
+            const nested = findBuilderNodeByPath(normalized, child, childPath);
+            if (nested) return nested;
+          }
+        }
+        return null;
+      }
+      function updateBuilderFileContent(path = "", content = "") {
+        const node = findBuilderNodeByPath(path);
+        if (!node || node.type !== "file") return;
+        node.content = String(content || "");
+      }
+      function getBuilderFolderNode(path = "") {
+        const normalized = normalizeBuilderFilePath(path);
+        if (!normalized) return ensureBuilderProjectFiles();
+        const node = findBuilderNodeByPath(normalized);
+        return node?.type === "folder" ? node : ensureBuilderProjectFiles();
+      }
+      function getBuilderFileContent(path = "") {
+        const node = findBuilderNodeByPath(path);
+        if (!node || node.type !== "file") return "";
+        return String(node.content || "");
+      }
+      function getAvailableBuilderFilesByExtension(extension = "") {
+        const wanted = String(extension || "").toLowerCase();
+        const results = [];
+        const walk = (node, currentPath = "") => {
+          if (!node) return;
+          if (node.type === "file") {
+            const filePath = normalizeBuilderFilePath(currentPath ? `${currentPath}/${node.name}` : node.name);
+            if (getBuilderFileExtension(filePath) === wanted) {
+              results.push(filePath);
+            }
+            return;
+          }
+          const children = Array.isArray(node.children) ? node.children : [];
+          children.forEach((child) => walk(child, currentPath ? `${currentPath}/${node.name}` : node.name));
+        };
+        const root = ensureBuilderProjectFiles();
+        (Array.isArray(root.children) ? root.children : []).forEach((child) => walk(child, ""));
+        return results.sort((a, b) => a.localeCompare(b));
+      }
+      function buildRelativeBuilderFilePath(fromPath = "", toPath = "") {
+        const fromParts = splitBuilderFilePath(getBuilderParentFolderPath(fromPath));
+        const toParts = splitBuilderFilePath(toPath);
+        let commonIndex = 0;
+        while (
+          commonIndex < fromParts.length &&
+          commonIndex < toParts.length &&
+          fromParts[commonIndex] === toParts[commonIndex]
+        ) {
+          commonIndex += 1;
+        }
+        const up = Array.from({ length: fromParts.length - commonIndex }, () => "..");
+        const down = toParts.slice(commonIndex);
+        const combined = [...up, ...down].filter(Boolean).join("/");
+        return combined || toParts[toParts.length - 1] || "";
+      }
+      function parseBuilderHtmlProperties(path = "") {
+        const html = getBuilderFileContent(path);
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(String(html || ""), "text/html");
+        const cssLinks = Array.from(doc.querySelectorAll('link[rel="stylesheet"][href]'))
+          .map((node) => String(node.getAttribute("href") || "").trim())
+          .filter(Boolean);
+        const jsLinks = Array.from(doc.querySelectorAll("script[src]"))
+          .map((node) => String(node.getAttribute("src") || "").trim())
+          .filter(Boolean);
+        return { cssLinks, jsLinks };
+      }
+      function closeBuilderHtmlPropertiesModal() {
+        const modal = document.getElementById("builder-html-properties-modal");
+        if (modal) modal.classList.add("hidden");
+      }
+      function renderBuilderHtmlPropertiesModal() {
+        const modal = document.getElementById("builder-html-properties-modal");
+        const title = document.getElementById("builder-html-properties-title");
+        const body = document.getElementById("builder-html-properties-body");
+        if (!modal || !title || !body) return;
+        const htmlPath = normalizeBuilderFilePath(builderHtmlPropertiesState.path || "");
+        title.textContent = htmlPath || "index.html";
+        const cssOptions = getAvailableBuilderFilesByExtension("css");
+        const jsOptions = getAvailableBuilderFilesByExtension("js");
+        const renderSelectRows = (kind, values, options) => `
+          <div class="space-y-3">
+            ${(values.length ? values : [""]).map((value, index) => `
+              <div class="flex items-center gap-3">
+                <select onchange="updateBuilderHtmlPropertyLink('${kind}', ${index}, this.value)" class="flex-1 rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none focus:border-cyan-400">
+                  <option value="">Select ${kind.toUpperCase()} file</option>
+                  ${options
+                    .map((option) => {
+                      const relative = buildRelativeBuilderFilePath(htmlPath, option);
+                      return `<option value="${escapeHtmlText(relative)}" ${String(value || "") === relative ? "selected" : ""}>${escapeHtmlText(option)}</option>`;
+                    })
+                    .join("")}
+                </select>
+                <button onclick="removeBuilderHtmlPropertyLink('${kind}', ${index})" class="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-rose-400/20 bg-rose-500/10 text-rose-200 hover:bg-rose-500/15">
+                  <i class="fas fa-times"></i>
+                </button>
+              </div>`).join("")}
+            <button onclick="addBuilderHtmlPropertyLink('${kind}')" class="inline-flex items-center gap-2 rounded-2xl border border-cyan-400/20 bg-cyan-500/10 px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-cyan-200 hover:bg-cyan-500/15">
+              <i class="fas fa-plus"></i>
+              <span>Link More ${kind.toUpperCase()}</span>
+            </button>
+          </div>`;
+        body.innerHTML = `
+          <div class="rounded-[1.5rem] border border-white/10 bg-white/[0.03] p-4">
+            <p class="text-[10px] font-black uppercase tracking-[0.18em] text-cyan-300">Link CSS</p>
+            <p class="mt-2 text-sm text-slate-400">Stylesheets will be placed in the head using accurate relative paths.</p>
+            <div class="mt-4">${renderSelectRows("css", builderHtmlPropertiesState.cssLinks, cssOptions)}</div>
+          </div>
+          <div class="rounded-[1.5rem] border border-white/10 bg-white/[0.03] p-4">
+            <p class="text-[10px] font-black uppercase tracking-[0.18em] text-amber-300">Link JavaScript</p>
+            <p class="mt-2 text-sm text-slate-400">Scripts will be appended before the closing body tag in the selected HTML file.</p>
+            <div class="mt-4">${renderSelectRows("js", builderHtmlPropertiesState.jsLinks, jsOptions)}</div>
+          </div>
+        `;
+        modal.classList.remove("hidden");
+      }
+      function openBuilderHtmlPropertiesModal(path = "") {
+        const normalizedPath = normalizeBuilderFilePath(path);
+        if (!normalizedPath || !isBuilderHtmlFile(normalizedPath)) return;
+        const parsed = parseBuilderHtmlProperties(normalizedPath);
+        builderHtmlPropertiesState = {
+          path: normalizedPath,
+          cssLinks: parsed.cssLinks.length ? parsed.cssLinks : [""],
+          jsLinks: parsed.jsLinks.length ? parsed.jsLinks : [""],
+        };
+        closeBuilderContextMenu();
+        renderBuilderHtmlPropertiesModal();
+      }
+      function addBuilderHtmlPropertyLink(kind = "css") {
+        const key = kind === "js" ? "jsLinks" : "cssLinks";
+        builderHtmlPropertiesState[key] = [...builderHtmlPropertiesState[key], ""];
+        renderBuilderHtmlPropertiesModal();
+      }
+      function removeBuilderHtmlPropertyLink(kind = "css", index = 0) {
+        const key = kind === "js" ? "jsLinks" : "cssLinks";
+        builderHtmlPropertiesState[key] = builderHtmlPropertiesState[key].filter((_, itemIndex) => itemIndex !== Number(index));
+        if (!builderHtmlPropertiesState[key].length) builderHtmlPropertiesState[key] = [""];
+        renderBuilderHtmlPropertiesModal();
+      }
+      function updateBuilderHtmlPropertyLink(kind = "css", index = 0, value = "") {
+        const key = kind === "js" ? "jsLinks" : "cssLinks";
+        builderHtmlPropertiesState[key] = builderHtmlPropertiesState[key].map((item, itemIndex) =>
+          itemIndex === Number(index) ? String(value || "").trim() : item,
+        );
+      }
+      function applyBuilderHtmlProperties() {
+        const htmlPath = normalizeBuilderFilePath(builderHtmlPropertiesState.path || "");
+        if (!htmlPath) return;
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(getBuilderFileContent(htmlPath) || "<!DOCTYPE html><html><head></head><body></body></html>", "text/html");
+        const cssLinks = builderHtmlPropertiesState.cssLinks.map((item) => String(item || "").trim()).filter(Boolean);
+        const jsLinks = builderHtmlPropertiesState.jsLinks.map((item) => String(item || "").trim()).filter(Boolean);
+        Array.from(doc.querySelectorAll('link[rel="stylesheet"][href]')).forEach((node) => {
+          const href = String(node.getAttribute("href") || "").trim();
+          if (!/^([a-z]+:)?\/\//i.test(href) && !href.startsWith("/") && !href.startsWith("data:")) {
+            node.remove();
+          }
+        });
+        Array.from(doc.querySelectorAll("script[src]")).forEach((node) => {
+          const src = String(node.getAttribute("src") || "").trim();
+          if (!/^([a-z]+:)?\/\//i.test(src) && !src.startsWith("/") && !src.startsWith("data:")) {
+            node.remove();
+          }
+        });
+        if (!doc.head) {
+          const head = doc.createElement("head");
+          doc.documentElement.insertBefore(head, doc.body || null);
+        }
+        if (!doc.body) {
+          const body = doc.createElement("body");
+          doc.documentElement.appendChild(body);
+        }
+        cssLinks.forEach((href) => {
+          const link = doc.createElement("link");
+          link.setAttribute("rel", "stylesheet");
+          link.setAttribute("href", href);
+          doc.head.appendChild(link);
+        });
+        jsLinks.forEach((src) => {
+          const script = doc.createElement("script");
+          script.setAttribute("src", src);
+          doc.body.appendChild(script);
+        });
+        const nextHtml = "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
+        updateBuilderFileContent(htmlPath, nextHtml);
+        if (normalizeBuilderFilePath(activeBuilderFilePath || "") === htmlPath) {
+          refreshBuilderCodeMode();
+          if (!builderCodeMode) {
+            tryApplyCodeModeToCanvas(true);
+          }
+        }
+        closeBuilderHtmlPropertiesModal();
+        showBuilderSnackbar("HTML file links updated.", "success");
+      }
+      function createBuilderFolderNode(name = "folder") {
+        return {
+          name: String(name || "folder").trim(),
+          type: "folder",
+          children: [],
+        };
+      }
+      function createBuilderFileNode(name = "file.txt", content = "") {
+        return {
+          name: String(name || "file.txt").trim(),
+          type: "file",
+          content: String(content || ""),
+        };
+      }
+      function buildBuilderProjectFilesFromEntries(entries = []) {
+        const root = { name: "root", type: "folder", children: [] };
+        const safeEntries = Array.isArray(entries) ? entries : [];
+        safeEntries.forEach((entry) => {
+          const normalizedPath = normalizeBuilderFilePath(entry?.path || entry?.name || "");
+          if (!normalizedPath) return;
+          const parts = splitBuilderFilePath(normalizedPath);
+          if (!parts.length) return;
+          let cursor = root;
+          for (let index = 0; index < parts.length; index += 1) {
+            const part = parts[index];
+            const isLeaf = index === parts.length - 1;
+            cursor.children = Array.isArray(cursor.children) ? cursor.children : [];
+            let child = cursor.children.find((item) => String(item?.name || "") === part);
+            if (!child) {
+              child = isLeaf
+                ? createBuilderFileNode(part, String(entry?.content || ""))
+                : createBuilderFolderNode(part);
+              cursor.children.push(child);
+            }
+            if (isLeaf && child.type === "file") {
+              child.content = String(entry?.content || "");
+            }
+            cursor = child;
+          }
+        });
+        if (!root.children.length) {
+          root.children.push(createBuilderFileNode("index.html", ""));
+        }
+        return root;
+      }
+      function setBuilderProjectFromEntries(projectNameValue = "MediaLab Project", entries = [], activePath = "index.html") {
+        builderProjectName = extractBuilderProjectNameSeed(projectNameValue);
+        builderProjectFiles = buildBuilderProjectFilesFromEntries(entries);
+        activeBuilderFilePath = normalizeBuilderFilePath(activePath || getFirstBuilderHtmlFilePath(builderProjectFiles) || "index.html");
+        selectedBuilderFilePath = activeBuilderFilePath;
+        ensureBuilderProjectFiles();
+        renderBuilderProjectExplorer();
+      }
+      function getFirstBuilderHtmlFilePath(node = ensureBuilderProjectFiles(), currentPath = "") {
+        if (node?.type !== "folder") return "";
+        const children = Array.isArray(node.children) ? node.children : [];
+        for (const child of children) {
+          const childPath = normalizeBuilderFilePath(currentPath ? `${currentPath}/${child.name}` : child.name);
+          if (child.type === "file" && isBuilderHtmlFile(childPath)) return childPath;
+          if (child.type === "folder") {
+            const nested = getFirstBuilderHtmlFilePath(child, childPath);
+            if (nested) return nested;
+          }
+        }
+        return "";
+      }
+      function persistActiveBuilderFileContent() {
+        ensureBuilderProjectFiles();
+        const activePath = normalizeBuilderFilePath(activeBuilderFilePath || "index.html");
+        if (!activePath) return;
+        const editor = document.getElementById("builder-code-editor");
+        const canvas = document.getElementById("web-canvas");
+        if (builderCodeMode || isBuilderCodeOnlyFile(activePath)) {
+          updateBuilderFileContent(activePath, editor?.value || getBuilderFileContent(activePath));
+          return;
+        }
+        updateBuilderFileContent(activePath, canvas?.innerHTML || "");
+      }
+      function syncBuilderProjectNameLabel() {
+        const label = document.getElementById("builder-explorer-project-name");
+        if (label) label.textContent = builderProjectName || "MediaLab Project";
+      }
+      function syncBuilderExplorerVisibility() {
+        const shell = document.getElementById("builder-explorer-shell");
+        const toggle = document.getElementById("builder-explorer-toggle");
+        if (shell) shell.classList.toggle("hidden", !builderExplorerOpen);
+        if (toggle) {
+          toggle.classList.toggle("bg-cyan-500/10", !builderExplorerOpen);
+          toggle.classList.toggle("text-cyan-300", !builderExplorerOpen);
+          toggle.classList.toggle("bg-cyan-500/20", builderExplorerOpen);
+          toggle.classList.toggle("text-white", builderExplorerOpen);
+        }
+      }
+      function toggleBuilderExplorer(forceValue = null) {
+        builderExplorerOpen =
+          typeof forceValue === "boolean" ? forceValue : !builderExplorerOpen;
+        syncBuilderExplorerVisibility();
+        if (!builderExplorerOpen) closeBuilderContextMenu();
+      }
+      function syncBuilderCodeFileLabel() {
+        const label = document.getElementById("builder-code-file-label");
+        if (label) {
+          const currentPath = normalizeBuilderFilePath(activeBuilderFilePath || "index.html");
+          label.textContent = currentPath || "index.html";
+        }
+      }
+      function getBuilderParentFolderPath(path = "") {
+        const parts = splitBuilderFilePath(path);
+        if (parts.length <= 1) return "";
+        return normalizeBuilderFilePath(parts.slice(0, -1).join("/"));
+      }
+      function selectBuilderFolder(path = "") {
+        selectedBuilderFolderPath = normalizeBuilderFilePath(path);
+        selectedBuilderFilePath = "";
+        closeBuilderContextMenu();
+        renderBuilderProjectExplorer();
+      }
+      function toggleBuilderFolderCollapse(path = "") {
+        const normalizedPath = normalizeBuilderFilePath(path);
+        if (!normalizedPath) return;
+        if (collapsedBuilderFolders.has(normalizedPath)) collapsedBuilderFolders.delete(normalizedPath);
+        else collapsedBuilderFolders.add(normalizedPath);
+        renderBuilderProjectExplorer();
+      }
+      function selectBuilderFile(path = "") {
+        selectedBuilderFolderPath = "";
+        closeBuilderContextMenu();
+        const normalizedPath = normalizeBuilderFilePath(path);
+        if (!normalizedPath) return;
+        selectedBuilderFilePath = normalizedPath;
+        renderBuilderProjectExplorer();
+      }
+      function closeBuilderContextMenu() {
+        builderContextMenuState = { open: false, x: 0, y: 0, path: "", type: "" };
+        const menu = document.getElementById("builder-context-menu");
+        if (menu) menu.classList.add("hidden");
+      }
+      function openBuilderContextMenu(event, path = "", type = "file") {
+        event?.preventDefault();
+        event?.stopPropagation();
+        const normalizedPath = normalizeBuilderFilePath(path);
+        if (type === "folder") {
+          selectedBuilderFolderPath = normalizedPath;
+          selectedBuilderFilePath = "";
+        } else {
+          selectedBuilderFolderPath = "";
+          selectedBuilderFilePath = normalizedPath;
+        }
+        builderContextMenuState = {
+          open: true,
+          x: Number(event?.clientX || 0),
+          y: Number(event?.clientY || 0),
+          path: normalizedPath,
+          type,
+        };
+        renderBuilderProjectExplorer();
+        return false;
+      }
+      function openBuilderContextMenuFromButton(button, path = "", type = "file") {
+        const rect = button?.getBoundingClientRect?.();
+        return openBuilderContextMenu(
+          rect
+            ? {
+                preventDefault() {},
+                stopPropagation() {},
+                clientX: rect.right - 12,
+                clientY: rect.bottom + 8,
+              }
+            : null,
+          path,
+          type,
+        );
+      }
+      function focusBuilderRenameInput() {
+        requestAnimationFrame(() => {
+          const input = document.getElementById("builder-rename-input");
+          if (!input) return;
+          input.focus({ preventScroll: true });
+          input.select();
+        });
+      }
+      function beginBuilderRename(path = "") {
+        renamingBuilderPath = normalizeBuilderFilePath(path);
+        closeBuilderContextMenu();
+        renderBuilderProjectExplorer();
+        focusBuilderRenameInput();
+      }
+      function renameBuilderNode(path = "", nextName = "") {
+        const normalizedPath = normalizeBuilderFilePath(path);
+        const cleanName = String(nextName || "").trim().replace(/[\\/]+/g, "");
+        if (!normalizedPath || !cleanName) {
+          renamingBuilderPath = "";
+          renderBuilderProjectExplorer();
+          return;
+        }
+        const parentPath = getBuilderParentFolderPath(normalizedPath);
+        const parentNode = getBuilderFolderNode(parentPath);
+        const currentNode = findBuilderNodeByPath(normalizedPath);
+        if (!currentNode || !parentNode?.children) {
+          renamingBuilderPath = "";
+          renderBuilderProjectExplorer();
+          return;
+        }
+        const siblings = Array.isArray(parentNode.children) ? parentNode.children : [];
+        let finalName = cleanName;
+        let suffix = 2;
+        while (
+          siblings.some(
+            (child) =>
+              child !== currentNode &&
+              String(child?.name || "").trim().toLowerCase() === finalName.toLowerCase(),
+          )
+        ) {
+          finalName = `${cleanName}-${suffix}`;
+          suffix += 1;
+        }
+        currentNode.name = finalName;
+        const nextPath = normalizeBuilderFilePath(parentPath ? `${parentPath}/${finalName}` : finalName);
+        if (normalizeBuilderFilePath(activeBuilderFilePath || "") === normalizedPath) {
+          activeBuilderFilePath = nextPath;
+        }
+        if (normalizeBuilderFilePath(selectedBuilderFilePath || "") === normalizedPath) {
+          selectedBuilderFilePath = nextPath;
+        }
+        if (normalizeBuilderFilePath(selectedBuilderFolderPath || "") === normalizedPath) {
+          selectedBuilderFolderPath = nextPath;
+        }
+        renamingBuilderPath = "";
+        renderBuilderProjectExplorer();
+      }
+      function handleBuilderRenameKeydown(event, path = "") {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          renameBuilderNode(path, event.currentTarget?.value || "");
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          renamingBuilderPath = "";
+          renderBuilderProjectExplorer();
+        }
+      }
+      function deleteBuilderNode(path = "") {
+        const normalizedPath = normalizeBuilderFilePath(path);
+        if (!normalizedPath) return;
+        const parentPath = getBuilderParentFolderPath(normalizedPath);
+        const parentNode = getBuilderFolderNode(parentPath);
+        if (!parentNode?.children) return;
+        parentNode.children = parentNode.children.filter((child) => {
+          const childPath = normalizeBuilderFilePath(parentPath ? `${parentPath}/${child.name}` : child.name);
+          return childPath !== normalizedPath;
+        });
+        if (normalizeBuilderFilePath(activeBuilderFilePath || "") === normalizedPath) {
+          activeBuilderFilePath = getFirstBuilderHtmlFilePath() || "index.html";
+          selectedBuilderFilePath = activeBuilderFilePath;
+          if (findBuilderNodeByPath(activeBuilderFilePath)) {
+            loadBuilderFileIntoWorkspace(activeBuilderFilePath);
+          }
+        }
+        if (normalizeBuilderFilePath(selectedBuilderFilePath || "") === normalizedPath) {
+          selectedBuilderFilePath = "";
+        }
+        if (normalizeBuilderFilePath(selectedBuilderFolderPath || "") === normalizedPath) {
+          selectedBuilderFolderPath = "";
+        }
+        renamingBuilderPath = "";
+        closeBuilderContextMenu();
+        renderBuilderProjectExplorer();
+      }
+      function openBuilderContextTarget(path = "", type = "file") {
+        closeBuilderContextMenu();
+        if (type === "folder") {
+          selectBuilderFolder(path);
+          return;
+        }
+        switchBuilderProjectFile(path);
+      }
+      function renderBuilderExplorerTreeNode(node, currentPath = "", depth = 0) {
+        if (!node) return "";
+        const nodePath = normalizeBuilderFilePath(currentPath ? `${currentPath}/${node.name}` : node.name);
+        if (node.type === "folder") {
+          const children = Array.isArray(node.children) ? node.children : [];
+          const isCollapsed = collapsedBuilderFolders.has(nodePath);
+          const isSelectedFolder = normalizeBuilderFilePath(selectedBuilderFolderPath || "") === nodePath;
+          return `
+            <div class="builder-tree-node builder-tree-folder">
+              <div class="builder-tree-branch ${isSelectedFolder ? "is-selected-folder" : ""}">
+                <button onclick="event.stopPropagation(); toggleBuilderFolderCollapse('${escapeInlineJsString(nodePath)}')" class="builder-tree-folder-toggle">
+                  <i class="fas ${isCollapsed ? "fa-chevron-right" : "fa-chevron-down"} text-[10px]"></i>
+                </button>
+                <button onclick="selectBuilderFolder('${escapeInlineJsString(nodePath)}')" class="flex min-w-0 flex-1 items-center gap-2 text-left">
+                  <i class="fas ${isCollapsed ? "fa-folder" : "fa-folder-open"} text-cyan-300"></i>
+                  <div class="min-w-0">
+                    ${
+                      renamingBuilderPath === nodePath
+                        ? `<input id="builder-rename-input" value="${escapeAttr(node.name || "folder")}" onblur="renameBuilderNode('${escapeInlineJsString(nodePath)}', this.value)" onkeydown="handleBuilderRenameKeydown(event, '${escapeInlineJsString(nodePath)}')" class="w-full rounded-lg border border-fuchsia-400/30 bg-slate-950/80 px-2 py-1 text-sm font-semibold text-white outline-none focus:border-fuchsia-400" />`
+                        : `<div class="builder-tree-label">${escapeHtmlText(node.name || "folder")}</div>`
+                    }
+                    <div class="builder-tree-meta">${children.length} item${children.length === 1 ? "" : "s"}</div>
+                  </div>
+                </button>
+                <button onclick="event.stopPropagation(); openBuilderContextMenuFromButton(this, '${escapeInlineJsString(nodePath)}', 'folder')" class="builder-tree-actions" title="Folder actions">
+                  <i class="fas fa-ellipsis-v text-[11px]"></i>
+                </button>
+              </div>
+              <div class="builder-tree-children ${isCollapsed ? "hidden" : ""}">
+                ${children
+                  .map((child) =>
+                    renderBuilderExplorerTreeNode(
+                      child,
+                      normalizeBuilderFilePath(currentPath ? `${currentPath}/${node.name}` : node.name),
+                      depth + 1,
+                    ),
+                  )
+                  .join("")}
+              </div>
+            </div>`;
+        }
+        const normalizedSelected = normalizeBuilderFilePath(selectedBuilderFilePath || activeBuilderFilePath || "index.html");
+        const displayPath = normalizeBuilderFilePath(currentPath ? `${currentPath}/${node.name}` : node.name);
+        const icon =
+          getBuilderFileExtension(displayPath) === "css"
+            ? "fa-file-code text-emerald-300"
+            : getBuilderFileExtension(displayPath) === "js"
+              ? "fa-file-code text-amber-300"
+              : "fa-file-lines text-slate-200";
+        return `
+          <div class="builder-tree-node">
+            <button onclick="selectBuilderFile('${escapeInlineJsString(displayPath)}')" ondblclick="switchBuilderProjectFile('${escapeInlineJsString(displayPath)}')" class="builder-tree-branch ${!selectedBuilderFolderPath && normalizedSelected === displayPath ? "is-active" : ""}">
+              <i class="fas ${icon}"></i>
+              <div class="min-w-0">
+                ${
+                  renamingBuilderPath === displayPath
+                    ? `<input id="builder-rename-input" value="${escapeAttr(node.name || "untitled")}" onblur="renameBuilderNode('${escapeInlineJsString(displayPath)}', this.value)" onkeydown="handleBuilderRenameKeydown(event, '${escapeInlineJsString(displayPath)}')" class="w-full rounded-lg border border-cyan-400/30 bg-slate-950/80 px-2 py-1 text-sm font-semibold text-white outline-none focus:border-cyan-400" />`
+                    : `<div class="builder-tree-label">${escapeHtmlText(node.name || "untitled")}</div>`
+                }
+                <div class="builder-tree-meta">${escapeHtmlText(getBuilderFileExtension(displayPath) || "file")}</div>
+              </div>
+              <span onclick="event.stopPropagation(); openBuilderContextMenuFromButton(this, '${escapeInlineJsString(displayPath)}', 'file')" class="builder-tree-actions" title="File actions">
+                <i class="fas fa-ellipsis-v text-[11px]"></i>
+              </span>
+            </button>
+          </div>`;
+      }
+      function renderBuilderProjectExplorer() {
+        const tree = document.getElementById("builder-explorer-tree");
+        ensureBuilderProjectFiles();
+        syncBuilderProjectNameLabel();
+        syncBuilderCodeFileLabel();
+        syncBuilderExplorerVisibility();
+        if (!tree) return;
+        const rootChildren = Array.isArray(builderProjectFiles?.children) ? builderProjectFiles.children : [];
+        tree.innerHTML = rootChildren.length
+          ? `${rootChildren.map((child) => renderBuilderExplorerTreeNode(child)).join("")}
+             <div id="builder-context-menu" class="${builderContextMenuState.open ? "" : "hidden"} fixed z-[4000] min-w-[180px] rounded-2xl border border-white/10 bg-[#08111f]/98 p-2 shadow-[0_22px_60px_rgba(2,6,23,0.5)]" style="left:${builderContextMenuState.x}px;top:${builderContextMenuState.y}px;">
+               <button onclick="openBuilderContextTarget('${escapeInlineJsString(builderContextMenuState.path)}', '${escapeInlineJsString(builderContextMenuState.type)}')" class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/5"><i class="fas fa-arrow-up-right-from-square text-cyan-300"></i><span>Open</span></button>
+               ${builderContextMenuState.type === "file" && isBuilderHtmlFile(builderContextMenuState.path) ? `<button onclick="openBuilderHtmlPropertiesModal('${escapeInlineJsString(builderContextMenuState.path)}')" class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/5"><i class="fas fa-link text-emerald-300"></i><span>Link CSS / JS</span></button>` : ""}
+               <button onclick="beginBuilderRename('${escapeInlineJsString(builderContextMenuState.path)}')" class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/5"><i class="fas fa-pen text-amber-300"></i><span>Rename</span></button>
+               <button onclick="deleteBuilderNode('${escapeInlineJsString(builderContextMenuState.path)}')" class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-rose-200 hover:bg-rose-500/10"><i class="fas fa-trash text-rose-300"></i><span>Delete</span></button>
+             </div>`
+          : `<div class="rounded-2xl border border-dashed border-white/10 p-5 text-sm text-slate-400">No project files yet.</div>`;
+        if (renamingBuilderPath) focusBuilderRenameInput();
+      }
+      function extractBuilderProjectNameSeed(value = "") {
+        const trimmed = String(value || "").trim();
+        return trimmed || "MediaLab Project";
+      }
+      function resetBuilderProjectFiles({ preserveName = false } = {}) {
+        builderProjectFiles = createDefaultBuilderProjectFiles();
+        activeBuilderFilePath = "index.html";
+        selectedBuilderFilePath = "index.html";
+        selectedBuilderFolderPath = "";
+        collapsedBuilderFolders = new Set();
+        if (!preserveName) builderProjectName = "MediaLab Project";
+      }
+      function addBuilderNodeToFolder(node, folderPath = "") {
+        ensureBuilderProjectFiles();
+        const targetFolder = getBuilderFolderNode(folderPath);
+        targetFolder.children = Array.isArray(targetFolder.children)
+          ? targetFolder.children
+          : [];
+        const existingNames = new Set(
+          targetFolder.children.map((child) => String(child?.name || "").toLowerCase()),
+        );
+        let baseName = String(node?.name || "").trim() || (node?.type === "folder" ? "folder" : "file.txt");
+        let nextName = baseName;
+        let suffix = 2;
+        while (existingNames.has(nextName.toLowerCase())) {
+          const extension = node?.type === "file" && baseName.includes(".")
+            ? `.${baseName.split(".").pop()}`
+            : "";
+          const stem = extension ? baseName.slice(0, -extension.length) : baseName;
+          nextName = `${stem}-${suffix}${extension}`;
+          suffix += 1;
+        }
+        node.name = nextName;
+        targetFolder.children.push(node);
+        renderBuilderProjectExplorer();
+        return normalizeBuilderFilePath(folderPath ? `${folderPath}/${node.name}` : node.name);
+      }
+      function promptAddBuilderFile() {
+        const targetFolderPath = normalizeBuilderFilePath(selectedBuilderFolderPath || "");
+        const targetFolder = getBuilderFolderNode(targetFolderPath);
+        const existingNames = new Set((Array.isArray(targetFolder.children) ? targetFolder.children : []).map((child) => String(child?.name || "").toLowerCase()));
+        let fileName = "file1.html";
+        let index = 2;
+        while (existingNames.has(fileName.toLowerCase())) {
+          fileName = `file${index}.html`;
+          index += 1;
+        }
+        const extension = getBuilderFileExtension(fileName);
+        const defaultContent =
+          extension === "css"
+            ? "/* MediaLab styles */\n"
+            : extension === "js"
+              ? "// MediaLab interactions\n"
+              : extension === "html" || extension === "htm"
+                ? ""
+                : "";
+        const filePath = addBuilderNodeToFolder(createBuilderFileNode(fileName, defaultContent), targetFolderPath);
+        selectedBuilderFilePath = filePath;
+        selectedBuilderFolderPath = "";
+        renamingBuilderPath = filePath;
+        renderBuilderProjectExplorer();
+        focusBuilderRenameInput();
+        showBuilderSnackbar("Project file added.", "success");
+      }
+      function promptAddBuilderFolder() {
+        const targetFolderPath = normalizeBuilderFilePath(selectedBuilderFolderPath || "");
+        const targetFolder = getBuilderFolderNode(targetFolderPath);
+        const existingNames = new Set((Array.isArray(targetFolder.children) ? targetFolder.children : []).map((child) => String(child?.name || "").toLowerCase()));
+        let folderName = "folder1";
+        let index = 2;
+        while (existingNames.has(folderName.toLowerCase())) {
+          folderName = `folder${index}`;
+          index += 1;
+        }
+        const addedPath = addBuilderNodeToFolder(createBuilderFolderNode(folderName), targetFolderPath);
+        selectBuilderFolder(addedPath);
+        renamingBuilderPath = addedPath;
+        renderBuilderProjectExplorer();
+        focusBuilderRenameInput();
+        showBuilderSnackbar("Project folder added.", "success");
+      }
+      function loadBuilderFileIntoWorkspace(path = "") {
+        const normalizedPath = normalizeBuilderFilePath(path || activeBuilderFilePath || "index.html");
+        const fileNode = findBuilderNodeByPath(normalizedPath);
+        if (!fileNode || fileNode.type !== "file") return;
+        const content = String(fileNode.content || "");
+        const canvas = document.getElementById("web-canvas");
+        const editor = document.getElementById("builder-code-editor");
+        if (isBuilderCodeOnlyFile(normalizedPath)) {
+          builderCodeMode = true;
+          if (editor) {
+            editor.value = content;
+          }
+          refreshBuilderCodeMode();
+          updateBuilderUI();
+          return;
+        }
+        builderCodeMode = false;
+        builderImportedProject = null;
+        builderRawImportDocument = "";
+        if (canvas) {
+          canvas.innerHTML = content;
+          ensureBuilderGuides(canvas);
+          initCanvasSelection(canvas);
+          hydrateCanvasElements();
+          deselectAll();
+        }
+        updateBuilderUI();
+        if (editor) {
+          editor.value = content;
+        }
+        refreshBuilderCodeMode();
+      }
+      function switchBuilderProjectFile(path = "") {
+        const normalizedPath = normalizeBuilderFilePath(path);
+        if (!normalizedPath) return;
+        persistActiveBuilderFileContent();
+        activeBuilderFilePath = normalizedPath;
+        selectedBuilderFilePath = normalizedPath;
+        selectedBuilderFolderPath = getBuilderParentFolderPath(normalizedPath);
+        loadBuilderFileIntoWorkspace(normalizedPath);
+        renderBuilderProjectExplorer();
+      }
       // ====================== 2. STUDIO LIFE-CYCLE ======================
       function launchBossMode() {
         const doc = document.documentElement;
@@ -13317,6 +14302,7 @@
         } else {
           updateBuilderUI();
           renderBuilderDrafts();
+          renderBuilderProjectExplorer();
         }
         scheduleBuilderTutorial();
       }
@@ -13355,6 +14341,7 @@
           if (!builderInitialized || !builderHasCanvasContent()) {
             canvas.innerHTML = "";
             applyCanvasDesignPreset("clean", true);
+            resetBuilderProjectFiles();
           } else {
             refreshCanvasBackground();
           }
@@ -13373,6 +14360,7 @@
         builderCodeMode = false;
         if (!builderInitialized) saveToHistory();
         updateBuilderUI();
+        renderBuilderProjectExplorer();
         document.addEventListener("contextmenu", handleRightClick);
         builderInitialized = true;
         bindBuilderTutorialControls();
@@ -13853,11 +14841,24 @@
       }
       document.addEventListener("mousedown", (e) => {
         const toolbarShell = document.getElementById("builder-toolbar-shell");
+        const explorerShell = document.getElementById("builder-explorer-shell");
+        const explorerToggle = document.getElementById("builder-explorer-toggle");
+        const contextMenu = document.getElementById("builder-context-menu");
         if (toolbarShell && !toolbarShell.contains(e.target)) {
           hideBuilderPanels();
         }
         if (toolbarShell && toolbarShell.contains(e.target)) {
           queueBuilderPanelAutoHide();
+        }
+        if (
+          contextMenu &&
+          !contextMenu.contains(e.target) &&
+          explorerShell &&
+          !explorerShell.contains(e.target) &&
+          explorerToggle &&
+          !explorerToggle.contains(e.target)
+        ) {
+          closeBuilderContextMenu();
         }
         const studioMenu = document.getElementById("studio-menu-panel");
         const studioToggle = document.getElementById("studio-menu-toggle");
@@ -14252,6 +15253,7 @@
         modal?.classList.remove("flex");
       }
       async function saveBuilderDraft(options = {}) {
+        persistActiveBuilderFileContent();
         const canvas = document.getElementById("web-canvas");
         if (!canvas) return;
         const {
@@ -14260,6 +15262,9 @@
           keepalive = false,
         } = options;
         const drafts = getBuilderDrafts();
+        const projectTree = cloneBuilderProjectFiles(ensureBuilderProjectFiles());
+        const primaryHtmlPath =
+          getFirstBuilderHtmlFilePath(projectTree) || normalizeBuilderFilePath(activeBuilderFilePath || "index.html");
         const draftName =
           options.name ||
           (isAutoSave
@@ -14268,9 +15273,12 @@
         const payload = {
           name: draftName,
           savedAt: Date.now(),
-          canvasHtml: canvas.innerHTML,
+          canvasHtml: getBuilderFileContent(primaryHtmlPath) || canvas.innerHTML,
           pageBackground: getCanvasPageStyleState(canvas).background,
           isAutoSave,
+          projectFiles: projectTree,
+          activeFilePath: normalizeBuilderFilePath(activeBuilderFilePath || "index.html"),
+          projectName: builderProjectName || draftName,
         };
         if (!loggedIn) {
           if (!silent) showLogin();
@@ -14302,7 +15310,13 @@
         if (!draft || !canvas) return;
         builderImportedProject = null;
         builderRawImportDocument = "";
-        canvas.innerHTML = draft.canvasHtml || draft.canvasState?.html || "";
+        builderProjectFiles = cloneBuilderProjectFiles(draft.projectFiles || createDefaultBuilderProjectFiles());
+        builderProjectName = extractBuilderProjectNameSeed(draft.projectName || draft.name || "MediaLab Project");
+        activeBuilderFilePath = normalizeBuilderFilePath(draft.activeFilePath || getFirstBuilderHtmlFilePath(builderProjectFiles) || "index.html");
+        selectedBuilderFilePath = activeBuilderFilePath;
+        const primaryHtmlPath = getFirstBuilderHtmlFilePath(builderProjectFiles) || "index.html";
+        updateBuilderFileContent(primaryHtmlPath, String(draft.canvasHtml || draft.canvasState?.html || getBuilderFileContent(primaryHtmlPath) || ""));
+        canvas.innerHTML = getBuilderFileContent(isBuilderHtmlFile(activeBuilderFilePath) ? activeBuilderFilePath : primaryHtmlPath);
         applyCanvasPageBackground(
           draft.pageBackground ||
             draft.canvasState?.pageBackground ||
@@ -14313,6 +15327,8 @@
         initCanvasSelection(canvas);
         hydrateCanvasElements();
         deselectAll();
+        loadBuilderFileIntoWorkspace(activeBuilderFilePath);
+        renderBuilderProjectExplorer();
         saveToHistory();
       }
       function newBuilderProject() {
@@ -14320,11 +15336,14 @@
         if (!canvas) return;
         builderImportedProject = null;
         builderRawImportDocument = "";
+        resetBuilderProjectFiles();
         canvas.innerHTML = "";
         applyCanvasDesignPreset("clean", true);
         ensureBuilderGuides(canvas);
         initCanvasSelection(canvas);
         deselectAll();
+        renderBuilderProjectExplorer();
+        refreshBuilderCodeMode();
         saveToHistory();
       }
       function requestNewBuilderProject() {
@@ -14483,6 +15502,11 @@
         return "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
       }
       function getBuilderEditorDocument() {
+        ensureBuilderProjectFiles();
+        const activePath = normalizeBuilderFilePath(activeBuilderFilePath || "index.html");
+        if (isBuilderCodeOnlyFile(activePath)) return getBuilderFileContent(activePath);
+        const htmlFileContent = getBuilderFileContent(activePath);
+        if (htmlFileContent && isBuilderHtmlFile(activePath)) return htmlFileContent;
         if (builderImportedProject?.sourceHtml) return builderImportedProject.sourceHtml;
         return builderRawImportDocument || buildCodeModeDocument();
       }
@@ -14599,6 +15623,17 @@
             };
           }),
         );
+        const vfsEntries = await Promise.all(
+          normalizedFiles.map(async ({ file, path }) => {
+            const relativePath = makeProjectRelative(path);
+            const lower = String(relativePath || "").toLowerCase();
+            const isTextFile = /\.(html?|css|js|json|txt|md)$/i.test(lower);
+            return {
+              path: relativePath,
+              content: isTextFile ? await file.text() : "",
+            };
+          }),
+        );
         if (progressDiv && statusText && bar && percentLabel) {
           statusText.innerText = "Project ready.";
           bar.classList.remove("bg-cyan-400");
@@ -14619,6 +15654,7 @@
           rootHtml: rewrittenHtml,
           entryPath: makeProjectRelative(preferredHtml.path) || "index.html",
           files: filesForPublish,
+          vfsEntries,
           rootFolder,
           assetMap,
           resolvedCssMap,
@@ -14632,6 +15668,11 @@
           const project = await buildImportedProjectPreview(fileList);
           builderImportedProject = project;
           builderRawImportDocument = project.rootHtml;
+          setBuilderProjectFromEntries(
+            project.projectName,
+            project.vfsEntries || [{ path: project.entryPath || "index.html", content: project.sourceHtml || "" }],
+            project.entryPath || "index.html",
+          );
           builderCodeMode = true;
           updateBuilderUI();
           editor.value = project.sourceHtml;
@@ -14672,6 +15713,7 @@
           html = html.replace(/__MEDIALAB_OWNER_NAME__/g, ownerName);
           builderImportedProject = null;
           builderRawImportDocument = html;
+          setBuilderProjectFromEntries(labels[slug] || "Website Template", [{ path: "index.html", content: html }], "index.html");
           builderCodeMode = true;
           updateBuilderUI();
           editor.value = html;
@@ -14696,6 +15738,7 @@
       }
       async function handleCandyCrushTemplateSelection() {
         await loadBuilderSiteTemplate("candycrush");
+        handleBuilderTutorialEvent("starter-inserted", { kind: "candycrush" });
       }
       function insertStarterBlock(kind) {
         const canvas = document.getElementById("web-canvas");
@@ -14928,7 +15971,7 @@
           const tutorialStep = builderTourState.steps[builderTourState.stepIndex];
           const shouldAdvanceTutorialDirectly =
             builderTourState.active &&
-            tutorialStep?.title === "Insert Login Form";
+            tutorialStep?.title === "Pick Candy Crush Template";
           finishStarterInsert({
             skipTutorialEvent: shouldAdvanceTutorialDirectly,
           });
@@ -14941,7 +15984,7 @@
               if (
                 builderTourState.active &&
                 builderTourState.steps[builderTourState.stepIndex]?.title ===
-                  "Insert Login Form"
+                  "Pick Candy Crush Template"
               ) {
                 advanceBuilderTutorial();
               }
@@ -16170,6 +17213,7 @@
         if (canvasContainer)
           canvasContainer.classList.toggle("hidden", builderCodeMode);
         if (codePanel) codePanel.classList.toggle("hidden", !builderCodeMode);
+        syncBuilderCodeFileLabel();
       }
       function restoreCanvasSnapshot(index) {
         const canvas = document.getElementById("web-canvas");
@@ -16432,6 +17476,15 @@
         saveToHistory();
       }
       function toggleBuilderCodeMode() {
+        const activePath = normalizeBuilderFilePath(activeBuilderFilePath || "index.html");
+        if (builderCodeMode && isBuilderCodeOnlyFile(activePath)) {
+          const fallbackHtml = getFirstBuilderHtmlFilePath();
+          if (fallbackHtml) {
+            switchBuilderProjectFile(fallbackHtml);
+            return;
+          }
+        }
+        persistActiveBuilderFileContent();
         builderCodeMode = !builderCodeMode;
         if (builderCodeMode) refreshBuilderCodeMode();
         updateBuilderUI();
@@ -16492,8 +17545,8 @@
               const step = builderTourState.steps[builderTourState.stepIndex];
               if (!step?.waitFor) return;
               if (
-                event.target?.id === "builder-template-login" ||
-                event.target?.closest?.("#builder-template-login")
+                event.target?.id === "builder-template-candycrush" ||
+                event.target?.closest?.("#builder-template-candycrush")
               ) {
                 return;
               }
@@ -16546,7 +17599,7 @@
           const handled = step.onEvent(payload);
           if (handled === false) return;
         }
-        if (eventName === "starter-inserted" && payload.kind === "login") {
+        if (eventName === "starter-inserted" && payload.kind === "candycrush") {
           setTimeout(() => {
             if (!builderTourState.active) return;
             advanceBuilderTutorial();
@@ -16744,17 +17797,17 @@
             onEvent: (payload) => payload.tab === "templates",
           },
           {
-            title: "Insert Login Form",
+            title: "Pick Candy Crush Template",
             message:
-              "Choose the Login Form first. It is the fastest way to drop in a real structured section.",
-            targetSelector: "#builder-template-login",
+              "Choose the Candy Crush Game template first. It is the fastest way to start with a polished playable project.",
+            targetSelector: "#builder-template-candycrush",
             primaryLabel: "Waiting...",
             primaryAction: null,
             secondaryLabel: "Dismiss",
             secondaryAction: () => dismissBuilderTutorial(true),
             waitFor: "starter-inserted",
             onEvent: (payload) => {
-              if (payload.kind !== "login") return false;
+              if (payload.kind !== "candycrush") return false;
               return true;
             },
           },
@@ -17595,6 +18648,7 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
         if (lineGutter)
           lineGutter.textContent = buildCodeLineNumbers(editor.value);
         syncCodeEditorScroll();
+        syncBuilderCodeFileLabel();
       }
       function buildCodeLineNumbers(code = "") {
         const lineCount = Math.max(1, code.split("\n").length);
@@ -17657,6 +18711,11 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
         if (lineGutter) lineGutter.scrollTop = editor.scrollTop;
         clearTimeout(codeApplyTimer);
         codeApplyTimer = setTimeout(() => {
+          const activePath = normalizeBuilderFilePath(activeBuilderFilePath || "index.html");
+          if (isBuilderCodeOnlyFile(activePath)) {
+            updateBuilderFileContent(activePath, editor.value);
+            return;
+          }
           if (builderImportedProject) {
             builderImportedProject.sourceHtml = editor.value;
             builderImportedProject.rootHtml = buildImportedProjectPreviewDocument(
@@ -17833,8 +18892,17 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
       function tryApplyCodeModeToCanvas(silent = false) {
         const editor = document.getElementById("builder-code-editor");
         if (!editor) return;
+        const activePath = normalizeBuilderFilePath(activeBuilderFilePath || "index.html");
+        if (isBuilderCodeOnlyFile(activePath)) {
+          updateBuilderFileContent(activePath, editor.value);
+          if (!silent) {
+            showBuilderSnackbar(`${activePath} updated.`, "success");
+          }
+          return;
+        }
         const parser = new DOMParser();
         const doc = parser.parseFromString(editor.value, "text/html");
+        updateBuilderFileContent(activePath, editor.value);
         applyCanvasPageBackground(extractBodyBackgroundFromDocument(doc), true);
         const bodyChildren = Array.from(doc.body.children).filter(
           (node) =>
@@ -18260,6 +19328,7 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
       }
       function saveToHistory() {
         const canvas = document.getElementById("web-canvas");
+        persistActiveBuilderFileContent();
         const snapshot = {
           html: canvas?.innerHTML || "",
           pageBackground: getCanvasPageStyleState(canvas).background,

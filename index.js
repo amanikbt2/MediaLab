@@ -1284,6 +1284,7 @@ function buildMarketplacePublicItem(item = {}, viewerId = "") {
     category: item.category || "General",
     screenshots: Array.isArray(item.screenshots) ? item.screenshots.slice(0, 4) : [],
     screenshotAssets: Array.isArray(item.screenshotAssets) ? item.screenshotAssets.slice(0, 4) : [],
+    allowTest: Boolean(item.allowTest),
     purpose: item.purpose || "",
     sourceType: item.sourceType || "draft",
     listingKind: item.listingKind || "sale",
@@ -3674,6 +3675,7 @@ app.post("/api/marketplace", publishRateLimit, express.json({ limit: "15mb" }), 
     const purpose = sanitizeMarketplaceText(req.body?.purpose || "", 800);
     const category = sanitizeMarketplaceText(req.body?.category || "General", 80) || "General";
     const price = normalizeMarketplacePrice(req.body?.price);
+    const allowTest = Boolean(req.body?.allowTest);
     const screenshots = (Array.isArray(req.body?.screenshots) ? req.body.screenshots : [])
       .map((value) => String(value || "").trim())
       .filter(Boolean)
@@ -3802,6 +3804,7 @@ app.post("/api/marketplace", publishRateLimit, express.json({ limit: "15mb" }), 
       category,
       screenshots,
       screenshotAssets,
+      allowTest,
       purpose,
       sourceType,
       listingKind,
