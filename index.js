@@ -234,7 +234,7 @@ function serializeNotification(notification = {}) {
 
 async function listUserNotifications(userId, limit = 10) {
   if (!userId) return [];
-  const safeLimit = Math.max(1, Math.min(50, Number(limit || 10)));
+  const safeLimit = Math.max(1, Math.min(10, Number(limit || 10)));
   const notifications = await Notification.find({ userId })
     .sort({ createdAt: -1 })
     .limit(safeLimit)

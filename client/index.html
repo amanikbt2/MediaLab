@@ -8813,6 +8813,13 @@
         if (shouldOpen) {
           queueNotificationAutoHide();
           await fetchNotifications();
+          notificationsList = notificationsList.map((item) => ({
+            ...item,
+            isRead: true,
+            readAt: item.readAt || new Date().toISOString(),
+          }));
+          unreadNotificationCount = 0;
+          renderNotificationsUi();
           await markAllNotificationsRead({ silent: true });
         } else {
           clearTimeout(notificationDropdownTimer);
