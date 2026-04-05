@@ -1750,7 +1750,7 @@
             </button>
             <div
               id="notification-dropdown"
-              class="hidden fixed inset-y-0 right-0 z-[5005] w-full max-w-[24rem] border-l border-white/10 bg-slate-950 p-5 shadow-[-20px_0_60px_rgba(2,6,23,0.5)]"
+              class="hidden fixed inset-y-0 right-0 z-[5005] w-full max-w-[24rem] border-l border-white/10 bg-slate-950 p-5 shadow-[-20px_0_60px_rgba(2,6,23,0.5)] flex flex-col"
             >
               <div class="flex items-center justify-between gap-3">
                 <div>
@@ -1762,7 +1762,7 @@
                   </button>
                 </div>
               </div>
-              <div id="notification-list" class="mt-4 h-[calc(100vh-7rem)] space-y-3 overflow-y-auto pr-1"></div>
+              <div id="notification-list" class="relative z-[1] mt-4 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1"></div>
             </div>
           </div>
           <div id="more-features-shell" class="relative">
@@ -4560,6 +4560,7 @@
         upsertNotificationFromSocket(payload);
         const dropdown = document.getElementById("notification-dropdown");
         if (dropdown && !dropdown.classList.contains("hidden")) {
+          fetchNotifications().catch(() => {});
           markAllNotificationsRead({ silent: true });
         }
       });
@@ -8628,8 +8629,10 @@
             throw new Error(data.message || "Could not load notifications.");
           }
           markSessionHealthy();
-          notificationsList = Array.isArray(data.notifications) ? data.notifications : [];
-          unreadNotificationCount = notificationsList.filter((item) => !item.isRead).length;
+          notificationsList = Array.isArray(data.notifications) ? data.notifications.slice(0, 10) : [];
+          unreadNotificationCount = Number(
+            data.unreadCount ?? notificationsList.filter((item) => !item.isRead).length,
+          );
           renderNotificationsUi();
           return notificationsList;
         } catch (error) {

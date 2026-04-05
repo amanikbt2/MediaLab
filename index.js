@@ -200,18 +200,7 @@ async function createUserNotification({
       metadata: metadata && typeof metadata === "object" ? metadata : {},
       isRead: false,
     });
-    const payload = {
-      _id: String(notification._id),
-      userId: String(notification.userId),
-      type: notification.type,
-      title: notification.title,
-      message: notification.message,
-      targetType: notification.targetType,
-      targetId: notification.targetId,
-      metadata: notification.metadata || {},
-      isRead: false,
-      createdAt: notification.createdAt,
-    };
+    const payload = serializeNotification(notification);
     io.to(`${USER_NOTIFICATION_ROOM_PREFIX}${String(notification.userId)}`).emit(
       "user:notification",
       payload,
@@ -222,6 +211,35 @@ async function createUserNotification({
     console.error("Notification create failed:", error);
     return null;
   }
+}
+
+function serializeNotification(notification = {}) {
+  return {
+    _id: String(notification?._id || ""),
+    userId: String(notification?.userId || ""),
+    type: String(notification?.type || "general").trim(),
+    title: String(notification?.title || "").trim(),
+    message: String(notification?.message || "").trim(),
+    targetType: String(notification?.targetType || "").trim(),
+    targetId: String(notification?.targetId || "").trim(),
+    metadata:
+      notification?.metadata && typeof notification.metadata === "object"
+        ? notification.metadata
+        : {},
+    isRead: Boolean(notification?.isRead),
+    createdAt: notification?.createdAt || new Date(),
+    readAt: notification?.readAt || null,
+  };
+}
+
+async function listUserNotifications(userId, limit = 10) {
+  if (!userId) return [];
+  const safeLimit = Math.max(1, Math.min(50, Number(limit || 10)));
+  const notifications = await Notification.find({ userId })
+    .sort({ createdAt: -1 })
+    .limit(safeLimit)
+    .lean();
+  return notifications.map((item) => serializeNotification(item));
 }
 
 async function createBulkNotifications(userIds = [], payload = {}) {
@@ -242,18 +260,7 @@ async function createBulkNotifications(userIds = [], payload = {}) {
     notifications.forEach((notification) => {
       io.to(`${USER_NOTIFICATION_ROOM_PREFIX}${String(notification.userId)}`).emit(
         "user:notification",
-        {
-        _id: String(notification._id),
-        userId: String(notification.userId),
-        type: notification.type,
-        title: notification.title,
-        message: notification.message,
-        targetType: notification.targetType,
-        targetId: notification.targetId,
-        metadata: notification.metadata || {},
-        isRead: false,
-        createdAt: notification.createdAt,
-        },
+        serializeNotification(notification),
       );
     });
     await Promise.all(
@@ -376,9 +383,10 @@ async function syncUserActivityWeights() {
     await user.save();
   }
 
-  await UsageLog.deleteMany({
-    _id: { $in: pendingLogs.map((log) => log._id) },
-  });
+  await UsageLog.updateMany(
+    { _id: { $in: pendingLogs.map((log) => log._id) } },
+    { $set: { "metadata.weightProcessed": true } },
+  );
 }
 
 function logServerIssue(summary, metadata = {}) {
@@ -2358,10 +2366,8 @@ app.get("/api/notifications", accountRateLimit, async (req, res) => {
     if (!req.user?._id) {
       return res.status(401).json({ success: false, message: "Login required." });
     }
-    const notifications = await Notification.find({ userId: req.user._id })
-      .sort({ createdAt: -1 })
-      .limit(40)
-      .lean();
+    await trimUserNotifications(req.user._id);
+    const notifications = await listUserNotifications(req.user._id, 10);
     const unreadCount = await Notification.countDocuments({
       userId: req.user._id,
       isRead: false,
@@ -2415,9 +2421,12 @@ app.get("/api/admin/notifications", adminRateLimit, requireAdminApi, async (_req
   try {
     const recent = await Notification.find({})
       .sort({ createdAt: -1 })
-      .limit(120)
+      .limit(20)
       .lean();
-    return res.json({ success: true, notifications: recent });
+    return res.json({
+      success: true,
+      notifications: recent.map((item) => serializeNotification(item)),
+    });
   } catch (error) {
     console.error("Admin notifications fetch failed:", error);
     return res.status(500).json({ success: false, message: "Could not load notifications." });
