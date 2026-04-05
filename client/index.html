@@ -594,6 +594,33 @@
       .canvas-element.selected-secondary > .absolute {
         opacity: 1 !important;
       }
+      .builder-selection-chip {
+        position: absolute;
+        right: 0;
+        top: -1.9rem;
+        z-index: 95;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        max-width: min(320px, calc(100% + 24px));
+        padding: 0.35rem 0.55rem;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(2, 6, 23, 0.94);
+        box-shadow: 0 14px 36px rgba(2, 6, 23, 0.35);
+        font-size: 10px;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        white-space: nowrap;
+        pointer-events: none;
+      }
+      .builder-selection-chip-id {
+        color: #f87171;
+      }
+      .builder-selection-chip-class {
+        color: #facc15;
+      }
       .builder-guide {
         position: absolute;
         background: rgba(34, 211, 238, 0.95);
@@ -4049,6 +4076,7 @@
         };
       }
       let marketplaceDraftListing = createEmptyMarketplaceDraftListing();
+      let marketplaceEditingListingId = "";
       let currentMarketplaceItem = null;
       let marketplaceCreateStep = 1;
       let marketplaceUploadState = createEmptyMarketplaceUploadState();
@@ -4345,6 +4373,9 @@
       socket.on("connect", () => {
         clientSocketId = socket.id;
         console.log("Connected to AI Engine. ID:", clientSocketId);
+        if (loggedIn && currentUser?._id) {
+          socket.emit("register-user", currentUser._id);
+        }
         if (loggedIn && currentUser?._id) {
           fetchNotifications().catch(() => {});
         }
@@ -5036,7 +5067,53 @@
             : [],
           sourceType: String(type || "").trim(),
         };
+        marketplaceEditingListingId = "";
         if (currentStudioToolId === "marketplace") mountMarketplaceTool();
+      }
+      async function editMarketplaceSale(id = "") {
+        const itemId = String(id || "").trim();
+        if (!itemId) return;
+        if (!loggedIn) {
+          showLogin();
+          return;
+        }
+        beginUniversalProgress("Loading marketplace sale for editing...", 18, 72);
+        try {
+          const res = await fetch(`/api/marketplace/${encodeURIComponent(itemId)}/edit`, {
+            credentials: "include",
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success || !data.item) {
+            throw new Error(data.message || "Could not load this marketplace sale.");
+          }
+          const item = data.item;
+          marketplaceEditingListingId = itemId;
+          marketplaceCreateStep = 1;
+          marketplaceActiveTab = "create";
+          marketplaceDraftListing = {
+            sourceType: String(item.sourceType || "draft"),
+            listingKind: String(item.listingKind || "sale"),
+            allowTest: Boolean(item.allowTest),
+            projectId: String(item.projectId || ""),
+            projectLabel: String(item.projectId || item.title || ""),
+            sourceHtml: String(item.sourceHtml || ""),
+            sourceEntryPath: String(item.sourceEntryPath || "index.html"),
+            sourceFiles: Array.isArray(item.sourceFiles) ? item.sourceFiles : [],
+            title: String(item.title || ""),
+            category: String(item.category || "Game"),
+            purpose: String(item.purpose || ""),
+            description: String(item.description || ""),
+            price: Number(item.price || 0),
+            screenshots: Array.isArray(item.screenshots) ? item.screenshots.slice(0, 4) : [],
+            screenshotAssets: Array.isArray(item.screenshotAssets) ? item.screenshotAssets.slice(0, 4) : [],
+          };
+          completeUniversalProgress("Marketplace sale ready to edit.");
+          mountMarketplaceTool();
+          showBuilderSnackbar("Editing marketplace sale.", "success");
+        } catch (error) {
+          failUniversalProgress("Could not load marketplace sale.");
+          showBuilderSnackbar(error.message || "Could not load this marketplace sale.", "error");
+        }
       }
       function renderMarketplaceCards(items = []) {
         if (!items.length) {
@@ -5176,6 +5253,9 @@
                   }
                 </div>
                 <div class="flex shrink-0 items-center gap-2">
+                  <button onclick="editMarketplaceSale('${item._id}')" class="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-amber-400/20 bg-amber-500/10 text-amber-200 hover:bg-amber-500/15 transition-all" title="Edit Sale">
+                    <i class="fas fa-pen"></i>
+                  </button>
                   <button onclick="openMarketplaceDetail('${item._id}')" class="inline-flex items-center gap-2 rounded-2xl border border-cyan-400/20 bg-cyan-500/10 px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-cyan-200 hover:bg-cyan-500/15 transition-all">
                     <i class="fas fa-chart-line"></i>
                     View Analytics
@@ -6196,8 +6276,13 @@
             message: "Uploading sale details and preview assets...",
           });
           startMarketplaceSubmitProgressPulse(68);
-          const res = await fetch("/api/marketplace", {
-            method: "POST",
+          const isEditingSale = Boolean(String(marketplaceEditingListingId || "").trim());
+          const res = await fetch(
+            isEditingSale
+              ? `/api/marketplace/${encodeURIComponent(marketplaceEditingListingId)}`
+              : "/api/marketplace",
+            {
+            method: isEditingSale ? "PATCH" : "POST",
             credentials: "include",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(marketplaceDraftListing),
@@ -6206,19 +6291,26 @@
           setMarketplaceSubmitState({
             active: true,
             percent: 74,
-            message: "Finalizing your review submission...",
+            message: isEditingSale
+              ? "Finalizing your marketplace update..."
+              : "Finalizing your review submission...",
           });
           const data = await res.json();
           if (!res.ok || !data.success) {
             throw new Error(data.message || "Could not submit the listing.");
           }
-          completeUniversalProgress("Marketplace listing submitted.");
+          completeUniversalProgress(
+            isEditingSale ? "Marketplace listing updated." : "Marketplace listing submitted.",
+          );
           setMarketplaceSubmitState({
             active: true,
             percent: 100,
-            message: "Submission complete. Opening My Sales...",
+            message: isEditingSale
+              ? "Update complete. Opening My Sales..."
+              : "Submission complete. Opening My Sales...",
           });
           marketplaceDraftListing = createEmptyMarketplaceDraftListing();
+          marketplaceEditingListingId = "";
           marketplaceUploadState = createEmptyMarketplaceUploadState();
           marketplaceCreateStep = 1;
           marketplaceActiveTab = "mine";
@@ -6226,7 +6318,12 @@
           stopMarketplaceSubmitProgressPulse();
           marketplaceSubmitState = createEmptyMarketplaceSubmitState();
           mountMarketplaceTool();
-          showBuilderSnackbar("Project submitted for marketplace review.", "success");
+          showBuilderSnackbar(
+            isEditingSale
+              ? "Marketplace sale updated and sent for review."
+              : "Project submitted for marketplace review.",
+            "success",
+          );
         } catch (error) {
           stopMarketplaceSubmitProgressPulse();
           failUniversalProgress("Marketplace submit failed.");
@@ -8313,7 +8410,7 @@
           }
           markSessionHealthy();
           notificationsList = Array.isArray(data.notifications) ? data.notifications : [];
-          unreadNotificationCount = Number(data.unreadCount || 0);
+          unreadNotificationCount = notificationsList.filter((item) => !item.isRead).length;
           renderNotificationsUi();
           return notificationsList;
         } catch (error) {
@@ -8478,6 +8575,9 @@
           renderGithubStorageStatus();
           closeRenderHostingOnboarding();
           return;
+        }
+        if (currentUser?._id) {
+          socket.emit("register-user", currentUser._id);
         }
         userSection?.classList.remove("hidden");
         startBtn?.classList.add("hidden");
@@ -13586,6 +13686,7 @@
               name: "index.html",
               type: "file",
               content: "",
+              links: { cssLinks: [], jsLinks: [] },
             },
           ],
         };
@@ -13636,9 +13737,20 @@
             name: "index.html",
             type: "file",
             content: "",
+            links: { cssLinks: [], jsLinks: [] },
           });
         }
         return builderProjectFiles;
+      }
+      function normalizeBuilderFileLinks(links = {}) {
+        const toList = (value) =>
+          (Array.isArray(value) ? value : [])
+            .map((item) => String(item || "").trim())
+            .filter(Boolean);
+        return {
+          cssLinks: toList(links.cssLinks),
+          jsLinks: toList(links.jsLinks),
+        };
       }
       function findBuilderNodeByPath(path = "", node = ensureBuilderProjectFiles(), currentPath = "") {
         const normalized = normalizeBuilderFilePath(path);
@@ -13662,6 +13774,19 @@
         if (!node || node.type !== "file") return;
         node.content = String(content || "");
       }
+      function getBuilderFileLinks(path = "") {
+        const node = findBuilderNodeByPath(path);
+        if (!node || node.type !== "file") {
+          return { cssLinks: [], jsLinks: [] };
+        }
+        node.links = normalizeBuilderFileLinks(node.links || {});
+        return node.links;
+      }
+      function updateBuilderFileLinks(path = "", links = {}) {
+        const node = findBuilderNodeByPath(path);
+        if (!node || node.type !== "file") return;
+        node.links = normalizeBuilderFileLinks(links);
+      }
       function getBuilderFolderNode(path = "") {
         const normalized = normalizeBuilderFilePath(path);
         if (!normalized) return ensureBuilderProjectFiles();
@@ -13672,6 +13797,9 @@
         const node = findBuilderNodeByPath(path);
         if (!node || node.type !== "file") return "";
         return String(node.content || "");
+      }
+      function isBuilderFullHtmlDocument(content = "") {
+        return /<html[\s>]/i.test(String(content || "")) || /<!doctype\s+html/i.test(String(content || ""));
       }
       function getAvailableBuilderFilesByExtension(extension = "") {
         const wanted = String(extension || "").toLowerCase();
@@ -13709,6 +13837,10 @@
         return combined || toParts[toParts.length - 1] || "";
       }
       function parseBuilderHtmlProperties(path = "") {
+        const existingLinks = getBuilderFileLinks(path);
+        if (existingLinks.cssLinks.length || existingLinks.jsLinks.length) {
+          return existingLinks;
+        }
         const html = getBuilderFileContent(path);
         const parser = new DOMParser();
         const doc = parser.parseFromString(String(html || ""), "text/html");
@@ -13801,51 +13933,25 @@
       function applyBuilderHtmlProperties() {
         const htmlPath = normalizeBuilderFilePath(builderHtmlPropertiesState.path || "");
         if (!htmlPath) return;
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(getBuilderFileContent(htmlPath) || "<!DOCTYPE html><html><head></head><body></body></html>", "text/html");
         const cssLinks = builderHtmlPropertiesState.cssLinks.map((item) => String(item || "").trim()).filter(Boolean);
         const jsLinks = builderHtmlPropertiesState.jsLinks.map((item) => String(item || "").trim()).filter(Boolean);
-        Array.from(doc.querySelectorAll('link[rel="stylesheet"][href]')).forEach((node) => {
-          const href = String(node.getAttribute("href") || "").trim();
-          if (!/^([a-z]+:)?\/\//i.test(href) && !href.startsWith("/") && !href.startsWith("data:")) {
-            node.remove();
-          }
-        });
-        Array.from(doc.querySelectorAll("script[src]")).forEach((node) => {
-          const src = String(node.getAttribute("src") || "").trim();
-          if (!/^([a-z]+:)?\/\//i.test(src) && !src.startsWith("/") && !src.startsWith("data:")) {
-            node.remove();
-          }
-        });
-        if (!doc.head) {
-          const head = doc.createElement("head");
-          doc.documentElement.insertBefore(head, doc.body || null);
-        }
-        if (!doc.body) {
-          const body = doc.createElement("body");
-          doc.documentElement.appendChild(body);
-        }
-        cssLinks.forEach((href) => {
-          const link = doc.createElement("link");
-          link.setAttribute("rel", "stylesheet");
-          link.setAttribute("href", href);
-          doc.head.appendChild(link);
-        });
-        jsLinks.forEach((src) => {
-          const script = doc.createElement("script");
-          script.setAttribute("src", src);
-          doc.body.appendChild(script);
-        });
-        const nextHtml = "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
-        updateBuilderFileContent(htmlPath, nextHtml);
+        updateBuilderFileLinks(htmlPath, { cssLinks, jsLinks });
         if (normalizeBuilderFilePath(activeBuilderFilePath || "") === htmlPath) {
           refreshBuilderCodeMode();
           if (!builderCodeMode) {
-            tryApplyCodeModeToCanvas(true);
+            const activePreviewFrame = document.getElementById("builder-import-frame");
+            if (activePreviewFrame) {
+              renderRawImportedHtmlPreview(
+                buildBuilderRuntimeDocument(htmlPath, getBuilderFileContent(htmlPath), {
+                  inlineLocalAssets: true,
+                }),
+                false,
+              );
+            }
           }
         }
         closeBuilderHtmlPropertiesModal();
-        showBuilderSnackbar("HTML file links updated.", "success");
+        showBuilderSnackbar("HTML file links updated safely.", "success");
       }
       function createBuilderFolderNode(name = "folder") {
         return {
@@ -13859,6 +13965,7 @@
           name: String(name || "file.txt").trim(),
           type: "file",
           content: String(content || ""),
+          links: { cssLinks: [], jsLinks: [] },
         };
       }
       function buildBuilderProjectFilesFromEntries(entries = []) {
@@ -13883,6 +13990,7 @@
             }
             if (isLeaf && child.type === "file") {
               child.content = String(entry?.content || "");
+              child.links = normalizeBuilderFileLinks(child.links || {});
             }
             cursor = child;
           }
@@ -14290,6 +14398,176 @@
           .replace(/^-+|-+$/g, "");
         return seed || "medialab-project";
       }
+      function guessBuilderMimeType(path = "") {
+        const lower = String(path || "").toLowerCase();
+        if (lower.endsWith(".html") || lower.endsWith(".htm")) return "text/html";
+        if (lower.endsWith(".css")) return "text/css";
+        if (lower.endsWith(".js")) return "application/javascript";
+        if (lower.endsWith(".json")) return "application/json";
+        if (lower.endsWith(".svg")) return "image/svg+xml";
+        if (lower.endsWith(".txt")) return "text/plain";
+        if (lower.endsWith(".md")) return "text/markdown";
+        return "application/octet-stream";
+      }
+      function encodeBuilderTextBase64(value = "") {
+        return btoa(unescape(encodeURIComponent(String(value || ""))));
+      }
+      function collectBuilderProjectFileEntries(node = ensureBuilderProjectFiles(), currentPath = "") {
+        if (!node) return [];
+        if (node.type === "file") {
+          return [{
+            path: normalizeBuilderFilePath(currentPath ? `${currentPath}/${node.name}` : node.name),
+            content: String(node.content || ""),
+          }];
+        }
+        const children = Array.isArray(node.children) ? node.children : [];
+        return children.flatMap((child) =>
+          collectBuilderProjectFileEntries(
+            child,
+            currentPath ? `${currentPath}/${node.name}` : node.name,
+          ),
+        );
+      }
+      function stripRootBuilderFolder(entries = []) {
+        const safeEntries = Array.isArray(entries) ? entries.filter((item) => item?.path) : [];
+        if (!safeEntries.length) return [];
+        const firstSegments = safeEntries
+          .map((item) => String(item.path || "").split("/")[0])
+          .filter(Boolean);
+        if (!firstSegments.length) return safeEntries;
+        const root = firstSegments[0];
+        const sameRoot = firstSegments.every((segment) => segment === root);
+        const canStrip = sameRoot && safeEntries.every((item) => String(item.path || "").includes("/"));
+        if (!canStrip) return safeEntries;
+        return safeEntries.map((item) => ({
+          ...item,
+          path: String(item.path || "").split("/").slice(1).join("/") || "index.html",
+        }));
+      }
+      function resolveBuilderProjectPath(fromPath = "", targetPath = "") {
+        const raw = String(targetPath || "").trim();
+        if (!raw || /^([a-z]+:)?\/\//i.test(raw) || raw.startsWith("/") || raw.startsWith("data:") || raw.startsWith("blob:")) {
+          return raw;
+        }
+        const baseSegments = splitBuilderFilePath(getBuilderParentFolderPath(fromPath));
+        const targetSegments = String(raw).split("/").filter(Boolean);
+        const merged = [...baseSegments];
+        targetSegments.forEach((segment) => {
+          if (segment === ".") return;
+          if (segment === "..") merged.pop();
+          else merged.push(segment);
+        });
+        return normalizeBuilderFilePath(merged.join("/"));
+      }
+      function buildBuilderRuntimeDocument(htmlPath = "", sourceHtml = "", options = {}) {
+        const inlineLocalAssets = options.inlineLocalAssets !== false;
+        const parser = new DOMParser();
+        const rawHtml = String(sourceHtml || "");
+        const isFullDocument = isBuilderFullHtmlDocument(rawHtml);
+        const doc = parser.parseFromString(
+          isFullDocument
+            ? rawHtml
+            : "<!DOCTYPE html><html><head></head><body></body></html>",
+          "text/html",
+        );
+        if (!isFullDocument && doc.body) {
+          doc.body.innerHTML = rawHtml;
+        }
+        if (!doc.head) {
+          const head = doc.createElement("head");
+          doc.documentElement.insertBefore(head, doc.body || null);
+        }
+        if (!doc.body) {
+          const body = doc.createElement("body");
+          doc.documentElement.appendChild(body);
+        }
+        Array.from(
+          doc.querySelectorAll('[data-builder-managed-link="css"], [data-builder-managed-link="js"]'),
+        ).forEach((node) => node.remove());
+        const fileLinks = getBuilderFileLinks(htmlPath);
+        fileLinks.cssLinks.forEach((href) => {
+          const link = doc.createElement("link");
+          link.setAttribute("rel", "stylesheet");
+          link.setAttribute("href", href);
+          link.setAttribute("data-builder-managed-link", "css");
+          doc.head.appendChild(link);
+        });
+        fileLinks.jsLinks.forEach((src) => {
+          const script = doc.createElement("script");
+          script.setAttribute("src", src);
+          script.setAttribute("data-builder-managed-link", "js");
+          doc.body.appendChild(script);
+        });
+        if (!inlineLocalAssets) {
+          return "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
+        }
+        Array.from(doc.querySelectorAll('link[rel="stylesheet"][href]')).forEach((node) => {
+          const href = String(node.getAttribute("href") || "").trim();
+          const resolved = resolveBuilderProjectPath(htmlPath, href);
+          if (!resolved || resolved === href && !findBuilderNodeByPath(resolved)) return;
+          const cssNode = findBuilderNodeByPath(resolved);
+          if (!cssNode || cssNode.type !== "file") return;
+          const style = doc.createElement("style");
+          style.setAttribute("data-builder-linked-href", href);
+          style.textContent = String(cssNode.content || "");
+          node.replaceWith(style);
+        });
+        Array.from(doc.querySelectorAll("script[src]")).forEach((node) => {
+          const src = String(node.getAttribute("src") || "").trim();
+          const resolved = resolveBuilderProjectPath(htmlPath, src);
+          if (!resolved || resolved === src && !findBuilderNodeByPath(resolved)) return;
+          const jsNode = findBuilderNodeByPath(resolved);
+          if (!jsNode || jsNode.type !== "file") return;
+          const script = doc.createElement("script");
+          script.setAttribute("data-builder-linked-src", src);
+          script.textContent = String(jsNode.content || "");
+          node.replaceWith(script);
+        });
+        return "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
+      }
+      function buildBuilderPublishPackage() {
+        persistActiveBuilderFileContent();
+        const vfsEntries = stripRootBuilderFolder(
+          collectBuilderProjectFileEntries().filter((item) => item.path),
+        );
+        const importedFiles = Array.isArray(builderImportedProject?.files) ? builderImportedProject.files : [];
+        const importedMap = new Map(
+          importedFiles.map((file) => [normalizeImportedProjectPath(file?.path || ""), file]),
+        );
+        const normalizedTextEntries = vfsEntries.map((entry) => ({
+          path: normalizeImportedProjectPath(entry.path || ""),
+          content: isBuilderHtmlFile(entry.path || "")
+            ? buildBuilderRuntimeDocument(entry.path, String(entry.content || ""), {
+                inlineLocalAssets: false,
+              })
+            : String(entry.content || ""),
+        }));
+        const mergedFiles = [];
+        const seenPaths = new Set();
+        normalizedTextEntries.forEach((entry) => {
+          const imported = importedMap.get(entry.path);
+          mergedFiles.push({
+            path: entry.path,
+            contentBase64: encodeBuilderTextBase64(entry.content),
+            mimeType: imported?.mimeType || guessBuilderMimeType(entry.path),
+          });
+          seenPaths.add(entry.path);
+        });
+        importedFiles.forEach((file) => {
+          const path = normalizeImportedProjectPath(file?.path || "");
+          if (!path || seenPaths.has(path)) return;
+          mergedFiles.push({
+            path,
+            contentBase64: String(file?.contentBase64 || "").trim(),
+            mimeType: file?.mimeType || guessBuilderMimeType(path),
+          });
+        });
+        const entryPath = stripRootBuilderFolder([{ path: getFirstBuilderHtmlFilePath() || "index.html" }])[0]?.path || "index.html";
+        return {
+          entryPath: normalizeImportedProjectPath(entryPath),
+          files: mergedFiles.filter((file) => file.path && file.contentBase64),
+        };
+      }
       function resetBuilderProjectFiles({ preserveName = false } = {}) {
         builderProjectFiles = createDefaultBuilderProjectFiles();
         activeBuilderFilePath = "index.html";
@@ -14387,7 +14665,12 @@
         builderImportedProject = null;
         builderRawImportDocument = "";
         if (canvas) {
-          canvas.innerHTML = content;
+          if (isBuilderHtmlFile(normalizedPath) && isBuilderFullHtmlDocument(content)) {
+            const parsed = new DOMParser().parseFromString(content, "text/html");
+            canvas.innerHTML = String(parsed.body?.innerHTML || "");
+          } else {
+            canvas.innerHTML = content;
+          }
           ensureBuilderGuides(canvas);
           initCanvasSelection(canvas);
           hydrateCanvasElements();
@@ -17498,6 +17781,61 @@
         }
         updateBuilderUI();
       }
+      function buildSelectionBadgeClassText(value = "") {
+        const raw = String(value || "").trim();
+        if (!raw) return "null";
+        const ignored = new Set([
+          "canvas-element",
+          "group",
+          "absolute",
+          "transition-shadow",
+          "active:cursor-grabbing",
+          "selected-premium",
+          "selected-secondary",
+          "element-body",
+          "w-full",
+          "h-full",
+          "overflow-visible",
+          "ml-content",
+          "ml-text",
+          "ml-button",
+          "ml-link",
+          "ml-input",
+          "ml-textarea",
+          "ml-image",
+        ]);
+        const parts = raw
+          .split(/\s+/)
+          .map((item) => item.trim())
+          .filter(Boolean)
+          .filter((item) => !ignored.has(item));
+        if (!parts.length) return "null";
+        return `.${parts[0]}`;
+      }
+      function getBuilderSelectionBadgeText(el) {
+        const inner = getElementInnerNode(el) || el;
+        const idValue = String(inner?.id || el?.id || "").trim();
+        const classValue = String(inner?.className || "").trim();
+        return {
+          idText: idValue ? `#${idValue}` : "null",
+          classText: buildSelectionBadgeClassText(classValue),
+        };
+      }
+      function syncBuilderSelectionBadges() {
+        document
+          .querySelectorAll("#web-canvas .builder-selection-chip")
+          .forEach((node) => node.remove());
+        const targets =
+          selectedElements.length > 0 ? selectedElements : selectedEl ? [selectedEl] : [];
+        targets.forEach((el) => {
+          if (!(el instanceof HTMLElement)) return;
+          const { idText, classText } = getBuilderSelectionBadgeText(el);
+          const chip = document.createElement("div");
+          chip.className = "builder-selection-chip";
+          chip.innerHTML = `<span class="builder-selection-chip-id">${escapeHtmlText(idText)}</span><span class="text-slate-500">|</span><span class="builder-selection-chip-class">${escapeHtmlText(classText)}</span>`;
+          el.appendChild(chip);
+        });
+      }
       function syncSelectedElementState() {
         document
           .querySelectorAll("#web-canvas .canvas-element")
@@ -17512,6 +17850,7 @@
               : "selected-secondary",
           );
         });
+        syncBuilderSelectionBadges();
       }
       function addElementSelection(el) {
         if (!selectedElements.includes(el)) {
@@ -18275,7 +18614,7 @@
       function buildCleanExportNode(sourceNode, index) {
         const cleanNode = sourceNode.cloneNode(true);
         cleanNode
-          .querySelectorAll(".resizer, .absolute.-top-10")
+          .querySelectorAll(".resizer, .absolute.-top-10, .builder-selection-chip")
           .forEach((ui) => ui.remove());
         cleanNode
           .querySelectorAll("[contenteditable]")
@@ -18618,7 +18957,8 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
           showLogin();
           return;
         }
-        const isFolderProject = Boolean(builderImportedProject?.files?.length);
+        const builderPublishPackage = buildBuilderPublishPackage();
+        const isFolderProject = Boolean(builderPublishPackage.files.length);
         const payload = isFolderProject ? null : buildExportPayload("medialab-page");
         const documentHtml = isFolderProject ? "" : getBuilderEditorDocument();
         const hasDirectDocument = /<html[\s>]/i.test(String(documentHtml || ""));
@@ -18642,20 +18982,7 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
               tone: "cyan",
             });
           }
-          const folderFiles = isFolderProject
-            ? (builderImportedProject.files || []).map((file) => {
-                const normalizedPath = normalizeImportedProjectPath(file?.path || "");
-                const isEntry = normalizedPath === builderImportedProject.entryPath;
-                const base64Content = isEntry
-                  ? btoa(unescape(encodeURIComponent(getBuilderEditorDocument())))
-                  : String(file?.contentBase64 || "");
-                return {
-                  path: normalizedPath,
-                  contentBase64: base64Content,
-                  mimeType: file?.mimeType || "",
-                };
-              })
-            : [];
+          const folderFiles = isFolderProject ? builderPublishPackage.files : [];
           const endpoint = isFolderProject
             ? "/api/github/publish-folder"
             : "/api/github/publish";
@@ -18664,7 +18991,7 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
                 projectName,
                 description: String(publishMeta?.description || "").trim(),
                 keywords: String(publishMeta?.keywords || "").trim(),
-                entryPath: builderImportedProject.entryPath || "index.html",
+                entryPath: builderPublishPackage.entryPath || "index.html",
                 files: folderFiles,
               }
             : {
@@ -19038,7 +19365,7 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
             node.classList.contains("canvas-element"),
         );
         if (!bodyChildren.length) {
-          renderRawImportedHtmlPreview(editor.value);
+          renderRawImportedHtmlPreview(buildBuilderRuntimeDocument(activePath, editor.value));
           return;
         }
         bodyChildren.forEach((node) => {
@@ -19067,8 +19394,10 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
         exportCanvasToHTML();
       }
       function openBuilderRunMode() {
-        if (builderImportedProject?.rootHtml) {
-          openBuilderRunModeWithHtml(builderImportedProject.rootHtml);
+        const activePath = normalizeBuilderFilePath(activeBuilderFilePath || getFirstBuilderHtmlFilePath() || "index.html");
+        const activeDocument = getBuilderEditorDocument();
+        if (isBuilderHtmlFile(activePath) && /<html[\s>]/i.test(String(activeDocument || ""))) {
+          openBuilderRunModeWithHtml(buildBuilderRuntimeDocument(activePath, activeDocument));
           return;
         }
         if (builderRawImportDocument) {
@@ -19641,6 +19970,9 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
         resetSmartInspectorState();
       }
       function deselectAll() {
+        document
+          .querySelectorAll("#web-canvas .builder-selection-chip")
+          .forEach((node) => node.remove());
         selectedElements.forEach((el) =>
           el.classList.remove(
             "ring-4",
