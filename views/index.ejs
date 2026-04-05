@@ -3842,18 +3842,45 @@
         </div>
         <div class="space-y-5">
           <div class="rounded-[1.6rem] border border-white/10 bg-white/[0.03] p-5">
-            <label class="text-[11px] uppercase tracking-[0.18em] text-slate-500 font-black block">Enter your Project Domain</label>
+            <label class="text-[11px] uppercase tracking-[0.18em] text-slate-500 font-black block">Hosted Domain</label>
             <input
               id="adsense-link-url-input"
               type="text"
-              placeholder="example.com"
-              class="mt-3 w-full rounded-2xl border border-white/10 bg-slate-950/50 px-4 py-3.5 text-white outline-none focus:border-amber-400 transition-all"
+              placeholder="Waiting for your first hosted project..."
+              readonly
+              class="mt-3 w-full rounded-2xl border border-white/10 bg-slate-950/50 px-4 py-3.5 text-white outline-none transition-all"
             />
             <p class="mt-3 text-xs leading-6 text-slate-400">
-              MediaLab only accepts domains that match your own hosted GitHub Pages or Render projects.
+              MediaLab automatically uses your first hosted Render domain for AdSense linking.
             </p>
           </div>
           <p id="adsense-link-error" class="hidden rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-100"></p>
+          <div id="adsense-domain-register-box" class="hidden rounded-[1.7rem] border border-cyan-400/20 bg-cyan-500/10 p-5">
+            <p class="text-sm font-black text-white">Looks like you haven't registered your domain to AdSense yet.</p>
+            <p class="mt-2 text-sm text-cyan-100/80">
+              Get started in Google AdSense, register the domain below, then come back and click Find Account again.
+            </p>
+            <div class="mt-4 rounded-2xl border border-white/10 bg-slate-950/35 px-4 py-3">
+              <div class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Domain To Register</div>
+              <div id="adsense-domain-register-url" class="mt-2 break-all text-sm text-cyan-200">-</div>
+            </div>
+            <div class="mt-4 flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onclick="copyAdsenseRegistrationUrl()"
+                class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-black text-white hover:bg-white/10 transition-all"
+              >
+                Copy URL
+              </button>
+              <button
+                type="button"
+                onclick="openAdsenseDomainRegistration()"
+                class="rounded-2xl bg-white px-4 py-3 text-sm font-black text-slate-950 hover:bg-amber-50 transition-all"
+              >
+                Click Here To Get Started
+              </button>
+            </div>
+          </div>
           <div id="adsense-link-success" class="hidden rounded-[1.7rem] border border-emerald-400/20 bg-emerald-500/10 p-5">
             <p id="adsense-link-success-title" class="text-sm font-black text-white">Success! We found your AdSense account.</p>
             <p id="adsense-link-success-subtitle" class="mt-2 text-sm text-emerald-100/80"></p>
@@ -4946,6 +4973,47 @@
         return normalized
           ? `https://medialab-6b20.onrender.com/${encodeURIComponent(normalized)}`
           : "https://medialab-6b20.onrender.com/";
+      }
+      function getPreferredAdsenseHostedUrl() {
+        const projects = Array.isArray(currentUser?.liveProjects) ? currentUser.liveProjects : [];
+        const exactRender =
+          projects.find((project) => String(project?.renderHostedConfirmed || "") === "true" || project?.renderHostedConfirmed)?.renderUrl ||
+          projects.find((project) => String(project?.renderDeployStatus || "").toLowerCase() === "live")?.renderUrl ||
+          currentLiveProjectDetail?.renderUrl ||
+          projects.find((project) => project?.renderUrl)?.renderUrl ||
+          currentLiveProjectDetail?.liveUrl ||
+          projects.find((project) => project?.liveUrl)?.liveUrl ||
+          currentLiveProjectDetail?.url ||
+          projects.find((project) => project?.url)?.url ||
+          "";
+        return normalizeHostedBaseUrl(exactRender);
+      }
+      function getPreferredAdsenseDomain() {
+        const hostedUrl = getPreferredAdsenseHostedUrl();
+        return hostedUrl ? hostedUrl.replace(/^https?:\/\//i, "").replace(/\/.*$/, "") : "";
+      }
+      function copyAdsenseRegistrationUrl() {
+        const value = String(
+          document.getElementById("adsense-domain-register-url")?.textContent || "",
+        ).trim();
+        if (!value || value === "-") {
+          showBuilderSnackbar("No hosted URL available to copy yet.", "error");
+          return;
+        }
+        navigator.clipboard
+          .writeText(value)
+          .then(() => showBuilderSnackbar("Hosted URL copied.", "success"))
+          .catch(() => showBuilderSnackbar("Could not copy that URL.", "error"));
+      }
+      function openAdsenseDomainRegistration() {
+        const value = String(
+          document.getElementById("adsense-domain-register-url")?.textContent || "",
+        ).trim();
+        const url = "https://www.google.com/adsense/new/";
+        if (value && value !== "-") {
+          navigator.clipboard?.writeText(value).catch(() => {});
+        }
+        window.open(url, "_blank", "noopener,noreferrer");
       }
       function renderMarketplacePriceValue(price = 0, className = "") {
         const amount = Number(price || 0);
@@ -8882,6 +8950,16 @@
                   <span class="inline-flex items-center rounded-full border border-emerald-400/25 bg-emerald-500/10 px-2 py-1 text-[9px] font-black uppercase tracking-[0.2em] text-emerald-300">Live</span>
                 </div>
                 <p class="mt-1 text-[11px] leading-5 text-gray-400">Repository <span class="font-black text-white">${repoLabel}</span> is ready under <span class="font-black text-white">@${currentUser.githubUsername}</span> with GitHub Pages enabled.</p>
+                <div class="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onclick="disconnectGithubAccount()"
+                    class="inline-flex items-center gap-2 rounded-2xl border border-red-400/20 bg-red-500/10 px-3.5 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-red-200 transition-all hover:bg-red-500/16"
+                  >
+                    <i class="fas fa-unlink"></i>
+                    Disconnect
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -8898,6 +8976,46 @@
           return;
         }
         window.location.href = "/api/auth/github";
+      }
+      async function disconnectGithubAccount() {
+        if (!loggedIn || !currentUser) {
+          showLogin();
+          return;
+        }
+        const confirmed = await openAppDialog({
+          chip: "Disconnect GitHub",
+          title: "Disconnect cloud storage?",
+          message:
+            "This removes the current GitHub connection from MediaLab. Your next publish will require a fresh Render setup for the new GitHub connection.",
+          tone: "error",
+          confirmLabel: "Disconnect",
+          cancelLabel: "Cancel",
+          destructive: true,
+        });
+        if (!confirmed) return;
+        try {
+          beginUniversalProgress("Disconnecting GitHub...", 20, 78);
+          const res = await fetch("/api/auth/github/disconnect", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            throw new Error(data.message || "Could not disconnect GitHub.");
+          }
+          currentUser = { ...(currentUser || {}), ...(data.user || {}) };
+          updateUserProfileUi();
+          await fetchGithubProjects({ silent: true }).catch(() => []);
+          completeUniversalProgress("GitHub disconnected.");
+          showStudioStatusSnackbar(
+            "GitHub disconnected. The next deploy will open Render setup again.",
+            "success",
+          );
+        } catch (error) {
+          hideUniversalProgress();
+          showStudioStatusSnackbar(error.message || "Could not disconnect GitHub.", "error");
+        }
       }
       function showStudioStatusSnackbar(message, tone = "success") {
         if (
@@ -9830,23 +9948,28 @@
           showLogin();
           return;
         }
+        const hostedUrl = getPreferredAdsenseHostedUrl();
+        if (!hostedUrl) {
+          openAppDialog({
+            chip: "Publish First",
+            title: "Cannot connect to AdSense yet",
+            message:
+              "Please publish your first project so MediaLab can detect your hosted Render domain before connecting AdSense.",
+            tone: "error",
+            confirmLabel: "OK",
+            cancelLabel: "Close",
+          });
+          return;
+        }
         document.getElementById("adsense-link-error")?.classList.add("hidden");
         document.getElementById("adsense-link-success")?.classList.add("hidden");
         document.getElementById("adsense-link-checklist")?.classList.add("hidden");
+        document.getElementById("adsense-domain-register-box")?.classList.add("hidden");
         document.getElementById("adsense-portal-panel")?.classList.add("hidden");
         document.getElementById("adsense-google-reconnect-btn")?.classList.add("hidden");
         const input = document.getElementById("adsense-link-url-input");
-        if (input && !input.value.trim()) {
-          const suggested =
-            currentLiveProjectDetail?.renderUrl ||
-            currentLiveProjectDetail?.liveUrl ||
-            currentLiveProjectDetail?.url ||
-            currentUser?.liveProjects?.find((project) => project?.renderHostedConfirmed)?.renderUrl ||
-            currentUser?.liveProjects?.[0]?.renderUrl ||
-            currentUser?.liveProjects?.[0]?.liveUrl ||
-            currentUser?.liveProjects?.[0]?.url ||
-            "";
-          input.value = suggested;
+        if (input) {
+          input.value = hostedUrl;
         }
         document.getElementById("adsense-link-modal")?.classList.remove("hidden");
         document.getElementById("adsense-link-modal")?.classList.add("flex");
@@ -9934,21 +10057,28 @@
         const errorNode = document.getElementById("adsense-link-error");
         const successNode = document.getElementById("adsense-link-success");
         const reconnectBtn = document.getElementById("adsense-google-reconnect-btn");
-        const domainName = String(input?.value || "")
-          .trim()
-          .replace(/^https?:\/\//i, "")
-          .replace(/\/.*$/, "")
-          .toLowerCase();
+        const registerBox = document.getElementById("adsense-domain-register-box");
+        const registerUrlNode = document.getElementById("adsense-domain-register-url");
+        const hostedUrl = getPreferredAdsenseHostedUrl();
+        const domainName = getPreferredAdsenseDomain();
+        if (input) {
+          input.value = hostedUrl;
+        }
         errorNode?.classList.add("hidden");
         successNode?.classList.add("hidden");
         document.getElementById("adsense-link-checklist")?.classList.add("hidden");
+        registerBox?.classList.add("hidden");
         reconnectBtn?.classList.add("hidden");
-        if (!domainName) {
-          if (errorNode) {
-            errorNode.textContent = "Enter your project domain first.";
-            errorNode.classList.remove("hidden");
-          }
-          input?.focus();
+        if (!domainName || !hostedUrl) {
+          await openAppDialog({
+            chip: "Publish First",
+            title: "Cannot connect to AdSense yet",
+            message:
+              "Please publish your first project so MediaLab can detect your hosted Render domain before connecting AdSense.",
+            tone: "error",
+            confirmLabel: "OK",
+            cancelLabel: "Close",
+          });
           return;
         }
         if (actionBtn) {
@@ -9960,12 +10090,24 @@
             method: "POST",
             credentials: "include",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ domainName }),
+            body: JSON.stringify({ liveProjectUrl: hostedUrl }),
           });
           const data = await res.json();
           if (!res.ok || !data.success) {
             if (data.requiresGoogleReconnect) {
               reconnectBtn?.classList.remove("hidden");
+            }
+            if (res.status === 404) {
+              if (registerUrlNode) {
+                registerUrlNode.textContent = data.suggestedDomainUrl || hostedUrl;
+              }
+              registerBox?.classList.remove("hidden");
+              if (errorNode) {
+                errorNode.textContent =
+                  "Looks like you haven't registered your domain to AdSense yet.";
+                errorNode.classList.remove("hidden");
+              }
+              return;
             }
             throw new Error(data.message || "Could not link your AdSense site.");
           }
@@ -9990,7 +10132,7 @@
           if (errorNode) {
             errorNode.textContent =
               error.message ||
-              "We couldn't find this domain in your AdSense account yet.";
+              "We couldn't verify this hosted domain in your AdSense account yet.";
             errorNode.classList.remove("hidden");
           }
         } finally {

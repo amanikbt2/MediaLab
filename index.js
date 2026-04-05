@@ -5407,6 +5407,8 @@ app.post("/api/adsense/link-site", express.json(), async (req, res) => {
         success: false,
         message:
           "We couldn't find this domain in your AdSense account. Make sure you've added it in your AdSense dashboard under Sites.",
+        domainName,
+        suggestedDomainUrl: liveProjectUrl || `https://${domainName}`,
       });
     }
 

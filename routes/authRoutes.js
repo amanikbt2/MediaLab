@@ -185,6 +185,24 @@ const buildRenderNameSeed = (value = "client") => {
 const buildDefaultRenderServiceName = (value = "client") =>
   buildRenderNameSeed(value);
 
+const resetUserRenderHostingState = (user) => {
+  if (!user) return;
+  user.confirmedFirstHosting = false;
+  user.firstHostingConfirmedAt = null;
+  user.liveProjects = (Array.isArray(user.liveProjects) ? user.liveProjects : []).map((project) => {
+    if (!project || typeof project !== "object") return project;
+    project.renderUrl = "";
+    project.renderServiceId = "";
+    project.renderServiceName = "";
+    project.renderBlueprintId = "";
+    project.renderRepoUrl = "";
+    project.renderDeployStatus = "";
+    project.renderHostedConfirmed = false;
+    project.renderVerifiedAt = null;
+    return project;
+  });
+};
+
 const buildGithubRepoScaffold = (owner = "user", repoName = "medialab", displayName = owner) => {
   const packageJson = JSON.stringify(
     {
@@ -767,12 +785,18 @@ router.get("/github/callback", async (req, res) => {
       },
     );
 
+    const previousGithubUsername = String(user.githubUsername || "").trim().toLowerCase();
+    const nextGithubUsername = String(profileData.login || "").trim();
+    const nextGithubUsernameLower = nextGithubUsername.toLowerCase();
     user.githubId = String(profileData.id || "");
-    user.githubUsername = String(profileData.login || "");
+    user.githubUsername = nextGithubUsername;
     user.githubToken = encryptGithubToken(tokenData.access_token);
     user.githubRepoCreated = Boolean(user.githubRepoCreated);
     user.githubRepoName = String(user.githubRepoName || getPreferredGithubRepoName(user));
     user.githubLinkedAt = new Date();
+    if (previousGithubUsername && previousGithubUsername !== nextGithubUsernameLower) {
+      resetUserRenderHostingState(user);
+    }
     await user.save();
 
     if (req.user) {
@@ -810,6 +834,7 @@ router.post("/github/disconnect", async (req, res) => {
     user.githubRepoCreated = false;
     user.githubRepoName = "";
     user.githubLinkedAt = null;
+    resetUserRenderHostingState(user);
     await user.save();
     req.user.githubId = "";
     req.user.githubUsername = "";
