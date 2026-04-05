@@ -748,6 +748,17 @@
         color: #ffffff;
         border-color: rgba(34, 211, 238, 0.24);
       }
+      .builder-project-name-input {
+        width: 100%;
+        border-radius: 0.8rem;
+        border: 1px solid rgba(34, 211, 238, 0.22);
+        background: rgba(2, 6, 23, 0.92);
+        color: #ffffff;
+        padding: 0.45rem 0.65rem;
+        font-size: 0.88rem;
+        font-weight: 700;
+        outline: none;
+      }
       .builder-tree-branch.is-selected-folder {
         background: rgba(168, 85, 247, 0.12);
         border-color: rgba(168, 85, 247, 0.24);
@@ -11665,7 +11676,13 @@
                 <div class="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
                     <div class="min-w-0">
                         <p class="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-400">Project Explorer</p>
-                        <p id="builder-explorer-project-name" class="mt-1 truncate text-sm font-semibold text-white">MediaLab Project</p>
+                        <div class="mt-1 flex items-center gap-2">
+                            <p id="builder-explorer-project-name" ondblclick="beginBuilderProjectRename()" class="min-w-0 flex-1 truncate text-sm font-semibold text-white">MediaLab Project</p>
+                            <input id="builder-project-name-input" class="builder-project-name-input hidden" value="MediaLab Project" onblur="commitBuilderProjectRename(this.value)" onkeydown="handleBuilderProjectRenameKeydown(event)" />
+                            <button onclick="beginBuilderProjectRename()" class="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white">
+                                <i class="fas fa-pen text-[11px]"></i>
+                            </button>
+                        </div>
                     </div>
                     <div class="flex items-center gap-2">
                         <button onclick="promptAddBuilderFile()" class="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-200 hover:border-cyan-400/25 hover:text-cyan-200 transition-all">
@@ -11681,7 +11698,7 @@
                 </div>
                 <div id="builder-explorer-tree" class="builder-explorer-tree"></div>
             </div>
-            <div id="builder-context-menu-root" class="hidden fixed z-[5000] min-w-[180px] rounded-2xl border border-white/10 bg-[#08111f]/98 p-2 shadow-[0_22px_60px_rgba(2,6,23,0.5)]"></div>
+            <div id="builder-context-menu-root" class="hidden fixed z-[5000] min-w-[180px] rounded-2xl border border-white/10 bg-[#010409]/[0.99] p-2 shadow-[0_22px_60px_rgba(0,0,0,0.62)]"></div>
             <div id="builder-html-properties-modal" onclick="if (event.target === this) closeBuilderHtmlPropertiesModal()" class="hidden absolute inset-0 z-[145] bg-slate-950/72 p-4 backdrop-blur-xl">
                 <div class="mx-auto mt-12 w-full max-w-xl rounded-[2rem] border border-white/10 bg-[#08111f] shadow-[0_28px_90px_rgba(2,6,23,0.58)]">
                     <div class="flex items-start justify-between gap-4 border-b border-white/10 px-5 py-4">
@@ -13549,6 +13566,7 @@
       let activeBuilderFilePath = "index.html";
       let selectedBuilderFilePath = "index.html";
       let builderProjectName = "MediaLab Project";
+      let builderProjectNameEditing = false;
       let builderExplorerOpen = false;
       let selectedBuilderFolderPath = "";
       let collapsedBuilderFolders = new Set();
@@ -13909,7 +13927,38 @@
       }
       function syncBuilderProjectNameLabel() {
         const label = document.getElementById("builder-explorer-project-name");
+        const input = document.getElementById("builder-project-name-input");
         if (label) label.textContent = builderProjectName || "MediaLab Project";
+        if (label) label.classList.toggle("hidden", builderProjectNameEditing);
+        if (input) {
+          input.value = builderProjectName || "MediaLab Project";
+          input.classList.toggle("hidden", !builderProjectNameEditing);
+        }
+      }
+      function beginBuilderProjectRename() {
+        builderProjectNameEditing = true;
+        syncBuilderProjectNameLabel();
+        requestAnimationFrame(() => {
+          const input = document.getElementById("builder-project-name-input");
+          if (!input) return;
+          input.focus({ preventScroll: true });
+          input.select();
+        });
+      }
+      function commitBuilderProjectRename(value = "") {
+        builderProjectName = extractBuilderProjectNameSeed(value);
+        builderProjectNameEditing = false;
+        syncBuilderProjectNameLabel();
+      }
+      function handleBuilderProjectRenameKeydown(event) {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          commitBuilderProjectRename(event.currentTarget?.value || "");
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          builderProjectNameEditing = false;
+          syncBuilderProjectNameLabel();
+        }
       }
       function syncBuilderExplorerVisibility() {
         const shell = document.getElementById("builder-explorer-shell");
@@ -14022,13 +14071,25 @@
       }
       function openBuilderContextMenuFromButton(button, path = "", type = "file") {
         const rect = button?.getBoundingClientRect?.();
+        const shellRect = document.getElementById("builder-explorer-shell")?.getBoundingClientRect?.();
+        const preferredLeft = rect
+          ? Math.max(
+              14,
+              Math.round(
+                Math.max(
+                  shellRect?.left ?? 14,
+                  rect.left - 196,
+                ),
+              ),
+            )
+          : 24;
         return openBuilderContextMenu(
           rect
             ? {
                 preventDefault() {},
                 stopPropagation() {},
-                clientX: rect.right - 12,
-                clientY: rect.bottom + 8,
+                clientX: preferredLeft,
+                clientY: Math.round(rect.top + 2),
               }
             : null,
           path,
@@ -14221,6 +14282,13 @@
       function extractBuilderProjectNameSeed(value = "") {
         const trimmed = String(value || "").trim();
         return trimmed || "MediaLab Project";
+      }
+      function getBuilderProjectSlug() {
+        const seed = extractBuilderProjectNameSeed(builderProjectName || "MediaLab Project")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "");
+        return seed || "medialab-project";
       }
       function resetBuilderProjectFiles({ preserveName = false } = {}) {
         builderProjectFiles = createDefaultBuilderProjectFiles();
@@ -15658,6 +15726,18 @@
           rootFolder.replace(/\/$/, "").split("/").pop() ||
           preferredHtml.file.name.replace(/\.html?$/i, "") ||
           "Imported Project";
+        const buildVfsDisplayPath = (rawPath = "") => {
+          const normalizedOriginalPath = normalizeImportedProjectPath(rawPath);
+          if (!normalizedOriginalPath) return "";
+          if (normalizedFiles.length === 1) {
+            const singleFolderName =
+              preferredHtml.file.name.replace(/\.html?$/i, "") ||
+              projectName ||
+              "Imported Project";
+            return `${normalizeImportedProjectPath(singleFolderName)}/index.html`;
+          }
+          return normalizedOriginalPath;
+        };
         const filesForPublish = await Promise.all(
           normalizedFiles.map(async ({ file, path }) => {
             const relativePath = makeProjectRelative(path);
@@ -15676,11 +15756,11 @@
         );
         const vfsEntries = await Promise.all(
           normalizedFiles.map(async ({ file, path }) => {
-            const relativePath = makeProjectRelative(path);
-            const lower = String(relativePath || "").toLowerCase();
+            const displayPath = buildVfsDisplayPath(path);
+            const lower = String(displayPath || "").toLowerCase();
             const isTextFile = /\.(html?|css|js|json|txt|md)$/i.test(lower);
             return {
-              path: relativePath,
+              path: displayPath,
               content: isTextFile ? await file.text() : "",
             };
           }),
@@ -15704,6 +15784,7 @@
           sourceHtml: htmlText,
           rootHtml: rewrittenHtml,
           entryPath: makeProjectRelative(preferredHtml.path) || "index.html",
+          vfsEntryPath: buildVfsDisplayPath(preferredHtml.path) || "index.html",
           files: filesForPublish,
           vfsEntries,
           rootFolder,
@@ -15721,8 +15802,8 @@
           builderRawImportDocument = project.rootHtml;
           setBuilderProjectFromEntries(
             project.projectName,
-            project.vfsEntries || [{ path: project.entryPath || "index.html", content: project.sourceHtml || "" }],
-            project.entryPath || "index.html",
+            project.vfsEntries || [{ path: project.vfsEntryPath || "index.html", content: project.sourceHtml || "" }],
+            project.vfsEntryPath || "index.html",
           );
           builderCodeMode = true;
           updateBuilderUI();
@@ -18416,11 +18497,7 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
         const repoLabel = document.getElementById("builder-publish-repo-label");
         if (!modal || !input) return;
         if (repoLabel) repoLabel.textContent = getGithubRepoLabel();
-        const firstText =
-          document
-            .querySelector("#web-canvas .canvas-element .ml-content")
-            ?.textContent?.trim() || "My MediaLab Page";
-        input.value = firstText
+        input.value = extractBuilderProjectNameSeed(builderProjectName || "My MediaLab Page")
           .replace(/\s+/g, " ")
           .trim()
           .slice(0, 48);
@@ -18982,7 +19059,7 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        link.download = `medialab-page.html`;
+        link.download = `${getBuilderProjectSlug()}.html`;
         link.click();
         URL.revokeObjectURL(url);
       }
