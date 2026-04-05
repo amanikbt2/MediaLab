@@ -4740,12 +4740,43 @@ app.patch("/api/marketplace/:id/remove", publishRateLimit, express.json(), async
 
 app.get("/api/admin/marketplace", adminRateLimit, requireAdminApi, async (_req, res) => {
   try {
-    const [pendingListings, approvedListings, itemsWithPendingPurchases, itemsWithCompletedPurchases] = await Promise.all([
+    const [pendingListings, approvedListings, itemsWithPendingPurchases, itemsWithReviewedPurchases] = await Promise.all([
       MarketplaceItem.find({ status: "pending" }).sort({ createdAt: -1 }).lean(),
       MarketplaceItem.find({ status: "approved" }).sort({ updatedAt: -1, createdAt: -1 }).lean(),
       MarketplaceItem.find({ "purchases.status": "pending" }).sort({ updatedAt: -1 }).lean(),
-      MarketplaceItem.find({ "purchases.status": { $in: ["approved", "failed"] } }).sort({ updatedAt: -1 }).lean(),
+      MarketplaceItem.find({ "purchases.status": { $in: ["approved", "declined", "failed"] } }).sort({ updatedAt: -1 }).lean(),
     ]);
+    const reviewedPurchases = itemsWithReviewedPurchases
+      .flatMap((item) =>
+        (Array.isArray(item.purchases) ? item.purchases : [])
+          .filter((purchase) =>
+            ["approved", "declined", "failed"].includes(
+              String(purchase.status || "").toLowerCase(),
+            ),
+          )
+          .map((purchase) => ({
+            itemId: String(item._id),
+            purchaseId: String(purchase._id),
+            title: item.title,
+            price: Number(item.price || 0),
+            status:
+              String(purchase.status || "").toLowerCase() === "failed"
+                ? "declined"
+                : String(purchase.status || "").toLowerCase(),
+            message: purchase.message || "",
+            declineReason: purchase.declineReason || "",
+            buyerId: purchase.buyerId || "",
+            buyerName: purchase.buyerName || "",
+            buyerEmail: purchase.buyerEmail || "",
+            createdAt: purchase.createdAt || null,
+            reviewedAt: purchase.reviewedAt || null,
+          })),
+      )
+      .sort(
+        (a, b) =>
+          new Date(b.reviewedAt || b.createdAt || 0) -
+          new Date(a.reviewedAt || a.createdAt || 0),
+      );
     return res.json({
       success: true,
       pendingListings: pendingListings.map((item) => buildMarketplacePublicItem(item)),
@@ -4766,25 +4797,12 @@ app.get("/api/admin/marketplace", adminRateLimit, requireAdminApi, async (_req, 
             })),
         )
         .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)),
-      completedPurchases: itemsWithCompletedPurchases
-        .flatMap((item) =>
-          (Array.isArray(item.purchases) ? item.purchases : [])
-            .filter((purchase) => ["approved", "failed"].includes(String(purchase.status || "").toLowerCase()))
-            .map((purchase) => ({
-              itemId: String(item._id),
-              purchaseId: String(purchase._id),
-              title: item.title,
-              price: Number(item.price || 0),
-              status: purchase.status || "",
-              message: purchase.message || "",
-              buyerId: purchase.buyerId || "",
-              buyerName: purchase.buyerName || "",
-              buyerEmail: purchase.buyerEmail || "",
-              createdAt: purchase.createdAt || null,
-              reviewedAt: purchase.reviewedAt || null,
-            })),
-        )
-        .sort((a, b) => new Date(b.reviewedAt || b.createdAt || 0) - new Date(a.reviewedAt || a.createdAt || 0)),
+      approvedPurchases: reviewedPurchases.filter(
+        (purchase) => String(purchase.status || "").toLowerCase() === "approved",
+      ),
+      declinedPurchases: reviewedPurchases.filter(
+        (purchase) => String(purchase.status || "").toLowerCase() === "declined",
+      ),
     });
   } catch (error) {
     console.error("Admin marketplace fetch failed:", error);
@@ -4902,11 +4920,16 @@ app.patch(
   express.json(),
   async (req, res) => {
     try {
-      const nextStatus = String(req.body?.status || "").trim().toLowerCase();
-      if (!["approved", "failed"].includes(nextStatus)) {
+      const requestedStatus = String(req.body?.status || "").trim().toLowerCase();
+      const nextStatus = requestedStatus === "failed" ? "declined" : requestedStatus;
+      const declineReason = sanitizeMarketplaceText(
+        req.body?.declineReason || req.body?.failedReason || "",
+        500,
+      );
+      if (!["approved", "declined"].includes(nextStatus)) {
         return res.status(400).json({
           success: false,
-          message: "Purchase status must be approved or failed.",
+          message: "Purchase status must be approved or declined.",
         });
       }
       const item = await MarketplaceItem.findById(req.params.id);
@@ -4930,6 +4953,7 @@ app.patch(
           return res.status(404).json({ success: false, message: "Buyer account not found." });
         }
         purchase.message = "Purchase approved. You now own the project.";
+        purchase.declineReason = "";
         purchase.approvedUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
         transfer = await transferMarketplaceProjectToBuyer(item, buyer);
         item.status = "sold";
@@ -4952,27 +4976,39 @@ app.patch(
           metadata: { itemId: String(item._id), title: item.title, purchaseId: String(purchase._id) },
         });
       } else {
+        purchase.declineReason = declineReason;
         purchase.message =
-          "Your purchase failed, please verify your payment details.";
+          declineReason ||
+          "Your purchase request was declined. Please review the admin feedback and try again.";
         purchase.approvedUntil = null;
         item.status = "approved";
         await createUserNotification({
           userId: purchase.buyerId,
-          type: "marketplace-purchase-failed",
-          title: "Purchase failed",
-          message: "Your purchase failed, please verify your payment details.",
+          type: "marketplace-purchase-declined",
+          title: "Purchase declined",
+          message: purchase.message,
           targetType: "marketplace-purchased",
           targetId: String(item._id),
-          metadata: { itemId: String(item._id), title: item.title, purchaseId: String(purchase._id) },
+          metadata: {
+            itemId: String(item._id),
+            title: item.title,
+            purchaseId: String(purchase._id),
+            declineReason: purchase.declineReason || "",
+          },
         });
         await createUserNotification({
           userId: item.authorId,
-          type: "marketplace-sale-failed",
-          title: "Purchase request failed",
-          message: `The purchase request for ${item.title} was marked as failed.`,
+          type: "marketplace-sale-declined",
+          title: "Purchase request declined",
+          message: `The purchase request for ${item.title} was declined.`,
           targetType: "marketplace-sale",
           targetId: String(item._id),
-          metadata: { itemId: String(item._id), title: item.title, purchaseId: String(purchase._id) },
+          metadata: {
+            itemId: String(item._id),
+            title: item.title,
+            purchaseId: String(purchase._id),
+            declineReason: purchase.declineReason || "",
+          },
         });
       }
       await item.save();
@@ -4981,7 +5017,7 @@ app.patch(
         message:
           nextStatus === "approved"
             ? "Purchase approved and transferred to the buyer."
-            : "Purchase marked as failed.",
+            : "Purchase request declined.",
         item: buildMarketplacePublicItem(item.toObject()),
         transfer,
       });

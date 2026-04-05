@@ -449,8 +449,16 @@
       let adminWithdrawals = [];
       let adminPayoutUsers = [];
       let adminNotifications = [];
-      let adminMarketplace = { pendingListings: [], approvedListings: [], pendingPurchases: [], completedPurchases: [] };
+      let adminMarketplace = {
+        pendingListings: [],
+        approvedListings: [],
+        pendingPurchases: [],
+        approvedPurchases: [],
+        declinedPurchases: [],
+      };
       let adminMarketplaceTab = "pending";
+      let adminMarketplacePurchaseTab = "pending";
+      let adminMarketplacePurchaseReasons = {};
       let currentAdminMarketplaceItem = null;
       let adminSocket = null;
       let adminCounterValues = {};
@@ -1826,7 +1834,72 @@
 
       function setAdminMarketplaceTab(tab = "pending") {
         adminMarketplaceTab = tab;
+        if (adminMarketplaceTab === "purchased" && adminMarketplacePurchaseTab === "pending") {
+          adminMarketplacePurchaseTab = "approved";
+        }
+        if (adminMarketplaceTab === "purchases" && !["pending", "approved", "declined"].includes(adminMarketplacePurchaseTab)) {
+          adminMarketplacePurchaseTab = "pending";
+        }
         renderAdminMarketplace();
+      }
+
+      function setAdminMarketplacePurchaseTab(tab = "pending") {
+        adminMarketplacePurchaseTab = tab;
+        renderAdminMarketplace();
+      }
+
+      function updateAdminMarketplacePurchaseReason(purchaseId = "", value = "") {
+        adminMarketplacePurchaseReasons[String(purchaseId || "")] = String(value || "");
+      }
+
+      function getAdminMarketplacePurchaseReason(purchaseId = "", fallback = "") {
+        const key = String(purchaseId || "");
+        const draft = String(adminMarketplacePurchaseReasons[key] || "").trim();
+        return draft || String(fallback || "").trim();
+      }
+
+      function renderAdminMarketplacePurchaseCard(item = {}, mode = "pending") {
+        const normalizedMode = String(mode || "pending").trim().toLowerCase();
+        const isApproved = normalizedMode === "approved";
+        const isDeclined = normalizedMode === "declined";
+        const declineReason = getAdminMarketplacePurchaseReason(
+          item.purchaseId,
+          item.declineReason || item.message || "",
+        );
+        return `
+          <article class="rounded-[1.5rem] border border-white/10 bg-slate-950/70 p-4">
+            <div class="flex flex-col gap-4">
+              <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div class="min-w-0">
+                  <div class="flex flex-wrap items-center gap-3">
+                    <h4 class="text-lg font-semibold text-white">${escapeHtml(item.title || "Untitled Purchase")}</h4>
+                    <span class="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${isApproved ? "text-emerald-300" : isDeclined ? "text-rose-300" : "text-amber-300"}">${escapeHtml(normalizedMode)}</span>
+                  </div>
+                  <p class="mt-2 text-sm text-slate-400">${escapeHtml(item.buyerName || "Unknown Buyer")} · ${escapeHtml(item.buyerEmail || "")}</p>
+                  <p class="mt-2 text-[11px] font-semibold text-slate-500">${item.price > 0 ? `$${Number(item.price).toFixed(2)}` : "Free"} · ${escapeHtml(formatDate(item.createdAt))}</p>
+                  ${item.reviewedAt ? `<p class="mt-1 text-[11px] font-semibold text-slate-600">Reviewed ${escapeHtml(formatDate(item.reviewedAt))}</p>` : ""}
+                </div>
+                ${
+                  normalizedMode === "pending"
+                    ? `<div class="flex gap-2">
+                         <button onclick="updateMarketplacePurchase('${item.itemId}', '${item.purchaseId}', 'approved')" class="rounded-2xl bg-emerald-400 px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-slate-950 hover:bg-emerald-300">Approve</button>
+                         <button onclick="updateMarketplacePurchase('${item.itemId}', '${item.purchaseId}', 'declined')" class="rounded-2xl border border-rose-400/20 bg-rose-500/10 px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-rose-100 hover:bg-rose-500/20">Decline</button>
+                       </div>`
+                    : ""
+                }
+              </div>
+              ${
+                normalizedMode === "pending"
+                  ? `<div class="rounded-[1.25rem] border border-white/10 bg-white/[0.03] p-4">
+                       <label class="block text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Decline reason</label>
+                       <textarea rows="4" oninput="updateAdminMarketplacePurchaseReason('${item.purchaseId}', this.value)" class="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none resize-none focus:border-rose-400" placeholder="Explain why this purchase request is being declined...">${escapeHtml(declineReason)}</textarea>
+                     </div>`
+                  : isDeclined
+                    ? `<div class="rounded-[1.25rem] border border-rose-400/20 bg-rose-500/10 p-4 text-sm text-rose-100">${escapeHtml(item.declineReason || item.message || "Purchase request declined.")}</div>`
+                    : `<div class="rounded-[1.25rem] border border-emerald-400/20 bg-emerald-500/10 p-4 text-sm text-emerald-100">${escapeHtml(item.message || "Purchase approved.")}</div>`
+              }
+            </div>
+          </article>`;
       }
 
       function renderAdminMarketplace() {
@@ -1835,7 +1908,8 @@
         const pendingListings = adminMarketplace.pendingListings || [];
         const approvedListings = adminMarketplace.approvedListings || [];
         const pendingPurchases = adminMarketplace.pendingPurchases || [];
-        const completedPurchases = adminMarketplace.completedPurchases || [];
+        const approvedPurchases = adminMarketplace.approvedPurchases || [];
+        const declinedPurchases = adminMarketplace.declinedPurchases || [];
         el.innerHTML = `
           <div class="rounded-[1.8rem] border border-white/10 bg-white/[0.03] p-5">
             <div class="flex flex-wrap items-center justify-between gap-4">
@@ -1846,8 +1920,8 @@
               <div class="flex gap-2">
                 <button onclick="setAdminMarketplaceTab('pending')" class="mini-tab ${adminMarketplaceTab === "pending" ? "active" : ""} px-4 py-2 rounded-2xl text-xs font-bold uppercase tracking-[0.16em]">Pending (${pendingListings.length})</button>
                 <button onclick="setAdminMarketplaceTab('approved')" class="mini-tab ${adminMarketplaceTab === "approved" ? "active" : ""} px-4 py-2 rounded-2xl text-xs font-bold uppercase tracking-[0.16em]">Approved (${approvedListings.length})</button>
-                <button onclick="setAdminMarketplaceTab('purchases')" class="mini-tab ${adminMarketplaceTab === "purchases" ? "active" : ""} px-4 py-2 rounded-2xl text-xs font-bold uppercase tracking-[0.16em]">Purchase Requests (${pendingPurchases.length})</button>
-                <button onclick="setAdminMarketplaceTab('purchased')" class="mini-tab ${adminMarketplaceTab === "purchased" ? "active" : ""} px-4 py-2 rounded-2xl text-xs font-bold uppercase tracking-[0.16em]">Purchased (${completedPurchases.length})</button>
+                <button onclick="setAdminMarketplaceTab('purchases')" class="mini-tab ${adminMarketplaceTab === "purchases" ? "active" : ""} px-4 py-2 rounded-2xl text-xs font-bold uppercase tracking-[0.16em]">Purchases (${pendingPurchases.length})</button>
+                <button onclick="setAdminMarketplaceTab('purchased')" class="mini-tab ${adminMarketplaceTab === "purchased" ? "active" : ""} px-4 py-2 rounded-2xl text-xs font-bold uppercase tracking-[0.16em]">Purchase Desk (${approvedPurchases.length + declinedPurchases.length})</button>
               </div>
             </div>
             <div class="mt-5 space-y-4">
@@ -1996,6 +2070,117 @@
         } catch (error) {
           showAdminToast(error.message || "Could not update this listing.", "error");
         }
+      }
+
+      async function updateMarketplacePurchase(itemId, purchaseId, status) {
+        const normalizedStatus = String(status || "").trim().toLowerCase();
+        const declineReason = getAdminMarketplacePurchaseReason(purchaseId);
+        if (normalizedStatus === "declined" && !declineReason) {
+          showAdminToast("Enter a decline reason first.", "error");
+          return;
+        }
+        try {
+          const res = await fetch(`/api/admin/marketplace/${itemId}/purchases/${purchaseId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json", ...getAdminHeaders() },
+            body: JSON.stringify({ status: normalizedStatus, declineReason }),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            throw new Error(data.message || "Could not update marketplace purchase.");
+          }
+          delete adminMarketplacePurchaseReasons[String(purchaseId || "")];
+          showAdminToast(data.message || "Marketplace purchase updated.", "success");
+          await loadAdminData();
+        } catch (error) {
+          showAdminToast(error.message || "Could not update marketplace purchase.", "error");
+        }
+      }
+
+      function renderAdminMarketplace() {
+        const el = document.getElementById("tab-marketplace");
+        if (!el) return;
+        const pendingListings = adminMarketplace.pendingListings || [];
+        const approvedListings = adminMarketplace.approvedListings || [];
+        const pendingPurchases = adminMarketplace.pendingPurchases || [];
+        const approvedPurchases = adminMarketplace.approvedPurchases || [];
+        const declinedPurchases = adminMarketplace.declinedPurchases || [];
+        const purchaseDeskCount = approvedPurchases.length + declinedPurchases.length;
+        const purchaseSection =
+          adminMarketplacePurchaseTab === "approved"
+            ? approvedPurchases.length
+              ? approvedPurchases
+                  .map((item) => renderAdminMarketplacePurchaseCard(item, "approved"))
+                  .join("")
+              : `<div class="rounded-[1.5rem] border border-dashed border-white/10 p-8 text-center text-slate-400">No approved purchases yet.</div>`
+            : adminMarketplacePurchaseTab === "declined"
+              ? declinedPurchases.length
+                ? declinedPurchases
+                    .map((item) => renderAdminMarketplacePurchaseCard(item, "declined"))
+                    .join("")
+                : `<div class="rounded-[1.5rem] border border-dashed border-white/10 p-8 text-center text-slate-400">No declined purchases yet.</div>`
+              : pendingPurchases.length
+                ? pendingPurchases
+                    .map((item) => renderAdminMarketplacePurchaseCard(item, "pending"))
+                    .join("")
+                : `<div class="rounded-[1.5rem] border border-dashed border-white/10 p-8 text-center text-slate-400">No pending purchase requests right now.</div>`;
+        el.innerHTML = `
+          <div class="rounded-[1.8rem] border border-white/10 bg-white/[0.03] p-5">
+            <div class="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <div class="text-[11px] font-black uppercase tracking-[0.22em] text-cyan-400">Marketplace Review</div>
+                <h3 class="mt-2 text-2xl font-semibold text-white">Listings and purchase requests</h3>
+              </div>
+              <div class="flex gap-2">
+                <button onclick="setAdminMarketplaceTab('pending')" class="mini-tab ${adminMarketplaceTab === "pending" ? "active" : ""} px-4 py-2 rounded-2xl text-xs font-bold uppercase tracking-[0.16em]">Pending (${pendingListings.length})</button>
+                <button onclick="setAdminMarketplaceTab('approved')" class="mini-tab ${adminMarketplaceTab === "approved" ? "active" : ""} px-4 py-2 rounded-2xl text-xs font-bold uppercase tracking-[0.16em]">Approved (${approvedListings.length})</button>
+                <button onclick="setAdminMarketplaceTab('purchases')" class="mini-tab ${adminMarketplaceTab === "purchases" ? "active" : ""} px-4 py-2 rounded-2xl text-xs font-bold uppercase tracking-[0.16em]">Purchases (${pendingPurchases.length})</button>
+                <button onclick="setAdminMarketplaceTab('purchased')" class="mini-tab ${adminMarketplaceTab === "purchased" ? "active" : ""} px-4 py-2 rounded-2xl text-xs font-bold uppercase tracking-[0.16em]">Purchase Desk (${purchaseDeskCount})</button>
+              </div>
+            </div>
+            <div class="mt-5 space-y-4">
+              ${
+                adminMarketplaceTab === "purchases" || adminMarketplaceTab === "purchased"
+                  ? `<div class="space-y-4">
+                      <div class="flex flex-wrap gap-2">
+                        ${
+                          adminMarketplaceTab === "purchases"
+                            ? `<button onclick="setAdminMarketplacePurchaseTab('pending')" class="mini-tab ${adminMarketplacePurchaseTab === "pending" ? "active" : ""} px-4 py-2 rounded-2xl text-xs font-bold uppercase tracking-[0.16em]">Pending (${pendingPurchases.length})</button>`
+                            : ""
+                        }
+                        <button onclick="setAdminMarketplacePurchaseTab('approved')" class="mini-tab ${adminMarketplacePurchaseTab === "approved" ? "active" : ""} px-4 py-2 rounded-2xl text-xs font-bold uppercase tracking-[0.16em]">Approved (${approvedPurchases.length})</button>
+                        <button onclick="setAdminMarketplacePurchaseTab('declined')" class="mini-tab ${adminMarketplacePurchaseTab === "declined" ? "active" : ""} px-4 py-2 rounded-2xl text-xs font-bold uppercase tracking-[0.16em]">Declined (${declinedPurchases.length})</button>
+                      </div>
+                      ${purchaseSection}
+                    </div>`
+                  : (adminMarketplaceTab === "approved" ? approvedListings : pendingListings).length
+                    ? (adminMarketplaceTab === "approved" ? approvedListings : pendingListings)
+                        .map(
+                          (item) => `
+                    <article class="rounded-[1.5rem] border border-white/10 bg-slate-950/70 p-4">
+                      <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                        <div class="min-w-0">
+                          <div class="flex items-center gap-3">
+                            <h4 class="text-lg font-semibold text-white">${escapeHtml(item.title || "Untitled Listing")}</h4>
+                            <span class="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-300">${escapeHtml(item.status || "pending")}</span>
+                            <span class="rounded-full border ${String(item.listingKind || "sale").toLowerCase() === "template" ? "border-fuchsia-400/20 bg-fuchsia-500/10 text-fuchsia-200" : "border-cyan-400/20 bg-cyan-500/10 text-cyan-200"} px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em]">${String(item.listingKind || "sale").toLowerCase() === "template" ? "template" : "sale"}</span>
+                          </div>
+                          <p class="mt-2 text-sm leading-6 text-slate-400">${escapeHtml(item.description || item.purpose || "")}</p>
+                          <div class="mt-3 flex flex-wrap gap-4 text-[11px] font-semibold text-slate-500">
+                            <span>${escapeHtml(item.authorName || "Unknown Creator")}</span>
+                            <span>${escapeHtml(item.category || "General")}</span>
+                            <span>${item.price > 0 ? `$${Number(item.price).toFixed(2)}` : "Free"}</span>
+                          </div>
+                        </div>
+                        <button onclick="openAdminMarketplaceDetail('${item._id}')" class="rounded-2xl bg-cyan-400 px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-slate-950 hover:bg-cyan-300">Review</button>
+                      </div>
+                    </article>`,
+                        )
+                        .join("")
+                    : `<div class="rounded-[1.5rem] border border-dashed border-white/10 p-8 text-center text-slate-400">No ${adminMarketplaceTab} marketplace listings right now.</div>`
+              }
+            </div>
+          </div>`;
       }
 
       function renderLogs() {
@@ -2352,9 +2537,16 @@
                 pendingListings: marketplaceData.pendingListings || [],
                 approvedListings: marketplaceData.approvedListings || [],
                 pendingPurchases: marketplaceData.pendingPurchases || [],
-                completedPurchases: marketplaceData.completedPurchases || [],
+                approvedPurchases: marketplaceData.approvedPurchases || [],
+                declinedPurchases: marketplaceData.declinedPurchases || [],
               }
-            : { pendingListings: [], approvedListings: [], pendingPurchases: [], completedPurchases: [] };
+            : {
+                pendingListings: [],
+                approvedListings: [],
+                pendingPurchases: [],
+                approvedPurchases: [],
+                declinedPurchases: [],
+              };
           const nextFeedbacks = adminFeedbacks.filter((item) => !previousFeedbackIds.has(item._id));
           const nextUsers = (adminAnalytics?.recentUsers || []).filter(
             (item) => !previousUserIds.has(item._id),

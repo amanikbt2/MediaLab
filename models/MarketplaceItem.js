@@ -38,10 +38,11 @@ const MarketplacePurchaseSchema = new mongoose.Schema(
     buyerEmail: { type: String, default: "", trim: true, lowercase: true },
     status: {
       type: String,
-      enum: ["pending", "approved", "failed"],
+      enum: ["pending", "approved", "declined", "failed"],
       default: "pending",
     },
     message: { type: String, default: "", trim: true },
+    declineReason: { type: String, default: "", trim: true },
     approvedUntil: { type: Date, default: null },
     createdAt: { type: Date, default: Date.now },
     reviewedAt: { type: Date, default: null },
