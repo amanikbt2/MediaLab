@@ -1099,6 +1099,13 @@
         justify-content: center;
         padding: 16px;
       }
+      #app-dialog-modal {
+        z-index: 2000005 !important;
+      }
+      #app-dialog-modal .builder-modal-card {
+        position: relative;
+        z-index: 2000006 !important;
+      }
       .builder-modal-card {
         width: min(100%, 460px);
         max-height: min(88vh, 760px);
@@ -5298,6 +5305,7 @@
         const category = String(marketplaceDraftListing.category || "").trim();
         const purpose = String(marketplaceDraftListing.purpose || "").trim();
         const description = String(marketplaceDraftListing.description || "").trim();
+        const effectivePurpose = purpose || description.slice(0, 180);
         const screenshots = Array.isArray(marketplaceDraftListing.screenshots)
           ? marketplaceDraftListing.screenshots.filter(Boolean)
           : [];
@@ -5322,7 +5330,7 @@
         if (!category) {
           issues.push("Enter a project category.");
         }
-        if (purpose.length < 5) {
+        if (effectivePurpose.length < 5) {
           issues.push("Purpose is too short.");
         }
         if (description.length < 8) {
@@ -5356,6 +5364,7 @@
         const category = String(marketplaceDraftListing.category || "").trim();
         const purpose = String(marketplaceDraftListing.purpose || "").trim();
         const description = String(marketplaceDraftListing.description || "").trim();
+        const effectivePurpose = purpose || description.slice(0, 180);
         const screenshots = Array.isArray(marketplaceDraftListing.screenshots)
           ? marketplaceDraftListing.screenshots.filter(Boolean)
           : [];
@@ -5378,7 +5387,7 @@
           const issues = [];
           if (title.length < 2) issues.push("Enter a marketplace title.");
           if (!category) issues.push("Enter a project category.");
-          if (!purpose) issues.push("Add a short purpose.");
+          if (!effectivePurpose) issues.push("Add a short purpose.");
           if (description.length < 3) issues.push("Add a short professional description.");
           if (Number(marketplaceDraftListing.price) < 0 || Number.isNaN(Number(marketplaceDraftListing.price))) {
             issues.push("Price must be 0 or more.");
@@ -6066,15 +6075,22 @@
       }
       function updateMarketplaceDraftField(field, value) {
         const normalizedValue = String(value ?? "").trim();
+        const nextValue =
+          field === "price"
+            ? normalizedValue === ""
+              ? 0
+              : Number(normalizedValue.replace(/,/g, ""))
+            : String(value || "");
         marketplaceDraftListing = {
           ...marketplaceDraftListing,
-          [field]:
-            field === "price"
-              ? normalizedValue === ""
-                ? 0
-                : Number(normalizedValue.replace(/,/g, ""))
-              : String(value || ""),
+          [field]: nextValue,
         };
+        if (field === "description") {
+          const currentPurpose = String(marketplaceDraftListing.purpose || "").trim();
+          if (!currentPurpose) {
+            marketplaceDraftListing.purpose = String(nextValue || "").trim().slice(0, 180);
+          }
+        }
       }
       async function toggleMarketplaceTemplateMode(enabled = false, input = null) {
         if (enabled) {
@@ -6584,6 +6600,14 @@
           showLogin();
           return;
         }
+        const currentPurpose = String(marketplaceDraftListing.purpose || "").trim();
+        const currentDescription = String(marketplaceDraftListing.description || "").trim();
+        if (!currentPurpose && currentDescription) {
+          marketplaceDraftListing = {
+            ...marketplaceDraftListing,
+            purpose: currentDescription.slice(0, 180),
+          };
+        }
         if (String(marketplaceDraftListing.sourceType || "").trim() === "draft") {
           const selectedDraft = getMarketplaceDraftProjects().find(
             (item) =>
@@ -6817,6 +6841,16 @@
                   ${getMarketplaceStatusBadge(item.status)}
                 </div>
                 <div class="mt-4 flex items-center gap-2 text-sm">${renderMarketplaceRating(item.averageRating || 0)}<span class="ml-2 text-slate-400">${Number(item.ratingPercent || 0).toFixed(0)}% rating from ${item.ratingCount || 0} users</span></div>
+                <div class="mt-4 grid grid-cols-2 gap-3">
+                  <div class="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                    <p class="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Total Purchases</p>
+                    <p class="mt-2 text-lg font-semibold text-white">${Number(item.purchaseCount || 0)}</p>
+                  </div>
+                  <div class="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                    <p class="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Pending Approval</p>
+                    <p class="mt-2 text-lg font-semibold text-amber-300">${Number(item.pendingPurchases || 0)}</p>
+                  </div>
+                </div>
                 ${!access.approved ? `<div class="mt-4 rounded-2xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">This project is still pending approval. Rating and purchase unlock after approval.</div>` : access.isOwner ? `<div class="mt-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">You are the owner of this project, so rating and purchase are disabled.</div>` : ``}
                 <button onclick="rateMarketplaceItem('${item._id}')" class="mt-4 inline-flex items-center gap-2 rounded-2xl border ${!access.canRate ? "border-white/10 bg-white/[0.04] text-slate-500 cursor-not-allowed" : item.viewerHasRated ? "border-amber-400/30 bg-amber-500/10 text-amber-300" : "border-white/10 bg-white/5 text-slate-200"} px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em]">
                   <i class="fas fa-star"></i>
@@ -7106,6 +7140,26 @@
           const data = await res.json();
           if (!res.ok || !data.success) {
             throw new Error(data.message || "Could not submit this purchase.");
+          }
+          const nextItem = data?.item || null;
+          if (nextItem && nextItem._id) {
+            if (currentMarketplaceItem && String(currentMarketplaceItem._id || "") === String(nextItem._id || "")) {
+              currentMarketplaceItem = nextItem;
+              renderMarketplaceDetail(currentMarketplaceItem);
+            }
+            marketplaceItems = (Array.isArray(marketplaceItems) ? marketplaceItems : []).map((item) =>
+              String(item?._id || "") === String(nextItem._id || "") ? nextItem : item,
+            );
+            marketplaceMySales = (Array.isArray(marketplaceMySales) ? marketplaceMySales : []).map((item) =>
+              String(item?._id || "") === String(nextItem._id || "") ? nextItem : item,
+            );
+            marketplacePurchasedItems = (Array.isArray(marketplacePurchasedItems) ? marketplacePurchasedItems : []).some(
+              (item) => String(item?._id || "") === String(nextItem._id || ""),
+            )
+              ? marketplacePurchasedItems.map((item) =>
+                  String(item?._id || "") === String(nextItem._id || "") ? nextItem : item,
+                )
+              : [nextItem, ...(Array.isArray(marketplacePurchasedItems) ? marketplacePurchasedItems : [])];
           }
           completeUniversalProgress("Purchase request sent.");
           await refreshMarketplaceData();
@@ -8729,8 +8783,14 @@
             </div>`;
           return;
         }
+        const firstReadIndex = notificationsList.findIndex((item) => item.isRead);
         list.innerHTML = notificationsList
-          .map((item) => `
+          .map((item, index) => `
+            ${index === firstReadIndex && firstReadIndex > 0 ? `<div class="my-3 flex items-center gap-3 px-1">
+              <div class="h-px flex-1 bg-white/10"></div>
+              <span class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Earlier notifications</span>
+              <div class="h-px flex-1 bg-white/10"></div>
+            </div>` : ""}
             <button onclick="openNotificationTarget('${String(item._id || "")}')" class="w-full rounded-[1.3rem] border ${item.isRead ? "border-white/8 bg-white/[0.03]" : "border-rose-400/20 bg-rose-500/10"} px-4 py-4 text-left transition-all hover:border-cyan-400/25 hover:bg-white/[0.05]">
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0">
@@ -8861,14 +8921,6 @@
         if (shouldOpen) {
           queueNotificationAutoHide();
           await fetchNotifications();
-          notificationsList = notificationsList.map((item) => ({
-            ...item,
-            isRead: true,
-            readAt: item.readAt || new Date().toISOString(),
-          }));
-          unreadNotificationCount = 0;
-          renderNotificationsUi();
-          await markAllNotificationsRead({ silent: true });
         } else {
           clearTimeout(notificationDropdownTimer);
         }
