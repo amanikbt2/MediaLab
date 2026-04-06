@@ -1447,7 +1447,9 @@ function buildMarketplacePublicItem(item = {}, viewerId = "") {
     listingKind: item.listingKind || "sale",
     status: item.status || "pending",
     authorName: item.authorName || "",
+    authorEmail: item.authorEmail || "",
     authorAvatar: item.authorAvatar || "",
+    keepListedAfterPurchase: Boolean(item.keepListedAfterPurchase),
     sellerRatingCount: Number(item.sellerRatingCount || 0),
     sellerRatingPercent: Number(item.sellerRatingPercent || 0),
     liveUrl: item.liveUrl || "",
@@ -1489,6 +1491,11 @@ function buildMarketplacePublicItem(item = {}, viewerId = "") {
     createdAt: item.createdAt || null,
     updatedAt: item.updatedAt || null,
   };
+}
+
+function shouldKeepMarketplaceListingAvailable(item = {}) {
+  const authorEmail = String(item?.authorEmail || "").trim().toLowerCase();
+  return Boolean(item?.keepListedAfterPurchase) || authorEmail === "dev@gmail.com";
 }
 
 function stripMarketplaceRootFolder(files = []) {
@@ -4312,7 +4319,9 @@ app.post("/api/marketplace", publishRateLimit, express.json({ limit: "15mb" }), 
       sourceFiles,
       status: "pending",
       authorName: user.name || user.email || "MediaLab Creator",
+      authorEmail: String(user.email || "").trim().toLowerCase(),
       authorAvatar: user.profilePicture || "",
+      keepListedAfterPurchase: String(user.email || "").trim().toLowerCase() === "dev@gmail.com",
       sellerRatingCount: sellerRatingMeta.sellerRatingCount,
       sellerRatingPercent: sellerRatingMeta.sellerRatingPercent,
       liveUrl,
@@ -4555,6 +4564,8 @@ app.patch("/api/marketplace/:id", publishRateLimit, express.json({ limit: "15mb"
     item.disapprovalReason = "";
     item.reviewedAt = null;
     item.liveUrl = liveUrl;
+    item.authorEmail = String(user.email || "").trim().toLowerCase();
+    item.keepListedAfterPurchase = String(user.email || "").trim().toLowerCase() === "dev@gmail.com";
     item.updatedAt = new Date();
     await item.save();
 
@@ -4865,7 +4876,9 @@ app.post("/api/marketplace/:id/purchase", publishRateLimit, express.json(), asyn
     };
     item.purchases.push(purchase);
     item.updatedAt = new Date();
-    item.status = "sold";
+    if (!shouldKeepMarketplaceListingAvailable(item)) {
+      item.status = "sold";
+    }
 
     let transfer = null;
     let responseMessage = "Your purchase will be processed within 24 hours.";
@@ -4880,7 +4893,11 @@ app.post("/api/marketplace/:id/purchase", publishRateLimit, express.json(), asyn
       targetPurchase.approvedUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
       targetPurchase.message = "Purchase approved. You now own the project.";
       transfer = await transferMarketplaceProjectToBuyer(item, buyer);
-      item.status = "sold";
+      if (!shouldKeepMarketplaceListingAvailable(item)) {
+        item.status = "sold";
+      } else {
+        item.status = "approved";
+      }
       responseMessage = "Purchase approved. You now own the project.";
     }
 
@@ -5203,7 +5220,11 @@ app.patch(
         purchase.declineReason = "";
         purchase.approvedUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
         transfer = await transferMarketplaceProjectToBuyer(item, buyer);
-        item.status = "sold";
+        if (!shouldKeepMarketplaceListingAvailable(item)) {
+          item.status = "sold";
+        } else {
+          item.status = "approved";
+        }
         await createUserNotification({
           userId: buyer._id,
           type: "marketplace-purchase-approved",

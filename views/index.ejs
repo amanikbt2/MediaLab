@@ -8788,7 +8788,7 @@
           .map((item, index) => `
             ${index === firstReadIndex && firstReadIndex > 0 ? `<div class="my-3 flex items-center gap-3 px-1">
               <div class="h-px flex-1 bg-white/10"></div>
-              <span class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Earlier notifications</span>
+              <span class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">----- older -----</span>
               <div class="h-px flex-1 bg-white/10"></div>
             </div>` : ""}
             <button onclick="openNotificationTarget('${String(item._id || "")}')" class="w-full rounded-[1.3rem] border ${item.isRead ? "border-white/8 bg-white/[0.03]" : "border-rose-400/20 bg-rose-500/10"} px-4 py-4 text-left transition-all hover:border-cyan-400/25 hover:bg-white/[0.05]">
@@ -8849,7 +8849,11 @@
         try {
           notificationsLoading = true;
           renderNotificationsUi();
-          const res = await fetch("/api/notifications", { credentials: "include" });
+          const res = await fetch("/api/notifications", {
+            credentials: "include",
+            cache: "no-store",
+            headers: { "Cache-Control": "no-store" },
+          });
           const data = await res.json();
           if (res.status === 401) {
             await handleAuthSessionFailure(data.message || "Your session ended. Please sign in again.");
@@ -8925,6 +8929,7 @@
         if (shouldOpen) {
           queueNotificationAutoHide();
           await fetchNotifications();
+          await markAllNotificationsRead({ silent: true });
         } else {
           clearTimeout(notificationDropdownTimer);
         }
