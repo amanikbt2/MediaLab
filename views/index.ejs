@@ -4268,7 +4268,7 @@
       let marketplacePreviewAutoCloseTimer = null;
       let pendingMarketplaceRemovalId = "";
       let currentAppDialogResolver = null;
-      const LOGIN_REQUIRED_TOOL_IDS = ["image-pdf"];
+      const LOGIN_REQUIRED_TOOL_IDS = ["console", "image-pdf"];
       const PREMIUM_TOOL_IDS = ["voice-clone", "text-to-speech", "image-edit"];
       function normalizeHostedBaseUrl(url = "") {
         return String(url || "").trim().replace(/\/$/, "");
@@ -4322,17 +4322,17 @@
       };
       const toolsData = [
         {
-          id: "console",
-          title: "Studio Console",
-          icon: "fa-gauge-high",
-          desc: "Wallet, hosting, and live project command center",
-          isNew: true,
-        },
-        {
           id: "web-builder",
           title: "Web Builder",
           icon: "fa-drafting-compass",
           desc: "Drag & drop professional web pages",
+          isNew: true,
+        },
+        {
+          id: "console",
+          title: "Studio Console",
+          icon: "fa-gauge-high",
+          desc: "Wallet, hosting, and live project command center",
           isNew: true,
         },
         {
@@ -4532,6 +4532,7 @@
       }
       function getPreferredStudioEntryTool(defaultTool = null) {
         if (defaultTool) return defaultTool;
+        if (!loggedIn) return "web-builder";
         return window.innerWidth < 768 ? "console" : "web-builder";
       }
       function goToStudio(defaultTool = null) {
