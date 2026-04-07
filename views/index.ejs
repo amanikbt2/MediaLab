@@ -8824,6 +8824,47 @@
           readAt: item?.readAt || null,
         };
       }
+      function getNotificationCacheKey(user = currentUser || {}) {
+        const identity = String(user?._id || user?.email || "")
+          .trim()
+          .toLowerCase();
+        if (!identity) return "";
+        return `medialab.notification.cache.${identity}`;
+      }
+      function persistNotificationCache(user = currentUser || {}) {
+        const cacheKey = getNotificationCacheKey(user);
+        if (!cacheKey) return;
+        try {
+          localStorage.setItem(
+            cacheKey,
+            JSON.stringify({
+              notifications: notificationsList.map((item) => normalizeNotificationItem(item)),
+              unreadCount: unreadNotificationCount,
+              savedAt: new Date().toISOString(),
+            }),
+          );
+        } catch {}
+      }
+      function restoreNotificationCache(user = currentUser || {}) {
+        const cacheKey = getNotificationCacheKey(user);
+        if (!cacheKey) return [];
+        try {
+          const raw = localStorage.getItem(cacheKey);
+          if (!raw) return [];
+          const parsed = JSON.parse(raw);
+          const cachedNotifications = trimNotificationFeed(
+            Array.isArray(parsed?.notifications) ? parsed.notifications : [],
+          );
+          notificationsList = cachedNotifications;
+          unreadNotificationCount = Number(
+            parsed?.unreadCount ?? cachedNotifications.filter((item) => !item.isRead).length,
+          );
+          renderNotificationsUi();
+          return cachedNotifications;
+        } catch {
+          return [];
+        }
+      }
       function trimNotificationFeed(items = []) {
         const normalizedItems = (Array.isArray(items) ? items : []).map((item) =>
           normalizeNotificationItem(item),
@@ -8851,6 +8892,7 @@
         }
         notificationsList = trimNotificationFeed([nextItem, ...notificationsList]);
         unreadNotificationCount = notificationsList.filter((item) => !item.isRead).length;
+        persistNotificationCache();
         renderNotificationsUi();
       }
       async function fetchNotifications(options = {}) {
@@ -8891,10 +8933,12 @@
           unreadNotificationCount = Number(
             data.unreadCount ?? notificationsList.filter((item) => !item.isRead).length,
           );
+          persistNotificationCache();
           renderNotificationsUi();
           return notificationsList;
         } catch (error) {
           console.warn("Notification fetch skipped:", error.message);
+          restoreNotificationCache(currentUser);
           renderNotificationsUi();
           return notificationsList;
         } finally {
@@ -8941,6 +8985,7 @@
           markSessionHealthy();
           notificationsList = notificationsList.map((item) => ({ ...item, isRead: true, readAt: new Date().toISOString() }));
           unreadNotificationCount = Number(data.unreadCount || 0);
+          persistNotificationCache();
           renderNotificationsUi();
         } catch (error) {
           if (!silent) {
@@ -9001,6 +9046,7 @@
           0,
           notificationsList.filter((item) => !item.isRead).length,
         );
+        persistNotificationCache();
         renderNotificationsUi();
         closeNotificationsDrawer();
         const targetType = String(notification.targetType || "").trim();
@@ -9086,6 +9132,7 @@
         if (currentUser?._id) {
           socket.emit("register-user", currentUser._id);
         }
+        restoreNotificationCache(currentUser);
         userSection?.classList.remove("hidden");
         startBtn?.classList.add("hidden");
         const picSrc =
