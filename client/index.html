@@ -9015,6 +9015,14 @@
         if (shouldOpen) {
           queueNotificationAutoHide();
           await fetchNotificationsWithRetry(2, 500);
+          notificationsList = notificationsList.map((item) =>
+            item.isRead
+              ? item
+              : { ...item, isRead: true, readAt: item.readAt || new Date().toISOString() },
+          );
+          unreadNotificationCount = 0;
+          persistNotificationCache();
+          renderNotificationsUi();
           await markAllNotificationsRead({ silent: true });
         } else {
           clearTimeout(notificationDropdownTimer);
