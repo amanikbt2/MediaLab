@@ -4223,6 +4223,7 @@
       let unreadNotificationCount = 0;
       let notificationsLoading = false;
       let notificationDropdownTimer = null;
+      let authBootstrapReady = false;
       let builderCommunityTemplates = [];
       function createEmptyMarketplaceDraftListing() {
         return {
@@ -4568,7 +4569,7 @@
         if (loggedIn && currentUser?._id) {
           socket.emit("register-user", currentUser._id);
         }
-        if (loggedIn && currentUser?._id) {
+        if (authBootstrapReady && loggedIn && currentUser?._id) {
           fetchNotifications().catch(() => {});
         }
       });
@@ -4582,7 +4583,7 @@
         }
       });
       setInterval(() => {
-        if (!loggedIn || !currentUser?._id || document.hidden) return;
+        if (!authBootstrapReady || !loggedIn || !currentUser?._id || document.hidden) return;
         fetchNotifications().catch(() => {});
       }, 30000);
       // UNIVERSAL PROGRESS LISTENER
@@ -8854,7 +8855,7 @@
       }
       async function fetchNotifications(options = {}) {
         const { allowSessionRecovery = true } = options;
-        if (!loggedIn || !currentUser) {
+        if (!authBootstrapReady || !loggedIn || !currentUser) {
           notificationsList = [];
           unreadNotificationCount = 0;
           renderNotificationsUi();
@@ -9119,7 +9120,9 @@
         }
         renderGithubStorageStatus();
         renderNotificationsUi();
-        fetchNotificationsWithRetry(3, 900);
+        if (authBootstrapReady) {
+          fetchNotificationsWithRetry(3, 900);
+        }
         updateAccountModalUi();
         maybePromptRenderHostingOnboarding();
         startRenderProjectSyncPolling();
@@ -9686,6 +9689,7 @@
       async function syncServerSessionState(options = {}) {
         const { silent = true } = options;
         try {
+          authBootstrapReady = false;
           const res = await fetch("/api/auth/me", {
             credentials: "include",
             cache: "no-store",
@@ -9697,11 +9701,14 @@
             loggedIn = true;
             currentUser = data.user;
             updateUserProfileUi();
+            authBootstrapReady = true;
             await fetchNotificationsWithRetry(3, 900).catch(() => []);
             return true;
           }
+          authBootstrapReady = true;
           return Boolean(loggedIn || currentUser);
         } catch {
+          authBootstrapReady = true;
           return Boolean(loggedIn && currentUser);
         }
       }
@@ -11068,6 +11075,7 @@
       async function checkAuth(options = {}) {
         const showProgress = Boolean(options?.showProgress);
         try {
+          authBootstrapReady = false;
           if (showProgress) {
             beginUniversalProgress("Logging you in...", 14, 76);
           }
@@ -11079,7 +11087,8 @@
             currentUser = data.user;
             await fetchPremiumRequestStatus();
             updateUserProfileUi();
-            await fetchNotifications().catch(() => []);
+            authBootstrapReady = true;
+            await fetchNotificationsWithRetry(4, 900).catch(() => []);
             startAdsenseStatusSyncLoop();
             startUserWalletRefreshLoop();
             await claimPendingReferralIfNeeded();
@@ -11104,6 +11113,7 @@
             setTimeout(() => maybePromptRenderHostingOnboarding(), 600);
           } else {
             currentPremiumRequest = null;
+            authBootstrapReady = true;
             updateUserProfileUi();
             if (showProgress) {
               setUniversalProgress({
@@ -11116,6 +11126,7 @@
           }
         } catch (e) {
           console.error("Auth check failed:", e);
+          authBootstrapReady = true;
           updateUserProfileUi();
           if (showProgress) {
             setUniversalProgress({
