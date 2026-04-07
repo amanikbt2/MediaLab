@@ -60,6 +60,42 @@ const createWelcomeNotification = async (user = null) => {
   }
 };
 
+const buildNotificationSnapshot = async (userId) => {
+  if (!userId) {
+    return { notifications: [], unreadCount: 0 };
+  }
+  const [unreadNotifications, readNotifications] = await Promise.all([
+    Notification.find({ userId, isRead: false }).sort({ createdAt: -1 }).lean(),
+    Notification.find({ userId, isRead: true }).sort({ createdAt: -1 }).limit(10).lean(),
+  ]);
+  const notifications = [...unreadNotifications, ...readNotifications]
+    .sort((left, right) => new Date(right.createdAt || 0) - new Date(left.createdAt || 0))
+    .map((notification) => ({
+      _id: String(notification?._id || ""),
+      userId: String(notification?.userId || ""),
+      recipientEmail: String(notification?.recipientEmail || "").trim().toLowerCase(),
+      senderName: String(notification?.senderName || "MediaLab").trim(),
+      senderEmail: String(notification?.senderEmail || "").trim().toLowerCase(),
+      deliveryScope: String(notification?.deliveryScope || "system").trim(),
+      type: String(notification?.type || "general").trim(),
+      title: String(notification?.title || "").trim(),
+      message: String(notification?.message || "").trim(),
+      targetType: String(notification?.targetType || "").trim(),
+      targetId: String(notification?.targetId || "").trim(),
+      metadata:
+        notification?.metadata && typeof notification.metadata === "object"
+          ? notification.metadata
+          : {},
+      isRead: Boolean(notification?.isRead),
+      createdAt: notification?.createdAt || new Date(),
+      readAt: notification?.readAt || null,
+    }));
+  return {
+    notifications,
+    unreadCount: unreadNotifications.length,
+  };
+};
+
 const slugifyRepoName = (value = "") =>
   String(value || "")
     .toLowerCase()
@@ -913,7 +949,13 @@ router.get("/me", async (req, res) => {
 
   if (req.isAuthenticated() && req.user) {
     await ensureUserReferralCode(req.user);
-    res.json({ success: true, user: toSafeUser(req.user) });
+    const notificationSnapshot = await buildNotificationSnapshot(req.user._id);
+    res.json({
+      success: true,
+      user: toSafeUser(req.user),
+      notifications: notificationSnapshot.notifications,
+      unreadCount: notificationSnapshot.unreadCount,
+    });
   } else {
     res.json({ success: false, message: "Not authenticated" });
   }

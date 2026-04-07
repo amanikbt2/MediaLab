@@ -8895,6 +8895,15 @@
           (left, right) => new Date(right.createdAt || 0) - new Date(left.createdAt || 0),
         );
       }
+      function applyNotificationSnapshot(items = [], unreadCount = null) {
+        notificationsList = trimNotificationFeed(Array.isArray(items) ? items : []);
+        unreadNotificationCount = Number(
+          unreadCount ?? notificationsList.filter((item) => !item.isRead).length,
+        );
+        persistNotificationCache();
+        renderNotificationsUi();
+        return notificationsList;
+      }
       function upsertNotificationFromSocket(payload = {}) {
         if (!payload?._id) return;
         const existingIndex = notificationsList.findIndex(
@@ -8907,10 +8916,7 @@
         if (existingIndex >= 0) {
           notificationsList.splice(existingIndex, 1);
         }
-        notificationsList = trimNotificationFeed([nextItem, ...notificationsList]);
-        unreadNotificationCount = notificationsList.filter((item) => !item.isRead).length;
-        persistNotificationCache();
-        renderNotificationsUi();
+        applyNotificationSnapshot([nextItem, ...notificationsList]);
       }
       async function fetchNotifications(options = {}) {
         const { allowSessionRecovery = true } = options;
@@ -8946,12 +8952,7 @@
             throw new Error(data.message || "Could not load notifications.");
           }
           markSessionHealthy();
-          notificationsList = trimNotificationFeed(Array.isArray(data.notifications) ? data.notifications : []);
-          unreadNotificationCount = Number(
-            data.unreadCount ?? notificationsList.filter((item) => !item.isRead).length,
-          );
-          persistNotificationCache();
-          renderNotificationsUi();
+          applyNotificationSnapshot(data.notifications, data.unreadCount);
           return notificationsList;
         } catch (error) {
           console.warn("Notification fetch skipped:", error.message);
@@ -9000,10 +9001,10 @@
           }
           if (!res.ok || !data.success) throw new Error(data.message || "Could not mark notifications as read.");
           markSessionHealthy();
-          notificationsList = notificationsList.map((item) => ({ ...item, isRead: true, readAt: new Date().toISOString() }));
-          unreadNotificationCount = Number(data.unreadCount || 0);
-          persistNotificationCache();
-          renderNotificationsUi();
+          applyNotificationSnapshot(
+            notificationsList.map((item) => ({ ...item, isRead: true, readAt: new Date().toISOString() })),
+            data.unreadCount || 0,
+          );
         } catch (error) {
           if (!silent) {
             showBuilderSnackbar(error.message || "Could not update notifications.", "error");
@@ -9067,12 +9068,13 @@
             ? { ...item, isRead: true, readAt: new Date().toISOString() }
             : item,
         );
-        unreadNotificationCount = Math.max(
-          0,
-          notificationsList.filter((item) => !item.isRead).length,
+        applyNotificationSnapshot(
+          notificationsList.map((item) =>
+            String(item._id || "") === String(notificationId || "")
+              ? { ...item, isRead: true, readAt: new Date().toISOString() }
+              : item,
+          ),
         );
-        persistNotificationCache();
-        renderNotificationsUi();
         closeNotificationsDrawer();
         const targetType = String(notification.targetType || "").trim();
         const targetId = String(notification.targetId || "").trim();
@@ -9773,6 +9775,7 @@
             loggedIn = true;
             currentUser = data.user;
             updateUserProfileUi();
+            applyNotificationSnapshot(data.notifications, data.unreadCount);
             authBootstrapReady = true;
             await fetchNotificationsWithRetry(3, 900).catch(() => []);
             return true;
@@ -11160,6 +11163,7 @@
             currentUser = data.user;
             await fetchPremiumRequestStatus();
             updateUserProfileUi();
+            applyNotificationSnapshot(data.notifications, data.unreadCount);
             authBootstrapReady = true;
             startAdsenseStatusSyncLoop();
             startUserWalletRefreshLoop();
