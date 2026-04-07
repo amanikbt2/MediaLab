@@ -4589,6 +4589,15 @@
         if (!authBootstrapReady || !loggedIn || !currentUser?._id || document.hidden) return;
         fetchNotifications().catch(() => {});
       }, 30000);
+      window.addEventListener("online", () => {
+        if (!authBootstrapReady || !loggedIn || !currentUser?._id) return;
+        fetchNotificationsWithRetry(4, 900).catch(() => {});
+      });
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden) return;
+        if (!authBootstrapReady || !loggedIn || !currentUser?._id) return;
+        fetchNotificationsWithRetry(3, 700).catch(() => {});
+      });
       // UNIVERSAL PROGRESS LISTENER
       socket.on("conversion-progress", (data) => {
         const type = data.type; // 'video' or 'voice'
