@@ -11006,15 +11006,11 @@
             currentUser = devData.user || null;
             await fetchPremiumRequestStatus();
             updateUserProfileUi();
-            await fetchNotificationsWithRetry(3, 900).catch(() => []);
             startAdsenseStatusSyncLoop();
             startUserWalletRefreshLoop();
             currentUser.builderDrafts = currentUser.builderDrafts || [];
             updateSidebarHistory(currentUser.projects || []);
             renderBuilderDrafts();
-            await fetchNotifications().catch(() => []);
-            await fetchReferralStatus().catch(() => {});
-            setTimeout(() => ensureGithubRepositoryInBackground(), 150);
             await logUsageActivity(
               "developer-login",
               "logged in with developer login",
@@ -11023,6 +11019,11 @@
             completeUniversalProgress("Welcome back to MediaLab.");
             hideLogin();
             goToStudio();
+            setTimeout(() => {
+              fetchNotificationsWithRetry(3, 900).catch(() => []);
+              fetchReferralStatus().catch(() => {});
+              ensureGithubRepositoryInBackground();
+            }, 120);
             return;
           }
           alert(
@@ -11151,19 +11152,14 @@
             await fetchPremiumRequestStatus();
             updateUserProfileUi();
             authBootstrapReady = true;
-            await fetchNotificationsWithRetry(4, 900).catch(() => []);
             startAdsenseStatusSyncLoop();
             startUserWalletRefreshLoop();
-            await claimPendingReferralIfNeeded();
-            await syncInstalledReferralIfNeeded();
-            await fetchReferralStatus();
             if (currentUser.projects) {
               updateSidebarHistory(currentUser.projects);
             }
             currentUser.builderDrafts = currentUser.builderDrafts || [];
             renderBuilderDrafts();
             scheduleFeedbackPrompt();
-            setTimeout(() => ensureGithubRepositoryInBackground(), 150);
             await logUsageActivity(
               "session-restored",
               "restored logged-in session",
@@ -11173,6 +11169,13 @@
               completeUniversalProgress("Logged in successfully.");
             }
             goToStudio();
+            setTimeout(() => {
+              fetchNotificationsWithRetry(4, 900).catch(() => []);
+              claimPendingReferralIfNeeded().catch(() => {});
+              syncInstalledReferralIfNeeded().catch(() => {});
+              fetchReferralStatus().catch(() => {});
+              ensureGithubRepositoryInBackground();
+            }, 120);
             setTimeout(() => maybePromptRenderHostingOnboarding(), 600);
           } else {
             currentPremiumRequest = null;
