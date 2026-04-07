@@ -11050,6 +11050,7 @@
             currentUser = data.user;
             await fetchPremiumRequestStatus();
             updateUserProfileUi();
+            await fetchNotifications().catch(() => []);
             startAdsenseStatusSyncLoop();
             startUserWalletRefreshLoop();
             await claimPendingReferralIfNeeded();
