@@ -2394,31 +2394,10 @@ app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 function shouldApplyWebContainerIsolation(req) {
   if (req.method === "OPTIONS") return false;
-  if (req.path.startsWith("/api/")) return false;
-  if (req.path.startsWith("/uploads/")) return false;
-
-  if (
-    req.path === "/" ||
-    req.path === "/sw.js" ||
-    req.path === "/manifest.json" ||
-    req.path.endsWith(".html") ||
-    req.path.endsWith(".js") ||
-    req.path.endsWith(".mjs") ||
-    req.path.endsWith(".css") ||
-    req.path.endsWith(".wasm") ||
-    req.path.endsWith(".json") ||
-    req.path.endsWith(".svg") ||
-    req.path.endsWith(".png") ||
-    req.path.endsWith(".jpg") ||
-    req.path.endsWith(".jpeg") ||
-    req.path.endsWith(".webp") ||
-    req.path.endsWith(".gif") ||
-    req.path.endsWith(".ico")
-  ) {
-    return true;
-  }
-
-  return false;
+  return (
+    req.path === "/studio-terminal" ||
+    req.path.startsWith("/studio-terminal/")
+  );
 }
 
 app.use((req, res, next) => {
@@ -2990,6 +2969,9 @@ app.use(passport.session());
 // Serving
 app.get("/", (_req, res) => {
   res.render("index");
+});
+app.get("/studio-terminal", (_req, res) => {
+  res.render("terminal-isolated");
 });
 app.get("/admin", (_req, res) => {
   res.render("admin");

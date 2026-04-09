@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MediaLab Terminal</title>
+    <link rel="icon" href="/favicon.png" type="image/png" />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/xterm@5.5.0/css/xterm.min.css"
+      crossorigin="anonymous"
+    />
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: Inter, system-ui, sans-serif;
+        background:
+          radial-gradient(circle at top, rgba(34, 211, 238, 0.14), transparent 34%),
+          linear-gradient(180deg, #020617 0%, #030712 100%);
+        color: #dbeafe;
+      }
+      .shell {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        padding: 18px;
+        gap: 14px;
+      }
+      .panel {
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(3, 7, 18, 0.82);
+        backdrop-filter: blur(22px);
+        border-radius: 24px;
+        box-shadow: 0 24px 80px rgba(2, 6, 23, 0.48);
+      }
+      .header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 18px 20px;
+      }
+      .title-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .eyebrow {
+        font-size: 11px;
+        font-weight: 900;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: rgba(125, 211, 252, 0.78);
+      }
+      .project-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        width: fit-content;
+        padding: 10px 14px;
+        border-radius: 999px;
+        background: rgba(34, 211, 238, 0.12);
+        border: 1px solid rgba(34, 211, 238, 0.2);
+        color: #cffafe;
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+      .status {
+        font-size: 13px;
+        color: rgba(148, 163, 184, 0.95);
+      }
+      .actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .ghost-btn {
+        appearance: none;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.04);
+        color: #e2e8f0;
+        border-radius: 14px;
+        padding: 10px 14px;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        cursor: pointer;
+      }
+      .ghost-btn:hover {
+        border-color: rgba(34, 211, 238, 0.38);
+        color: #cffafe;
+      }
+      .terminal-wrap {
+        flex: 1;
+        min-height: 0;
+        padding: 0 18px 18px;
+      }
+      .terminal-stage {
+        height: calc(100vh - 146px);
+        min-height: 420px;
+        border-radius: 20px;
+        overflow: hidden;
+        border: 1px solid rgba(34, 211, 238, 0.18);
+        background: #030712;
+      }
+      #terminal-instance {
+        width: 100%;
+        height: 100%;
+        padding: 14px;
+      }
+      .terminal-stage .xterm-viewport::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+      }
+      .terminal-stage .xterm-viewport::-webkit-scrollbar-thumb {
+        background: rgba(34, 211, 238, 0.26);
+        border-radius: 999px;
+      }
+      .hint {
+        padding: 0 20px 18px;
+        font-size: 12px;
+        color: rgba(148, 163, 184, 0.82);
+      }
+      @media (max-width: 760px) {
+        .header {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+        .actions {
+          width: 100%;
+          justify-content: flex-start;
+        }
+        .terminal-stage {
+          height: calc(100vh - 210px);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <section class="panel">
+        <div class="header">
+          <div class="title-stack">
+            <div class="eyebrow">MediaLab Isolated Terminal</div>
+            <div id="terminal-project-chip" class="project-chip">medialab&gt;</div>
+            <div id="terminal-status-text" class="status">
+              Waiting for project context from Studio...
+            </div>
+          </div>
+          <div class="actions">
+            <button type="button" class="ghost-btn" onclick="requestProjectBootstrap()">
+              Refresh Context
+            </button>
+            <button type="button" class="ghost-btn" onclick="window.close()">
+              Close
+            </button>
+          </div>
+        </div>
+        <div class="terminal-wrap">
+          <div class="terminal-stage">
+            <div id="terminal-instance"></div>
+          </div>
+        </div>
+        <div class="hint">
+          This window is isolated for WebContainer on Render. Keep it open while you build.
+        </div>
+      </section>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.5.0/lib/xterm.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js" crossorigin="anonymous"></script>
+    <script type="module">
+      const CHANNEL_NAME = "medialab_terminal_sync";
+      const SNAPSHOT_KEY = "medialab_terminal_bootstrap";
+      const FILE_UPDATE_KEY = "medialab_terminal_file_update";
+
+      let terminalTerm = null;
+      let terminalFitAddon = null;
+      let terminalWebContainer = null;
+      let terminalShellProcess = null;
+      let terminalShellWriter = null;
+      let terminalActiveFolder = "medialab";
+      let terminalSnapshot = null;
+      let terminalMirrorTimer = null;
+      let terminalSyncLock = false;
+      const terminalChannel =
+        typeof BroadcastChannel === "function" ? new BroadcastChannel(CHANNEL_NAME) : null;
+
+      function normalizeProjectSeed(value = "medialab") {
+        return String(value || "medialab")
+          .trim()
+          .replace(/[^a-zA-Z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "") || "medialab";
+      }
+
+      function updateProjectChip(name = "medialab") {
+        const chip = document.getElementById("terminal-project-chip");
+        if (chip) chip.textContent = `${normalizeProjectSeed(name)}>`;
+      }
+
+      function setStatus(message = "") {
+        const node = document.getElementById("terminal-status-text");
+        if (node) node.textContent = String(message || "").trim();
+      }
+
+      function writeLine(value = "") {
+        if (terminalTerm) terminalTerm.writeln(String(value || ""));
+      }
+
+      async function ensureWebContainerModule() {
+        try {
+          return await import("https://cdn.jsdelivr.net/npm/@webcontainer/api@1.3.0/+esm");
+        } catch (_firstError) {
+          return import("https://esm.sh/@webcontainer/api@1.3.0");
+        }
+      }
+
+      async function ensureRuntime() {
+        if (terminalTerm && terminalWebContainer) return;
+        if (!window.Terminal || !window.FitAddon?.FitAddon) {
+          throw new Error("Xterm failed to load in isolated terminal.");
+        }
+        const host = document.getElementById("terminal-instance");
+        const { WebContainer } = await ensureWebContainerModule();
+
+        if (!terminalTerm) {
+          terminalTerm = new window.Terminal({
+            convertEol: true,
+            cursorBlink: true,
+            fontFamily: "Consolas, Menlo, Monaco, monospace",
+            fontSize: 14,
+            lineHeight: 1.3,
+            theme: {
+              background: "#030712",
+              foreground: "#22d3ee",
+              cursor: "#22d3ee",
+            },
+          });
+          terminalFitAddon = new window.FitAddon.FitAddon();
+          terminalTerm.loadAddon(terminalFitAddon);
+          terminalTerm.open(host);
+          terminalFitAddon.fit();
+        }
+
+        if (!terminalWebContainer) {
+          setStatus("Booting WebContainer...");
+          terminalWebContainer = await WebContainer.boot();
+          setStatus("Terminal runtime ready.");
+        }
+      }
+
+      async function ensureDirectory(dirPath = "") {
+        if (!terminalWebContainer || !dirPath) return;
+        const parts = String(dirPath || "").split("/").filter(Boolean);
+        let current = "";
+        for (const part of parts) {
+          current += `/${part}`;
+          try {
+            await terminalWebContainer.fs.mkdir(current);
+          } catch {}
+        }
+      }
+
+      function getSnapshotProjectName(snapshot = terminalSnapshot) {
+        return normalizeProjectSeed(snapshot?.context?.name || "medialab");
+      }
+
+      function buildSnapshotEntries(snapshot = terminalSnapshot) {
+        const entries = Array.isArray(snapshot?.entries) ? snapshot.entries : [];
+        if (entries.length) return entries;
+        return [
+          {
+            path: "index.html",
+            content:
+              snapshot?.indexHtml ||
+              `<!DOCTYPE html><html><head><title>${getSnapshotProjectName(snapshot)}</title></head><body><h1>${getSnapshotProjectName(snapshot)}</h1></body></html>`,
+          },
+        ];
+      }
+
+      async function syncSnapshotFiles(snapshot = terminalSnapshot) {
+        if (!terminalWebContainer || !snapshot) return;
+        const folder = getSnapshotProjectName(snapshot);
+        const entries = buildSnapshotEntries(snapshot);
+        await ensureDirectory(`/${folder}`);
+        for (const entry of entries) {
+          const relativePath = String(entry?.path || "").trim().replace(/^\/+/, "");
+          if (!relativePath) continue;
+          const absolutePath = `/${folder}/${relativePath}`;
+          const parent = absolutePath.split("/").slice(0, -1).join("/");
+          await ensureDirectory(parent);
+          await terminalWebContainer.fs.writeFile(absolutePath, String(entry?.content || ""));
+        }
+        terminalActiveFolder = folder;
+      }
+
+      async function writeShell(value = "") {
+        if (!terminalShellProcess || !String(value || "")) return;
+        if (!terminalShellWriter && typeof terminalShellProcess.input?.getWriter === "function") {
+          terminalShellWriter = terminalShellProcess.input.getWriter();
+        }
+        if (terminalShellWriter?.write) {
+          await terminalShellWriter.write(String(value));
+          return;
+        }
+        if (typeof terminalShellProcess.input?.write === "function") {
+          await terminalShellProcess.input.write(String(value));
+        }
+      }
+
+      async function attachShell() {
+        if (!terminalWebContainer || terminalShellProcess) return;
+        terminalShellProcess = await terminalWebContainer.spawn("jsh");
+        terminalShellWriter = null;
+
+        const output = terminalShellProcess.output;
+        if (output) {
+          const reader = output.getReader();
+          (async () => {
+            while (true) {
+              const { value, done } = await reader.read();
+              if (done) break;
+              if (value) terminalTerm?.write(value);
+            }
+          })().catch((error) => {
+            console.warn("Terminal output loop stopped:", error.message);
+          });
+        }
+      }
+
+      async function activateSnapshot(snapshot = terminalSnapshot, options = {}) {
+        if (!snapshot) return;
+        await ensureRuntime();
+        await syncSnapshotFiles(snapshot);
+        await attachShell();
+        updateProjectChip(snapshot?.context?.name || "medialab");
+        setStatus(`Connected to ${terminalActiveFolder}.`);
+        if (!options.preserveOutput) {
+          terminalTerm?.reset();
+          writeLine(`MediaLab Terminal :: ${terminalActiveFolder}`);
+          writeLine("Type npm, node, or shell commands inside this project workspace.");
+          writeLine("");
+        }
+        await writeShell(`cd /${terminalActiveFolder}\n`);
+        terminalFitAddon?.fit?.();
+      }
+
+      async function mirrorProjectIndexFile() {
+        if (!terminalWebContainer || !terminalSnapshot || terminalSyncLock) return;
+        const folder = terminalActiveFolder || getSnapshotProjectName(terminalSnapshot);
+        try {
+          const content = await terminalWebContainer.fs.readFile(`/${folder}/index.html`, "utf-8");
+          const payload = {
+            type: "terminal-file-update",
+            projectName: folder,
+            path: "index.html",
+            content: String(content || ""),
+            timestamp: Date.now(),
+          };
+          localStorage.setItem(FILE_UPDATE_KEY, JSON.stringify(payload));
+          terminalChannel?.postMessage(payload);
+        } catch {}
+      }
+
+      function queueMirrorLoop() {
+        clearInterval(terminalMirrorTimer);
+        terminalMirrorTimer = setInterval(() => {
+          mirrorProjectIndexFile().catch(() => {});
+        }, 1500);
+      }
+
+      async function applySnapshot(snapshot, options = {}) {
+        if (!snapshot || !snapshot.context) return;
+        terminalSnapshot = snapshot;
+        localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(snapshot));
+        terminalSyncLock = true;
+        try {
+          await activateSnapshot(snapshot, options);
+        } finally {
+          terminalSyncLock = false;
+        }
+      }
+
+      function requestProjectBootstrap() {
+        terminalChannel?.postMessage({ type: "request-bootstrap", timestamp: Date.now() });
+      }
+
+      function getStoredSnapshot() {
+        try {
+          return JSON.parse(localStorage.getItem(SNAPSHOT_KEY) || "null");
+        } catch {
+          return null;
+        }
+      }
+
+      window.requestProjectBootstrap = requestProjectBootstrap;
+
+      terminalChannel?.addEventListener("message", (event) => {
+        const payload = event.data || {};
+        if (payload.type === "project-context") {
+          applySnapshot(payload.payload, { preserveOutput: false }).catch((error) => {
+            setStatus(error.message || "Project sync failed.");
+          });
+        }
+      });
+
+      window.addEventListener("storage", (event) => {
+        if (event.key !== SNAPSHOT_KEY || !event.newValue) return;
+        try {
+          const snapshot = JSON.parse(event.newValue);
+          applySnapshot(snapshot, { preserveOutput: false }).catch(() => {});
+        } catch {}
+      });
+
+      window.addEventListener("resize", () => terminalFitAddon?.fit?.());
+
+      const bootstrapSnapshot = getStoredSnapshot();
+      if (bootstrapSnapshot) {
+        applySnapshot(bootstrapSnapshot, { preserveOutput: false }).catch((error) => {
+          setStatus(error.message || "Terminal bootstrap failed.");
+        });
+      } else {
+        setStatus("Waiting for Studio bootstrap...");
+      }
+
+      queueMirrorLoop();
+      requestProjectBootstrap();
+    </script>
+  </body>
+</html>

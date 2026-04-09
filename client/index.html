@@ -14858,6 +14858,8 @@
       let terminalActiveProjectFolder = "medialab";
       let terminalLastIndexHtmlMirror = "";
       let terminalSyncPauseUntil = 0;
+      let terminalExternalWindow = null;
+      let terminalBroadcastChannel = null;
       let selectionBoxEl = null;
       let builderConfirmAction = null;
       let builderConfirmSecondaryAction = null;
@@ -15818,6 +15820,74 @@
           { path: "package.json", content: buildTerminalPackageJson(context.folderName) },
         ];
       }
+      function ensureTerminalBroadcastChannel() {
+        if (terminalBroadcastChannel || typeof BroadcastChannel !== "function") {
+          return terminalBroadcastChannel;
+        }
+        terminalBroadcastChannel = new BroadcastChannel("medialab_terminal_sync");
+        terminalBroadcastChannel.addEventListener("message", (event) => {
+          const payload = event.data || {};
+          if (payload.type === "request-bootstrap") {
+            broadcastTerminalProjectSnapshot();
+            return;
+          }
+          if (payload.type !== "terminal-file-update") return;
+          const context = getActiveTerminalProjectContext();
+          if (
+            normalizeTerminalProjectSeed(payload.projectName || "") !==
+            normalizeTerminalProjectSeed(context.folderName)
+          ) {
+            return;
+          }
+          const targetPath = normalizeBuilderFilePath(payload.path || "index.html") || "index.html";
+          const content = String(payload.content || "");
+          updateBuilderFileContent(targetPath, content);
+          if (
+            normalizeBuilderFilePath(activeBuilderFilePath || "") === targetPath &&
+            document.getElementById("builder-code-editor")
+          ) {
+            refreshBuilderCodeMode();
+          }
+        });
+        return terminalBroadcastChannel;
+      }
+      function buildTerminalProjectSnapshot() {
+        const context = getActiveTerminalProjectContext();
+        return {
+          context,
+          activePath: normalizeBuilderFilePath(activeBuilderFilePath || "index.html") || "index.html",
+          entries: getTerminalProjectEntries(context),
+          timestamp: Date.now(),
+        };
+      }
+      function broadcastTerminalProjectSnapshot() {
+        const snapshot = buildTerminalProjectSnapshot();
+        try {
+          localStorage.setItem("medialab_terminal_bootstrap", JSON.stringify(snapshot));
+        } catch {}
+        const channel = ensureTerminalBroadcastChannel();
+        channel?.postMessage({ type: "project-context", payload: snapshot });
+        if (terminalExternalWindow && terminalExternalWindow.closed) {
+          terminalExternalWindow = null;
+        }
+        return snapshot;
+      }
+      function openIsolatedTerminalWindow() {
+        const snapshot = broadcastTerminalProjectSnapshot();
+        const features = [
+          "popup=yes",
+          "width=1180",
+          "height=760",
+          "resizable=yes",
+          "scrollbars=yes",
+        ].join(",");
+        if (!terminalExternalWindow || terminalExternalWindow.closed) {
+          terminalExternalWindow = window.open("/studio-terminal", "medialab-studio-terminal", features);
+        } else {
+          terminalExternalWindow.focus();
+        }
+        return snapshot;
+      }
       async function syncTerminalProjectFiles(context = getActiveTerminalProjectContext()) {
         if (!terminalWebContainerInstance) return;
         const rootDir = `/${context.folderName}`;
@@ -15964,6 +16034,7 @@
         if (Date.now() < terminalSyncPauseUntil) return;
         clearTimeout(terminalProjectSyncTimer);
         terminalProjectSyncTimer = setTimeout(() => {
+          broadcastTerminalProjectSnapshot();
           activateTerminalProjectContext().catch(() => {});
         }, delay);
       }
@@ -15973,6 +16044,10 @@
         await activateTerminalProjectContext(options);
       }
       async function toggleTerminalDrawer(forceValue = null) {
+        if (!window.crossOriginIsolated) {
+          openIsolatedTerminalWindow();
+          return;
+        }
         terminalDrawerOpen =
           typeof forceValue === "boolean" ? forceValue : !terminalDrawerOpen;
         updateTerminalDrawerUI();
