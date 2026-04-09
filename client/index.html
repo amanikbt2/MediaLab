@@ -799,6 +799,30 @@
         color: #67e8f9;
         background: rgba(8, 47, 73, 0.9);
       }
+      .builder-layout-child-assist {
+        position: absolute;
+        top: 10px;
+        right: -18px;
+        z-index: 160;
+        display: inline-flex;
+      }
+      .builder-layout-child-btn {
+        width: 34px;
+        height: 34px;
+        border-radius: 999px;
+        border: 1px solid rgba(74, 222, 128, 0.38);
+        background: rgba(20, 83, 45, 0.94);
+        color: #dcfce7;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 14px 30px rgba(20, 83, 45, 0.3);
+        pointer-events: auto;
+      }
+      .builder-layout-child-btn:hover {
+        background: rgba(22, 101, 52, 0.98);
+        border-color: rgba(134, 239, 172, 0.52);
+      }
       .studio-menu-panel {
         position: absolute;
         top: calc(100% + 8px);
@@ -3569,9 +3593,6 @@
               <i class="fas fa-times"></i>
             </button>
           </div>
-        </div>
-        <div class="shrink-0 px-4 py-3 sm:px-5 border-b border-white/5 bg-[linear-gradient(90deg,rgba(16,185,129,0.14),rgba(6,182,212,0.08),transparent)]">
-          <p class="text-xs sm:text-sm text-slate-300">Studio controls are hidden here so you can test the page like a real live website.</p>
         </div>
         <div class="flex-1 min-h-0 bg-white">
           <iframe
@@ -12963,11 +12984,7 @@
             </div>
             <div id="code-mode-panel" class="hidden flex-1 px-2 sm:px-4 pt-2 sm:pt-4 pb-2 sm:pb-4">
                 <div class="code-mode-shell w-full max-w-[1680px] mx-auto">
-                    <div class="flex flex-wrap items-center justify-between gap-3 px-1">
-                        <div>
-                            <p class="text-[10px] font-black uppercase tracking-[0.22em] text-gray-500">Live Code</p>
-                            <p class="text-xs text-gray-400">Edit exact HTML and CSS in a focused mini editor. Valid changes sync back to the visual canvas.</p>
-                        </div>
+                    <div class="flex flex-wrap items-center justify-end gap-3 px-1">
                         <div class="flex gap-2">
                             <button onclick="copyBuilderCode()" class="px-4 py-2.5 rounded-xl bg-white/5 text-[10px] font-black uppercase tracking-[0.16em] text-gray-300 hover:bg-white/10 transition-all">Copy Code</button>
                             <button onclick="applyCodeModeToCanvas()" class="px-4 py-2.5 rounded-xl bg-cyan-600 text-[10px] font-black uppercase tracking-[0.16em] text-white hover:bg-cyan-500 transition-all">Apply to Canvas</button>
@@ -12998,14 +13015,14 @@
                     <i class="fas fa-sitemap text-sm"></i>
                 </button>
             </div>
-            <div id="canvas-container" onclick="deselectAll(event)" class="flex-1 overflow-y-auto overflow-x-hidden flex justify-center items-start px-2 sm:px-4 pt-2 sm:pt-4 pb-20 sm:pb-28 cursor-default custom-scrollbar" style="touch-action: pan-x pan-y pinch-zoom;">
-                <div class="relative flex w-full max-w-[1680px] flex-col items-center">
+            <div id="canvas-container" onclick="deselectAll(event)" class="flex-1 overflow-auto flex justify-center items-start px-2 sm:px-4 pt-2 sm:pt-4 pb-10 sm:pb-12 cursor-default custom-scrollbar" style="touch-action: pan-x pan-y pinch-zoom;">
+                <div class="relative flex w-max min-w-full flex-col items-center">
                     <div class="w-full px-1 sm:px-2 pb-2 flex flex-wrap items-center justify-between gap-2">
                         <div class="flex items-center gap-2">
                             <button id="builder-viewport-toggle" type="button" onclick="toggleBuilderViewportPanel()" class="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-slate-400 hover:text-cyan-200 hover:border-cyan-400/30 transition-colors">
                                 <i class="fas fa-chevron-down text-[10px]"></i>
                             </button>
-                            <div id="builder-canvas-size-label" class="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Desktop Canvas</div>
+                            <div id="builder-canvas-size-label" class="hidden text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Desktop Canvas</div>
                             <div id="builder-viewport-panel" class="hidden items-center gap-2 rounded-lg border border-white/10 bg-[#071122]/95 px-2.5 py-1.5 shadow-[0_18px_38px_rgba(2,6,23,0.45)]">
                                 <label class="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">
                                     <i class="fas fa-laptop-code text-cyan-300"></i>
@@ -13022,9 +13039,8 @@
                                     </select>
                                 </label>
                             </div>
-                            <button id="builder-terminal-toggle" type="button" onclick="toggleTerminalDrawer()" class="toolbar-item inline-flex h-8 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-[10px] font-black uppercase tracking-[0.18em] text-slate-300 hover:text-cyan-100">
+                            <button id="builder-terminal-toggle" type="button" onclick="toggleTerminalDrawer()" class="toolbar-item inline-flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-[10px] font-black uppercase tracking-[0.18em] text-slate-300 hover:text-cyan-100">
                                 <i class="fas fa-terminal text-[11px]"></i>
-                                <span class="hidden sm:inline">Terminal</span>
                             </button>
                         </div>
                         <div id="builder-responsive-controls" class="hidden items-center gap-2 rounded-lg border border-cyan-400/20 bg-cyan-500/[0.08] px-2.5 py-1.5">
@@ -13039,9 +13055,8 @@
                             <span class="px-3 py-1.5 rounded-full bg-white/5 border border-white/5">Mobile Safe</span>
                         </div>
                     </div>
-                    <div id="web-canvas" data-page-background="#ffffff" class="builder-grid bg-white w-full max-w-[1680px] min-h-[calc(100vh-5.2rem)] sm:min-h-[calc(100vh-7.2rem)] relative shadow-[0_60px_150px_rgba(0,0,0,0.55)] rounded-[1.2rem] sm:rounded-[2rem] overflow-hidden transition-transform duration-500">
+                    <div id="web-canvas" data-page-background="#ffffff" class="builder-grid bg-white relative shadow-[0_60px_150px_rgba(0,0,0,0.55)] rounded-[1.2rem] sm:rounded-[2rem] overflow-hidden transition-transform duration-500">
                     </div>
-                    <div class="h-28 sm:h-36"></div>
                 </div>
             </div>
             <div id="element-picker" class="hidden fixed z-[120] bg-gray-950/90 backdrop-blur-2xl border border-white/10 rounded-[2rem] sm:rounded-[3rem] shadow-2xl p-4 sm:p-6 w-[92vw] max-w-[360px] max-h-[72vh] overflow-y-auto animate-fadeIn ring-1 ring-cyan-500/20">
@@ -14372,6 +14387,100 @@
         if (shouldOpen) queueMoreDropdownAutoHide();
         else clearTimeout(moreDropdownTimer);
       }
+      function isBuilderCanvasWorkspaceHelperNode(node) {
+        if (!(node instanceof HTMLElement)) return true;
+        const helperClasses = [
+          "builder-selection-chip",
+          "builder-guide",
+          "builder-layout-guide-overlay",
+          "builder-layout-slot-guide",
+          "builder-selection-box",
+          "builder-layout-scroll-assist",
+        ];
+        return helperClasses.some((className) => node.classList.contains(className));
+      }
+      function snapBuilderWorkspaceValue(value = 0, step = 20) {
+        const safeStep = Math.max(4, Number(step) || 20);
+        return Math.ceil(Math.max(0, Number(value) || 0) / safeStep) * safeStep;
+      }
+      function updateBuilderCanvasWorkspaceSize() {
+        const canvas = document.getElementById("web-canvas");
+        const container = document.getElementById("canvas-container");
+        if (!canvas || !container) return;
+        const computed = window.getComputedStyle(canvas);
+        const gridStep = Math.max(
+          20,
+          parseFloat(String(computed.backgroundSize || "20").split(" ")[0]) || 20,
+        );
+        const buffer = gridStep * 5;
+        const containerHeight = Math.max(520, container.clientHeight - 24);
+        const defaultWidth = Math.min(1680, Math.max(960, container.clientWidth - 24));
+        const baseWidth = Math.max(
+          320,
+          parseInt(canvas.dataset.baseWidth || String(defaultWidth), 10) || defaultWidth,
+        );
+        let furthestRight = 0;
+        let furthestBottom = 0;
+        Array.from(canvas.children).forEach((child) => {
+          if (isBuilderCanvasWorkspaceHelperNode(child)) return;
+          const childStyle = window.getComputedStyle(child);
+          if (childStyle.display === "none" || childStyle.position === "fixed") return;
+          furthestRight = Math.max(furthestRight, child.offsetLeft + child.offsetWidth);
+          furthestBottom = Math.max(furthestBottom, child.offsetTop + child.offsetHeight);
+        });
+        const nextWidth = Math.max(
+          baseWidth,
+          snapBuilderWorkspaceValue(furthestRight + buffer, gridStep),
+        );
+        const nextHeight = Math.max(
+          containerHeight,
+          snapBuilderWorkspaceValue(furthestBottom + buffer, gridStep),
+        );
+        const currentWidth = parseFloat(canvas.style.width || "0");
+        const currentHeight = parseFloat(canvas.style.height || "0");
+        if (
+          Math.abs(currentWidth - nextWidth) < 1 &&
+          Math.abs(currentHeight - nextHeight) < 1
+        ) {
+          return;
+        }
+        canvas.style.width = `${nextWidth}px`;
+        canvas.style.minWidth = `${baseWidth}px`;
+        canvas.style.height = `${nextHeight}px`;
+        canvas.style.minHeight = `${nextHeight}px`;
+      }
+      function requestBuilderCanvasWorkspaceSize() {
+        cancelAnimationFrame(builderCanvasSizeRaf);
+        builderCanvasSizeRaf = requestAnimationFrame(() => {
+          updateBuilderCanvasWorkspaceSize();
+        });
+      }
+      function initBuilderCanvasWorkspaceAutoSize() {
+        const canvas = document.getElementById("web-canvas");
+        const container = document.getElementById("canvas-container");
+        if (!canvas || !container) return;
+        requestBuilderCanvasWorkspaceSize();
+        if (!builderCanvasMutationObserver) {
+          builderCanvasMutationObserver = new MutationObserver(() => {
+            requestBuilderCanvasWorkspaceSize();
+          });
+          builderCanvasMutationObserver.observe(canvas, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ["style", "class"],
+          });
+        }
+        if (!builderCanvasResizeObserver && typeof ResizeObserver === "function") {
+          builderCanvasResizeObserver = new ResizeObserver(() => {
+            requestBuilderCanvasWorkspaceSize();
+          });
+          builderCanvasResizeObserver.observe(canvas);
+          builderCanvasResizeObserver.observe(container);
+        }
+        window.addEventListener("resize", requestBuilderCanvasWorkspaceSize);
+      }
+      document.addEventListener("DOMContentLoaded", initBuilderCanvasWorkspaceAutoSize);
       document.addEventListener("mousedown", (event) => {
         const notificationShell = document.getElementById("notification-shell");
         const notificationDropdown = document.getElementById("notification-dropdown");
@@ -14866,6 +14975,9 @@
       let builderViewportMode = "desktop";
       let builderResponsiveWidth = 1280;
       let builderViewportPanelOpen = false;
+      let builderCanvasSizeRaf = 0;
+      let builderCanvasMutationObserver = null;
+      let builderCanvasResizeObserver = null;
       let feedbackRating = 5;
       let feedbackExitPending = false;
       let feedbackPromptTimer = null;
@@ -16733,13 +16845,17 @@
             ? builderResponsiveWidth
             : preset.width || 0;
         const isDesktop = builderViewportMode === "desktop";
-        if (isDesktop) {
-          canvas.style.width = "100%";
-          canvas.style.maxWidth = "1680px";
-        } else {
-          canvas.style.width = `${viewportWidth}px`;
-          canvas.style.maxWidth = `${viewportWidth}px`;
-        }
+        const desktopWidth = Math.min(
+          1680,
+          Math.max(960, canvas.parentElement?.clientWidth || 1280),
+        );
+        const baseWidth = isDesktop
+          ? desktopWidth
+          : Math.max(320, viewportWidth || builderResponsiveWidth || 1280);
+        canvas.dataset.baseWidth = String(baseWidth);
+        canvas.style.minWidth = `${baseWidth}px`;
+        canvas.style.width = `${Math.max(baseWidth, canvas.offsetWidth || 0)}px`;
+        canvas.style.maxWidth = "none";
         if (controls) {
           controls.classList.toggle(
             "hidden",
@@ -16755,6 +16871,7 @@
             ? "Desktop Canvas"
             : `${preset.label} • ${viewportWidth}px`;
         }
+        requestBuilderCanvasWorkspaceSize();
       }
       document.addEventListener("mousedown", (event) => {
         const panel = document.getElementById("builder-viewport-panel");
@@ -17014,6 +17131,10 @@
       }
       function detachElementFromLayoutFlow(el, canvas) {
         if (!el?.classList?.contains("in-layout-flow") || !canvas) return;
+        const layoutParent = el.parentElement?.closest?.(".canvas-element");
+        if (layoutParent?.id) {
+          el.dataset.lastLayoutParentId = layoutParent.id;
+        }
         const canvasRect = canvas.getBoundingClientRect();
         const elementRect = el.getBoundingClientRect();
         const nextLeft = clampBuilderValue(
@@ -17045,6 +17166,10 @@
       function attachElementToLayoutFlow(el, preview) {
         if (!el || !preview?.host) return;
         const host = preview.host;
+        const layoutParent = host.closest?.(".canvas-element");
+        if (layoutParent?.id) {
+          el.dataset.lastLayoutParentId = layoutParent.id;
+        }
         el.classList.add("in-layout-flow");
         el.classList.remove("absolute");
         Object.assign(el.style, {
@@ -17105,6 +17230,49 @@
           behavior: "smooth",
         });
       }
+      function buildLayoutPreviewForAppend(hostEl, childEl) {
+        const layoutType = getLayoutTypeForTarget(hostEl);
+        const host = getLayoutHostNode(hostEl);
+        if (!layoutType || !host) return null;
+        if (layoutType === "flex") {
+          return {
+            host,
+            layoutType,
+            insertIndex: Array.from(host.children).filter((child) =>
+              child.classList?.contains("canvas-element") && child !== childEl,
+            ).length,
+          };
+        }
+        const computed = window.getComputedStyle(host);
+        const columns = Math.max(
+          1,
+          splitCssTrackList(computed.gridTemplateColumns).length || 1,
+        );
+        const existingCount = Array.from(host.children).filter((child) =>
+          child.classList?.contains("canvas-element") && child !== childEl,
+        ).length;
+        return {
+          host,
+          layoutType,
+          columns,
+          column: existingCount % columns,
+          row: Math.floor(existingCount / columns),
+          colSpan: 1,
+          rowSpan: 1,
+        };
+      }
+      function reattachElementToLastLayoutParent(el) {
+        if (!el) return;
+        const parentId = String(el.dataset.lastLayoutParentId || "").trim();
+        const parentEl = parentId ? document.getElementById(parentId) : null;
+        if (!parentEl || parentEl.getAttribute("data-type") !== "div") return;
+        const preview = buildLayoutPreviewForAppend(parentEl, el);
+        if (!preview) return;
+        attachElementToLayoutFlow(el, preview);
+        selectedEl = el;
+        updateBuilderUI();
+        requestBuilderCanvasWorkspaceSize();
+      }
       function syncLayoutScrollAssist() {
         document
           .querySelectorAll("#web-canvas .builder-layout-scroll-assist")
@@ -17137,6 +17305,47 @@
         });
         wrapper.appendChild(leftBtn);
         wrapper.appendChild(rightBtn);
+        selectedEl.appendChild(wrapper);
+      }
+      function syncLayoutChildSnapAssist() {
+        document
+          .querySelectorAll("#web-canvas .builder-layout-child-assist")
+          .forEach((node) => node.remove());
+        if (!selectedEl || !selectedEl.classList?.contains("canvas-element")) return;
+        const canvas = document.getElementById("web-canvas");
+        if (!canvas) return;
+        const wrapper = document.createElement("div");
+        wrapper.className = "builder-layout-child-assist";
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "builder-layout-child-btn";
+        if (selectedEl.classList.contains("in-layout-flow")) {
+          button.title = "Snap out of layout";
+          button.innerHTML = '<i class="fas fa-arrow-right-from-bracket"></i>';
+          button.addEventListener("pointerdown", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const layoutParent = selectedEl.parentElement?.closest?.(".canvas-element");
+            if (layoutParent?.id) {
+              selectedEl.dataset.lastLayoutParentId = layoutParent.id;
+            }
+            detachElementFromLayoutFlow(selectedEl, canvas);
+            updateBuilderUI();
+            requestBuilderCanvasWorkspaceSize();
+          });
+        } else {
+          const parentId = String(selectedEl.dataset.lastLayoutParentId || "").trim();
+          const parentEl = parentId ? document.getElementById(parentId) : null;
+          if (!parentEl || !getLayoutTypeForTarget(parentEl)) return;
+          button.title = "Snap back into layout";
+          button.innerHTML = '<i class="fas fa-arrow-turn-down-left"></i>';
+          button.addEventListener("pointerdown", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            reattachElementToLastLayoutParent(selectedEl);
+          });
+        }
+        wrapper.appendChild(button);
         selectedEl.appendChild(wrapper);
       }
       function hideBuilderPanels() {
@@ -18930,8 +19139,11 @@ console.log("Triggered ${eventName}", { source, event });
                 s.display,
                 [
                   ["block", "Block"],
+                  ["inline-block", "Inline Block"],
                   ["flex", "Flex"],
+                  ["inline-flex", "Inline Flex"],
                   ["grid", "Grid"],
+                  ["inline-grid", "Inline Grid"],
                 ],
                 "updateStyle('display', this.value)",
               );
@@ -19018,19 +19230,83 @@ console.log("Triggered ${eventName}", { source, event });
                   ],
                   "updateStyle('alignItems', this.value)",
                 );
+                h += renderBuilderSelect(
+                  String(s.flexDirection || "row").startsWith("column")
+                    ? "Column Size"
+                    : "Row Size",
+                  "flexItemMode",
+                  s.flexItemMode,
+                  [
+                    ["auto", "Auto"],
+                    ["specific", "Specific"],
+                  ],
+                  "updateStyle('flexItemMode', this.value)",
+                );
+                if (s.flexItemMode === "specific") {
+                  h += renderBuilderInput(
+                    String(s.flexDirection || "row").startsWith("column")
+                      ? "Child Height"
+                      : "Child Width",
+                    "text",
+                    s.flexItemSize,
+                    "updateStyle('flexItemSize', normalizeCssSize(this.value, '220px'))",
+                  );
+                }
               } else if (s.display === "grid") {
-                h += renderBuilderInput(
+                h += renderBuilderSelect(
                   "Columns",
-                  "text",
-                  s.gridTemplateColumns,
-                  "updateStyle('gridTemplateColumns', this.value || 'repeat(2, minmax(0, 1fr))')",
+                  "gridColumnMode",
+                  s.gridColumnMode,
+                  [
+                    ["auto", "Auto"],
+                    ["specific", "Specific"],
+                  ],
+                  "updateStyle('gridColumnMode', this.value)",
                 );
-                h += renderBuilderInput(
+                if (s.gridColumnMode === "specific") {
+                  h += `<div class="grid grid-cols-2 gap-3">
+                    ${renderBuilderInput(
+                      "Count",
+                      "number",
+                      s.gridColumnCount,
+                      "updateStyle('gridColumnCount', this.value)",
+                      'min=\"1\"',
+                    )}
+                    ${renderBuilderInput(
+                      "Track Size",
+                      "text",
+                      s.gridColumnSize,
+                      "updateStyle('gridColumnSize', this.value || 'minmax(0, 1fr)')",
+                    )}
+                  </div>`;
+                }
+                h += renderBuilderSelect(
                   "Rows",
-                  "text",
-                  s.gridTemplateRows,
-                  "updateStyle('gridTemplateRows', this.value || 'auto')",
+                  "gridRowMode",
+                  s.gridRowMode,
+                  [
+                    ["auto", "Auto"],
+                    ["specific", "Specific"],
+                  ],
+                  "updateStyle('gridRowMode', this.value)",
                 );
+                if (s.gridRowMode === "specific") {
+                  h += `<div class="grid grid-cols-2 gap-3">
+                    ${renderBuilderInput(
+                      "Count",
+                      "number",
+                      s.gridRowCount,
+                      "updateStyle('gridRowCount', this.value)",
+                      'min=\"1\"',
+                    )}
+                    ${renderBuilderInput(
+                      "Track Size",
+                      "text",
+                      s.gridRowSize,
+                      "updateStyle('gridRowSize', this.value || 'auto')",
+                    )}
+                  </div>`;
+                }
               }
             }
             break;
@@ -19469,6 +19745,36 @@ console.log("Triggered ${eventName}", { source, event });
         if (/^-?\d+(\.\d+)?$/.test(trimmed)) return `${trimmed}px`;
         return trimmed;
       }
+      function inferGridTrackMode(template = "") {
+        const value = String(template || "").trim().toLowerCase();
+        if (!value || value === "none" || value === "auto") return "auto";
+        if (value.includes("auto-fit") || value.includes("auto-fill")) return "auto";
+        return "specific";
+      }
+      function inferGridTrackCount(template = "", fallback = 2) {
+        const match = String(template || "").match(/repeat\((\d+)\s*,/i);
+        return String(parseInt(match?.[1] || String(fallback), 10) || fallback);
+      }
+      function inferGridTrackSize(template = "", fallback = "minmax(0, 1fr)") {
+        const raw = String(template || "").trim();
+        const repeatMatch = raw.match(/repeat\(\d+\s*,\s*(.+)\)$/i);
+        if (repeatMatch?.[1]) return repeatMatch[1].trim();
+        if (!raw || raw === "auto" || raw === "none") return fallback;
+        const tracks = splitCssTrackList(raw);
+        return tracks[0] || fallback;
+      }
+      function buildGridTemplateFromControls(mode = "auto", count = 2, size = "minmax(0, 1fr)") {
+        if (mode !== "specific") return "repeat(auto-fit, minmax(180px, 1fr))";
+        const safeCount = Math.max(1, parseInt(String(count || "2"), 10) || 2);
+        const safeSize = String(size || "minmax(0, 1fr)").trim() || "minmax(0, 1fr)";
+        return `repeat(${safeCount}, ${safeSize})`;
+      }
+      function buildGridRowsFromControls(mode = "auto", count = 2, size = "auto") {
+        if (mode !== "specific") return "auto";
+        const safeCount = Math.max(1, parseInt(String(count || "2"), 10) || 2);
+        const safeSize = String(size || "auto").trim() || "auto";
+        return `repeat(${safeCount}, ${safeSize})`;
+      }
       function elementHasNestedCanvasChildren(el) {
         const body = el?.querySelector(".element-body");
         if (!body) return false;
@@ -19645,6 +19951,48 @@ console.log("Triggered ${eventName}", { source, event });
             "repeat(2, minmax(0, 1fr))",
           gridTemplateRows:
             styles.gridTemplateRows || typeDefaults.gridTemplateRows || "auto",
+          gridColumnMode:
+            styles.gridColumnMode ||
+            inferGridTrackMode(
+              styles.gridTemplateColumns ||
+                typeDefaults.gridTemplateColumns ||
+                "repeat(2, minmax(0, 1fr))",
+            ),
+          gridColumnCount:
+            styles.gridColumnCount ||
+            inferGridTrackCount(
+              styles.gridTemplateColumns ||
+                typeDefaults.gridTemplateColumns ||
+                "repeat(2, minmax(0, 1fr))",
+              2,
+            ),
+          gridColumnSize:
+            styles.gridColumnSize ||
+            inferGridTrackSize(
+              styles.gridTemplateColumns ||
+                typeDefaults.gridTemplateColumns ||
+                "repeat(2, minmax(0, 1fr))",
+              "minmax(0, 1fr)",
+            ),
+          gridRowMode:
+            styles.gridRowMode ||
+            inferGridTrackMode(
+              styles.gridTemplateRows || typeDefaults.gridTemplateRows || "auto",
+            ),
+          gridRowCount:
+            styles.gridRowCount ||
+            inferGridTrackCount(
+              styles.gridTemplateRows || typeDefaults.gridTemplateRows || "auto",
+              2,
+            ),
+          gridRowSize:
+            styles.gridRowSize ||
+            inferGridTrackSize(
+              styles.gridTemplateRows || typeDefaults.gridTemplateRows || "auto",
+              "auto",
+            ),
+          flexItemMode: styles.flexItemMode || "auto",
+          flexItemSize: styles.flexItemSize || "220px",
         };
       }
       function parseBackgroundImageUrl(backgroundImage = "") {
@@ -19739,6 +20087,8 @@ console.log("Triggered ${eventName}", { source, event });
           boxSizing: "border-box",
           boxShadow: styles.boxShadow,
         };
+        el.dataset.flexItemMode = styles.flexItemMode || "auto";
+        el.dataset.flexItemSize = styles.flexItemSize || "220px";
         if (type === "text") {
           Object.assign(inner.style, sharedTextStyles, {
             width: "100%",
@@ -19829,6 +20179,34 @@ console.log("Triggered ${eventName}", { source, event });
         if (type === "text") inner.textContent = attrs.text || "Add Text";
         if (type === "button") inner.textContent = attrs.text || "Get Started";
         if (type === "a") inner.textContent = attrs.text || "Learn More";
+        if (type === "div") {
+          const flowChildren = Array.from(inner.children).filter((child) =>
+            child.classList?.contains("canvas-element"),
+          );
+          if (String(styles.display || "").includes("flex")) {
+            const sizeMode = styles.flexItemMode || "auto";
+            const sizeValue = normalizeCssSize(styles.flexItemSize, "220px");
+            const isColumn = String(styles.flexDirection || "row").startsWith("column");
+            flowChildren.forEach((child) => {
+              if (sizeMode === "specific") {
+                child.style.flex = `0 0 ${sizeValue}`;
+                if (isColumn) {
+                  child.style.height = sizeValue;
+                  child.style.width = child.style.width || "100%";
+                } else {
+                  child.style.width = sizeValue;
+                  child.style.height = child.style.height || "auto";
+                }
+              } else {
+                child.style.flex = "";
+                if (child.classList.contains("in-layout-flow")) {
+                  child.style.width = "";
+                  child.style.height = "";
+                }
+              }
+            });
+          }
+        }
         if (el.dataset.preview === "true") {
           el.className = "relative";
         } else {
@@ -19895,6 +20273,8 @@ console.log("Triggered ${eventName}", { source, event });
         if (canvasContainer)
           canvasContainer.classList.toggle("hidden", builderCodeMode);
         if (codePanel) codePanel.classList.toggle("hidden", !builderCodeMode);
+        syncLayoutScrollAssist();
+        syncLayoutChildSnapAssist();
         syncBuilderCodeFileLabel();
       }
       function restoreCanvasSnapshot(index) {
@@ -22117,10 +22497,36 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
       });
       function updateStyle(p, v) {
         currentInspectorState.styles[p] = v;
+        if (
+          [
+            "gridColumnMode",
+            "gridColumnCount",
+            "gridColumnSize",
+            "gridRowMode",
+            "gridRowCount",
+            "gridRowSize",
+          ].includes(p)
+        ) {
+          currentInspectorState.styles.gridTemplateColumns = buildGridTemplateFromControls(
+            currentInspectorState.styles.gridColumnMode,
+            currentInspectorState.styles.gridColumnCount,
+            currentInspectorState.styles.gridColumnSize,
+          );
+          currentInspectorState.styles.gridTemplateRows = buildGridRowsFromControls(
+            currentInspectorState.styles.gridRowMode,
+            currentInspectorState.styles.gridRowCount,
+            currentInspectorState.styles.gridRowSize,
+          );
+        }
         const needsControlRefresh =
           p === "backgroundMode" ||
           p === "backgroundImageUrl" ||
-          p === "backgroundSize";
+          p === "backgroundSize" ||
+          p === "display" ||
+          p === "flexDirection" ||
+          p === "flexItemMode" ||
+          p === "gridColumnMode" ||
+          p === "gridRowMode";
         syncInspectorUI(needsControlRefresh);
         handleBuilderTutorialEvent("inspector-style-updated", {
           property: p,
@@ -22703,6 +23109,14 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
           overflowY: computed?.overflowY || "auto",
           gridTemplateColumns: computed?.gridTemplateColumns || "repeat(2, minmax(0, 1fr))",
           gridTemplateRows: computed?.gridTemplateRows || "auto",
+          gridColumnMode: inferGridTrackMode(computed?.gridTemplateColumns || "repeat(2, minmax(0, 1fr))"),
+          gridColumnCount: inferGridTrackCount(computed?.gridTemplateColumns || "repeat(2, minmax(0, 1fr))", 2),
+          gridColumnSize: inferGridTrackSize(computed?.gridTemplateColumns || "repeat(2, minmax(0, 1fr))", "minmax(0, 1fr)"),
+          gridRowMode: inferGridTrackMode(computed?.gridTemplateRows || "auto"),
+          gridRowCount: inferGridTrackCount(computed?.gridTemplateRows || "auto", 2),
+          gridRowSize: inferGridTrackSize(computed?.gridTemplateRows || "auto", "auto"),
+          flexItemMode: el.dataset.flexItemMode || "auto",
+          flexItemSize: el.dataset.flexItemSize || "220px",
         };
       }
     </script>
