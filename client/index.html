@@ -16916,25 +16916,38 @@
         return "";
       }
       function getNearestLayoutDropTarget(event, draggedEl) {
-        const rawTarget = event.target instanceof Element ? event.target : null;
-        const fallbackFromPoint = document.elementFromPoint(event.clientX, event.clientY);
-        const startNode = rawTarget || fallbackFromPoint;
-        if (!startNode) return null;
-        let node = startNode;
-        while (node && node !== document.body) {
-          const candidate = node.closest?.(".canvas-element");
+        const hitStack =
+          (typeof document.elementsFromPoint === "function"
+            ? document.elementsFromPoint(event.clientX, event.clientY)
+            : [document.elementFromPoint(event.clientX, event.clientY)]).filter(Boolean);
+        const candidates = [];
+        hitStack.forEach((node) => {
+          const candidate = node?.closest?.(".canvas-element");
           if (
             candidate &&
             candidate !== draggedEl &&
             !candidate.contains(draggedEl) &&
-            candidate.getAttribute("data-type") === "div"
+            candidate.getAttribute("data-type") === "div" &&
+            !candidates.includes(candidate)
           ) {
-            const layoutType = getLayoutTypeForTarget(candidate);
-            if (layoutType) {
-              return { target: candidate, layoutType };
-            }
+            candidates.push(candidate);
           }
-          node = node.parentElement;
+        });
+        for (const candidate of candidates) {
+          const layoutType = getLayoutTypeForTarget(candidate);
+          if (!layoutType) continue;
+          const host = getLayoutHostNode(candidate);
+          const rect = host?.getBoundingClientRect?.();
+          if (!rect) continue;
+          const magnet = 18;
+          const withinMagnet =
+            event.clientX >= rect.left - magnet &&
+            event.clientX <= rect.right + magnet &&
+            event.clientY >= rect.top - magnet &&
+            event.clientY <= rect.bottom + magnet;
+          if (withinMagnet) {
+            return { target: candidate, layoutType };
+          }
         }
         return null;
       }
