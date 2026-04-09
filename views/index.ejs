@@ -824,16 +824,18 @@
         border-color: rgba(134, 239, 172, 0.52);
       }
       .inspector-mode-tab {
-        flex: 1;
+        width: 42px;
+        height: 42px;
+        flex: 0 0 42px;
         border-radius: 999px;
         border: 1px solid rgba(255,255,255,0.08);
         background: rgba(255,255,255,0.04);
         color: #94a3b8;
-        font-size: 10px;
+        font-size: 8px;
         font-weight: 900;
-        letter-spacing: 0.22em;
+        letter-spacing: 0.12em;
         text-transform: uppercase;
-        padding: 10px 12px;
+        padding: 0;
         transition: all 0.2s ease;
       }
       .inspector-mode-tab.active {
@@ -879,6 +881,40 @@
         50% { transform: rotate(0deg) translateY(-12px) scale(1.04); }
         75% { transform: rotate(-4deg) translateY(-6px) scale(1.02); }
         100% { transform: rotate(0deg) translateY(0px) scale(1); }
+      }
+      @keyframes mlBackgroundGlow {
+        0%, 100% { filter: brightness(1) saturate(1); }
+        50% { filter: brightness(1.18) saturate(1.22); }
+      }
+      @keyframes mlAuroraFlow {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+      }
+      @keyframes mlBounceLift {
+        0%, 100% { transform: translateY(0); }
+        30% { transform: translateY(-18px); }
+        55% { transform: translateY(0); }
+        72% { transform: translateY(-8px); }
+      }
+      @keyframes mlMagicHover {
+        0%, 100% { transform: translateY(0) rotate(0deg); filter: drop-shadow(0 0 0 rgba(34,211,238,0)); }
+        50% { transform: translateY(-10px) rotate(1.6deg); filter: drop-shadow(0 0 18px rgba(34,211,238,0.35)); }
+      }
+      @keyframes mlElasticPop {
+        0%, 100% { transform: scale(1); }
+        30% { transform: scale(1.12, 0.9); }
+        50% { transform: scale(0.96, 1.04); }
+        72% { transform: scale(1.04, 0.98); }
+      }
+      @keyframes mlSwingArc {
+        0%, 100% { transform: rotate(0deg); transform-origin: top center; }
+        25% { transform: rotate(6deg); }
+        75% { transform: rotate(-6deg); }
+      }
+      @keyframes mlGhostTrail {
+        0%, 100% { opacity: 1; filter: blur(0px); }
+        50% { opacity: 0.42; filter: blur(1.5px); }
       }
       .studio-menu-panel {
         position: absolute;
@@ -14957,21 +14993,28 @@
           ["none", "None"],
           ["mlFadePulse", "Fade Pulse"],
           ["mlBlinkSoft", "Blink Soft"],
+          ["mlGhostTrail", "Ghost Trail"],
         ],
         color: [
           ["none", "None"],
           ["mlHueShift", "Hue Shift"],
+          ["mlBackgroundGlow", "Background Glow"],
+          ["mlAuroraFlow", "Aurora Flow"],
         ],
         transform: [
           ["none", "None"],
           ["mlWidthBreathe", "Width Breathe"],
           ["mlRotateDrift", "Rotate Drift"],
+          ["mlElasticPop", "Elastic Pop"],
+          ["mlSwingArc", "Swing Arc"],
         ],
         motion: [
           ["none", "None"],
           ["mlFloatBob", "Float"],
           ["mlSlideSweep", "Slide Sweep"],
           ["mlOrbitTilt", "Orbit Tilt"],
+          ["mlBounceLift", "Bounce Lift"],
+          ["mlMagicHover", "Magic Hover"],
         ],
       };
       const BUILDER_INTERACTION_TRIGGERS = [
@@ -19189,104 +19232,96 @@ console.log("Triggered ${eventName}", { source, event });
         const s = normalizeBuilderStyles(styles, currentInspectorState.type);
         let h = `<div class="space-y-3">`;
         const pageKey = inspectorAnimationPages[inspectorPageIndex] || "Opacity";
-        if (pageKey === "Opacity") {
-          h += renderBuilderSelect(
-            "Preset",
-            "animationName",
-            s.animationName,
-            inspectorAnimationPresets.opacity,
-            "updateStyle('animationName', this.value)",
-          );
-        } else if (pageKey === "Color") {
-          h += renderBuilderSelect(
-            "Preset",
-            "animationName",
-            s.animationName,
-            inspectorAnimationPresets.color,
-            "updateStyle('animationName', this.value)",
-          );
-        } else if (pageKey === "Transform") {
-          h += renderBuilderSelect(
-            "Preset",
-            "animationName",
-            s.animationName,
-            inspectorAnimationPresets.transform,
-            "updateStyle('animationName', this.value)",
-          );
-        } else {
-          h += renderBuilderSelect(
-            "Preset",
-            "animationName",
-            s.animationName,
-            inspectorAnimationPresets.motion,
-            "updateStyle('animationName', this.value)",
-          );
-        }
-        h += `<div class="grid grid-cols-2 gap-3">
-          ${renderBuilderInput("Duration", "text", s.animationDuration, "updateStyle('animationDuration', normalizeCssSize(this.value, '1.6s'))")}
-          ${renderBuilderInput("Delay", "text", s.animationDelay, "updateStyle('animationDelay', normalizeCssSize(this.value, '0s'))")}
-        </div>`;
-        h += renderBuilderSelect(
-          "Timing",
-          "animationTimingFunction",
-          s.animationTimingFunction,
-          [
-            ["ease", "Ease"],
-            ["ease-in", "Ease In"],
-            ["ease-out", "Ease Out"],
-            ["ease-in-out", "Ease In Out"],
-            ["linear", "Linear"],
-            ["cubic-bezier(0.22, 1, 0.36, 1)", "Expressive"],
-          ],
-          "updateStyle('animationTimingFunction', this.value)",
-        );
-        h += renderBuilderSelect(
-          "Direction",
-          "animationDirection",
-          s.animationDirection,
-          [
-            ["normal", "Normal"],
-            ["reverse", "Reverse"],
-            ["alternate", "Alternate"],
-            ["alternate-reverse", "Alt Reverse"],
-          ],
-          "updateStyle('animationDirection', this.value)",
-        );
-        h += renderBuilderSelect(
-          "Repeat",
-          "animationIterationCount",
-          s.animationIterationCount,
-          [
-            ["1", "Once"],
-            ["2", "2 Times"],
-            ["3", "3 Times"],
-            ["5", "5 Times"],
-            ["infinite", "Infinite"],
-          ],
-          "updateStyle('animationIterationCount', this.value)",
-        );
-        h += renderBuilderSelect(
-          "Fill Mode",
-          "animationFillMode",
-          s.animationFillMode,
-          [
-            ["none", "None"],
-            ["forwards", "Forwards"],
-            ["backwards", "Backwards"],
-            ["both", "Both"],
-          ],
-          "updateStyle('animationFillMode', this.value)",
-        );
-        h += renderBuilderSelect(
-          "Start State",
-          "animationPlayState",
-          s.animationPlayState,
-          [
-            ["running", "Start Immediately"],
-            ["paused", "Paused"],
-          ],
-          "updateStyle('animationPlayState', this.value)",
-        );
+        const presetOptions =
+          pageKey === "Opacity"
+            ? inspectorAnimationPresets.opacity
+            : pageKey === "Color"
+              ? inspectorAnimationPresets.color
+              : pageKey === "Transform"
+                ? inspectorAnimationPresets.transform
+                : inspectorAnimationPresets.motion;
+        normalizeAnimationStack(s.animationStack).forEach((layer, index) => {
+          h += `<div class="rounded-[1.2rem] border border-white/8 bg-white/[0.03] p-3.5 space-y-3">
+            <div class="flex items-center justify-between gap-3">
+              <div class="text-[9px] font-black uppercase tracking-[0.22em] text-cyan-300">Layer ${index + 1}</div>
+              <div class="text-[9px] text-slate-500">${layer.name === "none" ? "Inactive" : "Active"}</div>
+            </div>
+            ${renderBuilderSelect(
+              "Preset",
+              `animation-layer-${index}-name`,
+              layer.name,
+              presetOptions,
+              `updateAnimationLayer(${index}, 'name', this.value)`,
+            )}
+            <div class="grid grid-cols-2 gap-3">
+              ${renderBuilderInput(
+                "Duration",
+                "text",
+                layer.duration,
+                `updateAnimationLayer(${index}, 'duration', normalizeCssSize(this.value, '1.6s'))`,
+              )}
+              ${renderBuilderInput(
+                "Delay",
+                "text",
+                layer.delay,
+                `updateAnimationLayer(${index}, 'delay', normalizeCssSize(this.value, '0s'))`,
+              )}
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              ${renderBuilderSelect(
+                "Repeat",
+                `animation-layer-${index}-repeat`,
+                layer.iterationCount,
+                [
+                  ["1", "Once"],
+                  ["2", "2 Times"],
+                  ["3", "3 Times"],
+                  ["5", "5 Times"],
+                  ["infinite", "Infinity"],
+                ],
+                `updateAnimationLayer(${index}, 'iterationCount', this.value)`,
+              )}
+              ${renderBuilderSelect(
+                "Reverse",
+                `animation-layer-${index}-direction`,
+                layer.direction,
+                [
+                  ["normal", "Normal"],
+                  ["reverse", "Reverse"],
+                  ["alternate", "Alternate"],
+                  ["alternate-reverse", "Alt Reverse"],
+                ],
+                `updateAnimationLayer(${index}, 'direction', this.value)`,
+              )}
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              ${renderBuilderSelect(
+                "Timing",
+                `animation-layer-${index}-timing`,
+                layer.timingFunction,
+                [
+                  ["ease", "Ease"],
+                  ["ease-in", "Ease In"],
+                  ["ease-out", "Ease Out"],
+                  ["ease-in-out", "Ease In Out"],
+                  ["linear", "Linear"],
+                  ["cubic-bezier(0.22, 1, 0.36, 1)", "Expressive"],
+                ],
+                `updateAnimationLayer(${index}, 'timingFunction', this.value)`,
+              )}
+              ${renderBuilderSelect(
+                "Start",
+                `animation-layer-${index}-play`,
+                layer.playState,
+                [
+                  ["running", "Start"],
+                  ["paused", "Paused"],
+                ],
+                `updateAnimationLayer(${index}, 'playState', this.value)`,
+              )}
+            </div>
+          </div>`;
+        });
         h += `</div>`;
         return h;
       }
@@ -20003,6 +20038,49 @@ console.log("Triggered ${eventName}", { source, event });
         const safeSize = String(size || "auto").trim() || "auto";
         return `repeat(${safeCount}, ${safeSize})`;
       }
+      function normalizeAnimationStack(stack = []) {
+        const safeStack = Array.isArray(stack) ? stack : [];
+        return Array.from({ length: 3 }, (_, index) => {
+          const item = safeStack[index] || {};
+          return {
+            name: String(item.name || "none"),
+            duration: String(item.duration || "1.6s"),
+            delay: String(item.delay || "0s"),
+            iterationCount: String(item.iterationCount || "1"),
+            direction: String(item.direction || "normal"),
+            timingFunction: String(item.timingFunction || "ease-in-out"),
+            fillMode: String(item.fillMode || "both"),
+            playState: String(item.playState || "running"),
+          };
+        });
+      }
+      function buildAnimationCssFromStack(stack = []) {
+        const active = normalizeAnimationStack(stack).filter(
+          (item) => item.name && item.name !== "none",
+        );
+        if (!active.length) {
+          return {
+            animationName: "none",
+            animationDuration: "0s",
+            animationDelay: "0s",
+            animationIterationCount: "1",
+            animationDirection: "normal",
+            animationTimingFunction: "ease",
+            animationFillMode: "none",
+            animationPlayState: "running",
+          };
+        }
+        return {
+          animationName: active.map((item) => item.name).join(", "),
+          animationDuration: active.map((item) => item.duration).join(", "),
+          animationDelay: active.map((item) => item.delay).join(", "),
+          animationIterationCount: active.map((item) => item.iterationCount).join(", "),
+          animationDirection: active.map((item) => item.direction).join(", "),
+          animationTimingFunction: active.map((item) => item.timingFunction).join(", "),
+          animationFillMode: active.map((item) => item.fillMode).join(", "),
+          animationPlayState: active.map((item) => item.playState).join(", "),
+        };
+      }
       function elementHasNestedCanvasChildren(el) {
         const body = el?.querySelector(".element-body");
         if (!body) return false;
@@ -20236,6 +20314,9 @@ console.log("Triggered ${eventName}", { source, event });
             styles.animationFillMode || typeDefaults.animationFillMode || "both",
           animationPlayState:
             styles.animationPlayState || typeDefaults.animationPlayState || "running",
+          animationStack: normalizeAnimationStack(
+            styles.animationStack || typeDefaults.animationStack || [],
+          ),
         };
       }
       function parseBackgroundImageUrl(backgroundImage = "") {
@@ -20263,6 +20344,7 @@ console.log("Triggered ${eventName}", { source, event });
         const inner = getElementInnerNode(el);
         if (!inner) return;
         inner.style.cssText = "";
+        const animationCss = buildAnimationCssFromStack(styles.animationStack);
         Object.assign(el.style, {
           background: "transparent",
           borderRadius: "0px",
@@ -20273,19 +20355,19 @@ console.log("Triggered ${eventName}", { source, event });
           opacity: styles.opacity,
           mixBlendMode: styles.mixBlendMode,
           transform: `rotate(${styles.rotate})`,
-          animationName:
-            styles.animationName && styles.animationName !== "none"
-              ? styles.animationName
-              : "none",
-          animationDuration: styles.animationDuration || "1.6s",
-          animationTimingFunction: styles.animationTimingFunction || "ease-in-out",
-          animationDelay: styles.animationDelay || "0s",
-          animationIterationCount: styles.animationIterationCount || "infinite",
-          animationDirection: styles.animationDirection || "normal",
-          animationFillMode: styles.animationFillMode || "both",
-          animationPlayState: styles.animationPlayState || "running",
+          animationName: animationCss.animationName,
+          animationDuration: animationCss.animationDuration,
+          animationTimingFunction: animationCss.animationTimingFunction,
+          animationDelay: animationCss.animationDelay,
+          animationIterationCount: animationCss.animationIterationCount,
+          animationDirection: animationCss.animationDirection,
+          animationFillMode: animationCss.animationFillMode,
+          animationPlayState: animationCss.animationPlayState,
           padding: "0px",
         });
+        el.dataset.animationStack = JSON.stringify(
+          normalizeAnimationStack(styles.animationStack),
+        );
         const sharedTextStyles = {
           color: styles.color,
           fontSize: styles.fontSize,
@@ -22875,6 +22957,15 @@ ${interactionScript ? `\n${interactionScript}` : ""}
           page: inspectorPages[inspectorPageIndex] || "",
         });
       }
+      function updateAnimationLayer(index = 0, key = "name", value = "") {
+        const stack = normalizeAnimationStack(currentInspectorState.styles.animationStack);
+        if (!stack[index]) return;
+        stack[index][key] = value;
+        currentInspectorState.styles.animationStack = stack;
+        const animationCss = buildAnimationCssFromStack(stack);
+        Object.assign(currentInspectorState.styles, animationCss);
+        syncInspectorUI(true);
+      }
       function updateAttr(p, v) {
         currentInspectorState.attributes[p] = v;
         updateInspectorPreview();
@@ -23472,6 +23563,9 @@ ${interactionScript ? `\n${interactionScript}` : ""}
           animationDirection: computed?.animationDirection || "normal",
           animationFillMode: computed?.animationFillMode || "both",
           animationPlayState: computed?.animationPlayState || "running",
+          animationStack: normalizeAnimationStack(
+            JSON.parse(el.dataset.animationStack || "[]"),
+          ),
         };
       }
     </script>
