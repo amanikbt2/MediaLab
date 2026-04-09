@@ -14665,12 +14665,14 @@
         "Effects",
         "Transform",
         "Position",
-        "Events",
         "Interactions",
         "Custom CSS",
       ];
       const BUILDER_INTERACTION_TRIGGERS = [
         { key: "click", label: "On Click", domEvent: "click" },
+        { key: "pointerdown", label: "On Pointer Down", domEvent: "pointerdown" },
+        { key: "pointermove", label: "On Pointer Move", domEvent: "pointermove" },
+        { key: "pointerup", label: "On Pointer Up", domEvent: "pointerup" },
         { key: "mouseenter", label: "On Hover", domEvent: "mouseenter" },
         { key: "dblclick", label: "On Double Click", domEvent: "dblclick" },
         { key: "mouseleave", label: "On Mouse Leave", domEvent: "mouseleave" },
@@ -14681,6 +14683,20 @@
         { key: "submit", label: "On Submit", domEvent: "submit" },
         { key: "keydown", label: "On Key Down", domEvent: "keydown" },
         { key: "keyup", label: "On Key Up", domEvent: "keyup" },
+        { key: "dragstart", label: "On Drag Start", domEvent: "dragstart" },
+        { key: "drag", label: "On Drag", domEvent: "drag" },
+        { key: "dragend", label: "On Drag End", domEvent: "dragend" },
+        { key: "dragenter", label: "On Drag Enter", domEvent: "dragenter" },
+        { key: "dragover", label: "On Drag Over", domEvent: "dragover" },
+        { key: "dragleave", label: "On Drag Leave", domEvent: "dragleave" },
+        { key: "drop", label: "On Drop", domEvent: "drop" },
+        { key: "touchstart", label: "On Touch Start", domEvent: "touchstart" },
+        { key: "touchmove", label: "On Touch Move", domEvent: "touchmove" },
+        { key: "touchend", label: "On Touch End", domEvent: "touchend" },
+        { key: "contextmenu", label: "On Right Click", domEvent: "contextmenu" },
+        { key: "wheel", label: "On Wheel", domEvent: "wheel" },
+        { key: "scroll", label: "On Scroll", domEvent: "scroll" },
+        { key: "load", label: "On Load", domEvent: "load" },
       ];
       const BUILDER_EVENT_CATALOG = [
         "click",
@@ -14716,6 +14732,8 @@
       let activeBuilderPanel = null;
       let codeApplyTimer = null;
       let builderPanelIdleTimer = null;
+      let builderLoadedTemplateSlug = "";
+      let builderTemplateRuntimeDocument = "";
       let selectionBoxEl = null;
       let builderConfirmAction = null;
       let builderConfirmSecondaryAction = null;
@@ -17310,6 +17328,8 @@ console.log("Triggered ${eventName}", { source, event });
         if (!canvas) return;
         builderImportedProject = null;
         builderRawImportDocument = "";
+        builderLoadedTemplateSlug = "";
+        builderTemplateRuntimeDocument = "";
         resetBuilderProjectFiles();
         canvas.innerHTML = "";
         applyCanvasDesignPreset("clean", true);
@@ -17700,6 +17720,8 @@ console.log("Triggered ${eventName}", { source, event });
           html = html.replace(/__MEDIALAB_OWNER_NAME__/g, ownerName);
           builderImportedProject = null;
           builderRawImportDocument = html;
+          builderLoadedTemplateSlug = String(slug || "").trim().toLowerCase();
+          builderTemplateRuntimeDocument = html;
           setBuilderProjectFromEntries(labels[slug] || "Website Template", [{ path: "index.html", content: html }], "index.html");
           builderCodeMode = true;
           updateBuilderUI();
@@ -18670,20 +18692,6 @@ console.log("Triggered ${eventName}", { source, event });
             </div>`;
             break;
           case 11:
-            h += `<div class="rounded-2xl border border-white/5 bg-white/[0.03] p-3">
-              <div class="text-[8px] font-black uppercase tracking-[0.24em] text-cyan-400 mb-3">Available DOM Events</div>
-              <div class="max-h-[290px] overflow-y-auto space-y-2 pr-1">
-                ${BUILDER_EVENT_CATALOG.map(
-                  (eventName) => `
-                    <div class="rounded-xl border border-white/5 bg-white/[0.03] px-3 py-2 text-[11px] text-slate-300 flex items-center justify-between gap-2">
-                      <span>${eventName}</span>
-                      <span class="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">${Object.prototype.hasOwnProperty.call(a.interactions || {}, eventName) ? "Mapped" : "Free"}</span>
-                    </div>`,
-                ).join("")}
-              </div>
-            </div>`;
-            break;
-          case 12:
             h += `<div class="rounded-2xl border border-white/5 bg-white/[0.03] p-3 space-y-3">
               <div class="flex items-center justify-between gap-3">
                 <div>
@@ -18711,7 +18719,7 @@ console.log("Triggered ${eventName}", { source, event });
               </div>
             </div>`;
             break;
-          case 13:
+          case 12:
             const customCssRules = normalizeCustomCssRules(a.customCssRules);
             h += renderBuilderInput(
               "Custom CSS Class",
@@ -20256,30 +20264,69 @@ console.log("Triggered ${eventName}", { source, event });
         currentInspectorState.attributes.customCssRules = rules;
         updateInspectorPreview();
       }
+      function withImportantDeclarations(styleText = "") {
+        return String(styleText || "")
+          .split(";")
+          .map((part) => String(part || "").trim())
+          .filter(Boolean)
+          .map((part) => {
+            const separatorIndex = part.indexOf(":");
+            if (separatorIndex <= 0) return "";
+            const property = part.slice(0, separatorIndex).trim();
+            const value = part.slice(separatorIndex + 1).trim();
+            if (!property || !value) return "";
+            return `${property}: ${value.replace(/\s*!important\s*$/i, "")} !important;`;
+          })
+          .filter(Boolean)
+          .join(" ");
+      }
+      function buildScopedCustomCssText(scopeId = "", rulesInput = []) {
+        const rules = normalizeCustomCssRules(rulesInput);
+        const rootSelector = `[data-custom-css-scope="${scopeId}"]`;
+        const primarySelector = `${rootSelector} [data-builder-primary-target="true"]`;
+        return rules
+          .map((rule) => {
+            const selector = String(rule.selector || "").trim();
+            const declarations = withImportantDeclarations(rule.styles || "");
+            if (!declarations) return "";
+            let scopedSelector = primarySelector;
+            if (selector && !["self", "&", "element"].includes(selector.toLowerCase())) {
+              if (selector.includes("&")) {
+                scopedSelector = selector.replace(/&/g, primarySelector);
+              } else if (/^(?:[>:+~]|\[)/.test(selector)) {
+                scopedSelector = `${primarySelector}${selector}`;
+              } else {
+                scopedSelector = `${rootSelector} ${selector}`;
+              }
+            }
+            return `${scopedSelector} { ${declarations} }`;
+          })
+          .filter(Boolean)
+          .join("\n");
+      }
       function applyCustomCssRulesToElement(el, rulesInput) {
         if (!el) return;
         const rules = normalizeCustomCssRules(rulesInput);
         el.dataset.customCssRules = JSON.stringify(rules);
         const body = el.querySelector(".element-body");
         if (!body) return;
-        const baseCss = body.dataset.baseInlineCss || body.style.cssText || "";
-        body.dataset.baseInlineCss = baseCss;
-        body.style.cssText = baseCss;
-        rules.forEach((rule) => {
-          const selector = String(rule.selector || "")
-            .trim()
-            .toLowerCase();
-          const styleText = String(rule.styles || "").trim();
-          if (!styleText) return;
-          if (
-            !selector ||
-            selector === "self" ||
-            selector === "&" ||
-            selector === "element"
-          ) {
-            body.style.cssText = `${body.style.cssText};${styleText}`;
-          }
-        });
+        el
+          .querySelectorAll("[data-builder-primary-target='true']")
+          .forEach((node) => node.removeAttribute("data-builder-primary-target"));
+        const primaryTarget = getElementInnerNode(el) || body;
+        primaryTarget.setAttribute("data-builder-primary-target", "true");
+        const existingStyleTag = el.querySelector(":scope > style[data-builder-custom-css='true']");
+        if (existingStyleTag) existingStyleTag.remove();
+        const scopeId =
+          String(el.dataset.customCssScope || "").trim() ||
+          `mlcss_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        el.dataset.customCssScope = scopeId;
+        const scopedCssText = buildScopedCustomCssText(scopeId, rules);
+        if (!scopedCssText) return;
+        const styleTag = document.createElement("style");
+        styleTag.dataset.builderCustomCss = "true";
+        styleTag.textContent = scopedCssText;
+        el.appendChild(styleTag);
       }
       function formatCssDeclarationBlock(styleText = "", indent = "  ") {
         return String(styleText)
@@ -21355,6 +21402,13 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
       function openBuilderRunMode() {
         const activePath = normalizeBuilderFilePath(activeBuilderFilePath || getFirstBuilderHtmlFilePath() || "index.html");
         const activeDocument = getBuilderEditorDocument();
+        if (
+          builderLoadedTemplateSlug === "candycrush" &&
+          String(builderTemplateRuntimeDocument || "").trim()
+        ) {
+          openBuilderRunModeWithHtml(builderTemplateRuntimeDocument);
+          return;
+        }
         if (isBuilderHtmlFile(activePath) && /<html[\s>]/i.test(String(activeDocument || ""))) {
           openBuilderRunModeWithHtml(buildBuilderRuntimeDocument(activePath, activeDocument));
           return;
@@ -21392,7 +21446,12 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
       }
       function openBuilderRunModeInNewTab() {
         const runDocument =
-          builderImportedProject?.rootHtml || builderRawImportDocument || buildCodeModeDocument();
+          (builderLoadedTemplateSlug === "candycrush" &&
+          String(builderTemplateRuntimeDocument || "").trim())
+            ? builderTemplateRuntimeDocument
+            : builderImportedProject?.rootHtml ||
+              builderRawImportDocument ||
+              buildCodeModeDocument();
         if (!String(runDocument || "").trim()) {
           showBuilderSnackbar("Add content to the canvas before running the site.", "error");
           return;
@@ -21583,12 +21642,12 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
         const a = currentInspectorState.attributes;
         preview.innerHTML = "";
         const stageWidth = Math.max(
-          220,
-          Math.min((preview.clientWidth || 320) - 24, 340),
+          210,
+          Math.min((preview.clientWidth || 320) - 52, 316),
         );
         const stageHeight = Math.max(
-          150,
-          Math.min((preview.clientHeight || 190) - 18, 210),
+          146,
+          Math.min((preview.clientHeight || 190) - 42, 196),
         );
         Object.assign(preview.style, {
           width: "100%",
@@ -21596,9 +21655,11 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          padding: "0",
-          background: type === "text" ? "#ffffff" : "rgba(15,23,42,0.18)",
+          padding: "14px",
+          background:
+            "radial-gradient(circle at top, rgba(34,211,238,0.12), transparent 42%), linear-gradient(180deg, rgba(15,23,42,0.96), rgba(2,6,23,0.92))",
           borderRadius: "28px",
+          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
         });
         const previewStage = document.createElement("div");
         Object.assign(previewStage.style, {
@@ -21607,10 +21668,18 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          overflow: "hidden",
+          overflow: "visible",
           position: "relative",
-          borderRadius: "22px",
-          padding: "8px",
+          borderRadius: "24px",
+          padding: "16px",
+          background:
+            type === "text"
+              ? "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.98))"
+              : "linear-gradient(180deg, rgba(15,23,42,0.9), rgba(30,41,59,0.88))",
+          border: "1px solid rgba(148,163,184,0.22)",
+          boxShadow:
+            "0 18px 38px rgba(2,6,23,0.35), inset 0 1px 0 rgba(255,255,255,0.05)",
+          perspective: "1200px",
         });
         let previewShell;
         if (currentInspectorState.targetEl) {
@@ -21621,10 +21690,11 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
           const toolbar = previewShell.querySelector(".absolute.-top-10");
           if (toolbar) toolbar.remove();
           previewShell.dataset.preview = "true";
-          previewShell.className = "relative";
+          previewShell.className = `relative ${a.className || ""}`.trim();
         } else {
           previewShell = document.createElement("div");
           previewShell.dataset.preview = "true";
+          previewShell.className = `relative ${a.className || ""}`.trim();
           previewShell.innerHTML =
             '<div class="element-body w-full h-full overflow-visible"></div>';
         }
@@ -21637,10 +21707,21 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
           currentInspectorState.targetEl?.offsetHeight ||
           (type === "textarea" ? 128 : type === "div" ? 160 : 96);
         const scale = Math.min(
-          (stageWidth - 16) / rawWidth,
-          (stageHeight - 16) / rawHeight,
+          (stageWidth - 36) / rawWidth,
+          (stageHeight - 36) / rawHeight,
           1,
         );
+        const previewScaleFrame = document.createElement("div");
+        Object.assign(previewScaleFrame.style, {
+          position: "relative",
+          width: `${rawWidth}px`,
+          height: `${rawHeight}px`,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          transform: `scale(${scale})`,
+          transformOrigin: "center center",
+        });
         Object.assign(previewShell.style, {
           position: "relative",
           width: `${rawWidth}px`,
@@ -21648,8 +21729,6 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
           left: "0px",
           top: "0px",
           zIndex: "1",
-          transform: `scale(${scale})`,
-          transformOrigin: "center center",
           margin: "0 auto",
           overflow: "visible",
         });
@@ -21672,7 +21751,8 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
           ...a,
         });
         applyCustomCssRulesToElement(previewShell, a.customCssRules);
-        previewStage.appendChild(previewShell);
+        previewScaleFrame.appendChild(previewShell);
+        previewStage.appendChild(previewScaleFrame);
         preview.appendChild(previewStage);
       }
       function resetSmartInspectorState() {
