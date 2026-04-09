@@ -15010,6 +15010,10 @@
           updateBuilderFileContent(activePath, editor?.value || getBuilderFileContent(activePath));
           return;
         }
+        if (isBuilderHtmlFile(activePath)) {
+          updateBuilderFileContent(activePath, buildCodeModeDocument());
+          return;
+        }
         updateBuilderFileContent(activePath, canvas?.innerHTML || "");
       }
       function syncBuilderProjectNameLabel() {
@@ -19599,6 +19603,85 @@ console.log("Triggered ${eventName}", { source, event });
         );
         return backgroundMatch?.[1]?.trim() || "#ffffff";
       }
+      function getImportableBodyNodes(doc) {
+        return Array.from(doc?.body?.children || []).filter((node) => {
+          const tag = String(node?.tagName || "").toLowerCase();
+          if (!tag) return false;
+          if (["script", "style", "link", "meta", "noscript", "template"].includes(tag)) {
+            return false;
+          }
+          if (
+            node.classList?.contains("raw-import-shell") ||
+            node.id === "builder-import-frame"
+          ) {
+            return false;
+          }
+          return true;
+        });
+      }
+      function inferBuilderImportType(node) {
+        const tag = String(node?.tagName || "").toLowerCase();
+        if (/^h[1-6]$/.test(tag) || tag === "p" || tag === "span" || tag === "strong" || tag === "em" || tag === "label") {
+          return "text";
+        }
+        if (tag === "button") return "button";
+        if (tag === "a") return "a";
+        if (tag === "img") return "img";
+        if (tag === "input") return "input";
+        if (tag === "textarea") return "textarea";
+        return "div";
+      }
+      function buildSyntheticImportNodesFromDocument(doc) {
+        const sourceNodes = getImportableBodyNodes(doc);
+        let stackedTop = 32;
+        return sourceNodes.map((sourceNode, index) => {
+          const type = inferBuilderImportType(sourceNode);
+          const wrapper = document.createElement("div");
+          const clonedContent = sourceNode.cloneNode(true);
+          clonedContent
+            .querySelectorAll("script,style,link,meta,noscript,template")
+            .forEach((node) => node.remove());
+          const currentStyle = String(sourceNode.getAttribute("style") || "").trim();
+          const widthByType = {
+            text: "460px",
+            button: "220px",
+            a: "220px",
+            img: "320px",
+            input: "320px",
+            textarea: "360px",
+            div: "520px",
+          };
+          const heightByType = {
+            text: "110px",
+            button: "58px",
+            a: "50px",
+            img: "240px",
+            input: "56px",
+            textarea: "140px",
+            div: "220px",
+          };
+          clonedContent.classList.add("ml-content");
+          wrapper.id = sourceNode.id || `imported-node-${Date.now()}-${index + 1}`;
+          wrapper.className = "ml-container";
+          wrapper.setAttribute("data-type", type);
+          wrapper.setAttribute(
+            "style",
+            [
+              "position: absolute",
+              `left: 32px`,
+              `top: ${stackedTop}px`,
+              `width: ${widthByType[type] || "460px"}`,
+              `height: ${heightByType[type] || "180px"}`,
+              currentStyle,
+            ]
+              .filter(Boolean)
+              .join("; "),
+          );
+          wrapper.innerHTML = clonedContent.outerHTML;
+          stackedTop += type === "text" ? 130 : type === "button" || type === "a" ? 90 : 260;
+          return wrapper;
+        });
+      }
       function buildCleanExportNode(sourceNode, index) {
         const cleanNode = sourceNode.cloneNode(true);
         cleanNode
@@ -20354,17 +20437,24 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
             node.classList.contains("ml-container") ||
             node.classList.contains("canvas-element"),
         );
-        if (!bodyChildren.length) {
-          renderRawImportedHtmlPreview(buildBuilderRuntimeDocument(activePath, editor.value));
+        const importNodes = bodyChildren.length
+          ? bodyChildren
+          : buildSyntheticImportNodesFromDocument(doc);
+        if (!importNodes.length) {
+          renderRawImportedHtmlPreview(buildBuilderRuntimeDocument(activePath, editor.value), false);
           return;
         }
-        bodyChildren.forEach((node) => {
+        importNodes.forEach((node) => {
           if (node.classList.contains("ml-container")) {
             node.className =
               "canvas-element absolute group transition-shadow active:cursor-grabbing";
           }
         });
-        importCodeNodesToCanvas(bodyChildren);
+        importCodeNodesToCanvas(importNodes);
+        builderRawImportDocument = "";
+        if (!silent) {
+          showBuilderSnackbar("Code converted into editable visual blocks.", "success");
+        }
       }
       function applyCodeModeToCanvas() {
         tryApplyCodeModeToCanvas(false);
