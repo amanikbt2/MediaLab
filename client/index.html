@@ -823,6 +823,63 @@
         background: rgba(22, 101, 52, 0.98);
         border-color: rgba(134, 239, 172, 0.52);
       }
+      .inspector-mode-tab {
+        flex: 1;
+        border-radius: 999px;
+        border: 1px solid rgba(255,255,255,0.08);
+        background: rgba(255,255,255,0.04);
+        color: #94a3b8;
+        font-size: 10px;
+        font-weight: 900;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        padding: 10px 12px;
+        transition: all 0.2s ease;
+      }
+      .inspector-mode-tab.active {
+        background: rgba(6,182,212,0.16);
+        color: #cffafe;
+        border-color: rgba(34,211,238,0.35);
+        box-shadow: inset 0 0 0 1px rgba(34,211,238,0.14);
+      }
+      @keyframes mlFadePulse {
+        0%, 100% { opacity: 0.28; transform: translateY(0px) scale(0.98); }
+        50% { opacity: 1; transform: translateY(-4px) scale(1); }
+      }
+      @keyframes mlBlinkSoft {
+        0%, 48%, 100% { opacity: 1; }
+        50%, 52% { opacity: 0.18; }
+      }
+      @keyframes mlHueShift {
+        0% { filter: hue-rotate(0deg) saturate(1); }
+        50% { filter: hue-rotate(90deg) saturate(1.15); }
+        100% { filter: hue-rotate(180deg) saturate(1); }
+      }
+      @keyframes mlFloatBob {
+        0%, 100% { transform: translate3d(0, 0, 0); }
+        50% { transform: translate3d(0, -14px, 0); }
+      }
+      @keyframes mlRotateDrift {
+        0% { transform: rotate(0deg) scale(1); }
+        50% { transform: rotate(8deg) scale(1.03); }
+        100% { transform: rotate(-8deg) scale(1); }
+      }
+      @keyframes mlSlideSweep {
+        0% { transform: translateX(-28px); opacity: 0; }
+        35% { opacity: 1; }
+        100% { transform: translateX(28px); opacity: 0.88; }
+      }
+      @keyframes mlWidthBreathe {
+        0%, 100% { transform: scaleX(0.86); }
+        50% { transform: scaleX(1.08); }
+      }
+      @keyframes mlOrbitTilt {
+        0% { transform: rotate(0deg) translateY(0px) scale(1); }
+        25% { transform: rotate(4deg) translateY(-6px) scale(1.02); }
+        50% { transform: rotate(0deg) translateY(-12px) scale(1.04); }
+        75% { transform: rotate(-4deg) translateY(-6px) scale(1.02); }
+        100% { transform: rotate(0deg) translateY(0px) scale(1); }
+      }
       .studio-menu-panel {
         position: absolute;
         top: calc(100% + 8px);
@@ -13114,6 +13171,12 @@
                          <div id="inspector-preview" class="relative w-full h-full transition-all duration-300 px-5 py-4"></div>
                     </div>
                     <div class="p-5 sm:p-6 flex-1 min-h-0 flex flex-col">
+                        <div class="mb-4 shrink-0">
+                            <div class="flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.03] p-1">
+                                <button id="inspector-mode-css" type="button" onclick="setInspectorMode('css')" class="inspector-mode-tab active">CSS</button>
+                                <button id="inspector-mode-keyframes" type="button" onclick="setInspectorMode('keyframes')" class="inspector-mode-tab">Keyframes</button>
+                            </div>
+                        </div>
                         <div id="inspector-controls" class="flex-1 min-h-0 overflow-hidden pr-1 flex flex-col gap-3">
                             </div>
                        
@@ -14888,6 +14951,34 @@
         "Interactions",
         "Custom CSS",
       ];
+      const inspectorAnimationPages = [
+        "Opacity",
+        "Color",
+        "Transform",
+        "Motion",
+      ];
+      const inspectorAnimationPresets = {
+        opacity: [
+          ["none", "None"],
+          ["mlFadePulse", "Fade Pulse"],
+          ["mlBlinkSoft", "Blink Soft"],
+        ],
+        color: [
+          ["none", "None"],
+          ["mlHueShift", "Hue Shift"],
+        ],
+        transform: [
+          ["none", "None"],
+          ["mlWidthBreathe", "Width Breathe"],
+          ["mlRotateDrift", "Rotate Drift"],
+        ],
+        motion: [
+          ["none", "None"],
+          ["mlFloatBob", "Float"],
+          ["mlSlideSweep", "Slide Sweep"],
+          ["mlOrbitTilt", "Orbit Tilt"],
+        ],
+      };
       const BUILDER_INTERACTION_TRIGGERS = [
         { key: "click", label: "On Click", domEvent: "click" },
         { key: "pointerdown", label: "On Pointer Down", domEvent: "pointerdown" },
@@ -14939,6 +15030,7 @@
         "resize",
       ];
       let inspectorPageIndex = 0;
+      let inspectorMode = "css";
       let historyStack = [];
       let historyIndex = -1;
       let selectedEl = null;
@@ -18983,6 +19075,7 @@ console.log("Triggered ${eventName}", { source, event });
       // ====================== 4. CONTEXTUAL MICRO-INSPECTOR ======================
       function openSmartInspector(type, existingEl = null) {
         inspectorPageIndex = 0; // Surgical Reset
+        inspectorMode = "css";
         const modal = document.getElementById("smart-inspector");
         modal.classList.remove("hidden");
         handleBuilderTutorialEvent("inspector-opened", {
@@ -19068,6 +19161,7 @@ console.log("Triggered ${eventName}", { source, event });
         modal.style.removeProperty("padding-top");
         modal.style.removeProperty("align-items");
         modal.style.removeProperty("justify-content");
+        setInspectorMode("css");
       }
       function syncInspectorUI(refreshControls = true) {
         if (!currentInspectorState?.type) return;
@@ -19080,14 +19174,140 @@ console.log("Triggered ${eventName}", { source, event });
         }
         updateInspectorPreview();
       }
+      function getActiveInspectorPages() {
+        return inspectorMode === "keyframes"
+          ? inspectorAnimationPages
+          : inspectorPages;
+      }
+      function setInspectorMode(mode = "css") {
+        inspectorMode = mode === "keyframes" ? "keyframes" : "css";
+        inspectorPageIndex = 0;
+        document
+          .getElementById("inspector-mode-css")
+          ?.classList.toggle("active", inspectorMode === "css");
+        document
+          .getElementById("inspector-mode-keyframes")
+          ?.classList.toggle("active", inspectorMode === "keyframes");
+        syncInspectorUI(true);
+      }
+      function renderInspectorAnimationControls(styles) {
+        const s = normalizeBuilderStyles(styles, currentInspectorState.type);
+        let h = `<div class="space-y-3">`;
+        const pageKey = inspectorAnimationPages[inspectorPageIndex] || "Opacity";
+        if (pageKey === "Opacity") {
+          h += renderBuilderSelect(
+            "Preset",
+            "animationName",
+            s.animationName,
+            inspectorAnimationPresets.opacity,
+            "updateStyle('animationName', this.value)",
+          );
+        } else if (pageKey === "Color") {
+          h += renderBuilderSelect(
+            "Preset",
+            "animationName",
+            s.animationName,
+            inspectorAnimationPresets.color,
+            "updateStyle('animationName', this.value)",
+          );
+        } else if (pageKey === "Transform") {
+          h += renderBuilderSelect(
+            "Preset",
+            "animationName",
+            s.animationName,
+            inspectorAnimationPresets.transform,
+            "updateStyle('animationName', this.value)",
+          );
+        } else {
+          h += renderBuilderSelect(
+            "Preset",
+            "animationName",
+            s.animationName,
+            inspectorAnimationPresets.motion,
+            "updateStyle('animationName', this.value)",
+          );
+        }
+        h += `<div class="grid grid-cols-2 gap-3">
+          ${renderBuilderInput("Duration", "text", s.animationDuration, "updateStyle('animationDuration', normalizeCssSize(this.value, '1.6s'))")}
+          ${renderBuilderInput("Delay", "text", s.animationDelay, "updateStyle('animationDelay', normalizeCssSize(this.value, '0s'))")}
+        </div>`;
+        h += renderBuilderSelect(
+          "Timing",
+          "animationTimingFunction",
+          s.animationTimingFunction,
+          [
+            ["ease", "Ease"],
+            ["ease-in", "Ease In"],
+            ["ease-out", "Ease Out"],
+            ["ease-in-out", "Ease In Out"],
+            ["linear", "Linear"],
+            ["cubic-bezier(0.22, 1, 0.36, 1)", "Expressive"],
+          ],
+          "updateStyle('animationTimingFunction', this.value)",
+        );
+        h += renderBuilderSelect(
+          "Direction",
+          "animationDirection",
+          s.animationDirection,
+          [
+            ["normal", "Normal"],
+            ["reverse", "Reverse"],
+            ["alternate", "Alternate"],
+            ["alternate-reverse", "Alt Reverse"],
+          ],
+          "updateStyle('animationDirection', this.value)",
+        );
+        h += renderBuilderSelect(
+          "Repeat",
+          "animationIterationCount",
+          s.animationIterationCount,
+          [
+            ["1", "Once"],
+            ["2", "2 Times"],
+            ["3", "3 Times"],
+            ["5", "5 Times"],
+            ["infinite", "Infinite"],
+          ],
+          "updateStyle('animationIterationCount', this.value)",
+        );
+        h += renderBuilderSelect(
+          "Fill Mode",
+          "animationFillMode",
+          s.animationFillMode,
+          [
+            ["none", "None"],
+            ["forwards", "Forwards"],
+            ["backwards", "Backwards"],
+            ["both", "Both"],
+          ],
+          "updateStyle('animationFillMode', this.value)",
+        );
+        h += renderBuilderSelect(
+          "Start State",
+          "animationPlayState",
+          s.animationPlayState,
+          [
+            ["running", "Start Immediately"],
+            ["paused", "Paused"],
+          ],
+          "updateStyle('animationPlayState', this.value)",
+        );
+        h += `</div>`;
+        return h;
+      }
       function renderInspectorControls(type) {
         const container = document.getElementById("inspector-controls");
         const s = normalizeBuilderStyles(currentInspectorState.styles, type);
         const a = currentInspectorState.attributes;
         const isGradientMode = s.backgroundMode === "gradient";
         const isImageMode = s.backgroundMode === "image";
+        const pages = getActiveInspectorPages();
         document.getElementById("page-title").innerText =
-          inspectorPages[inspectorPageIndex];
+          pages[inspectorPageIndex] || pages[0] || "";
+        if (inspectorMode === "keyframes") {
+          container.innerHTML = renderInspectorAnimationControls(s);
+          return;
+        }
         let h = `<div class="space-y-3">`;
         switch (inspectorPageIndex) {
           case 0:
@@ -20006,6 +20226,21 @@ console.log("Triggered ${eventName}", { source, event });
             ),
           flexItemMode: styles.flexItemMode || "auto",
           flexItemSize: styles.flexItemSize || "220px",
+          animationName: styles.animationName || typeDefaults.animationName || "none",
+          animationDuration: styles.animationDuration || typeDefaults.animationDuration || "1.6s",
+          animationTimingFunction:
+            styles.animationTimingFunction ||
+            typeDefaults.animationTimingFunction ||
+            "ease-in-out",
+          animationDelay: styles.animationDelay || typeDefaults.animationDelay || "0s",
+          animationIterationCount:
+            styles.animationIterationCount || typeDefaults.animationIterationCount || "infinite",
+          animationDirection:
+            styles.animationDirection || typeDefaults.animationDirection || "normal",
+          animationFillMode:
+            styles.animationFillMode || typeDefaults.animationFillMode || "both",
+          animationPlayState:
+            styles.animationPlayState || typeDefaults.animationPlayState || "running",
         };
       }
       function parseBackgroundImageUrl(backgroundImage = "") {
@@ -20043,6 +20278,17 @@ console.log("Triggered ${eventName}", { source, event });
           opacity: styles.opacity,
           mixBlendMode: styles.mixBlendMode,
           transform: `rotate(${styles.rotate})`,
+          animationName:
+            styles.animationName && styles.animationName !== "none"
+              ? styles.animationName
+              : "none",
+          animationDuration: styles.animationDuration || "1.6s",
+          animationTimingFunction: styles.animationTimingFunction || "ease-in-out",
+          animationDelay: styles.animationDelay || "0s",
+          animationIterationCount: styles.animationIterationCount || "infinite",
+          animationDirection: styles.animationDirection || "normal",
+          animationFillMode: styles.animationFillMode || "both",
+          animationPlayState: styles.animationPlayState || "running",
           padding: "0px",
         });
         const sharedTextStyles = {
@@ -22690,6 +22936,7 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
       }
       function resetSmartInspectorState() {
         inspectorPageIndex = 0;
+        inspectorMode = "css";
         closeBuilderInteractionModal();
         currentInspectorState = {
           type: null,
@@ -22706,6 +22953,10 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
         if (controls) controls.innerHTML = "";
         const title = document.getElementById("page-title");
         if (title) title.innerText = inspectorPages[0];
+        document.getElementById("inspector-mode-css")?.classList.add("active");
+        document
+          .getElementById("inspector-mode-keyframes")
+          ?.classList.remove("active");
       }
       function applyStylesToExisting() {
         const el = currentInspectorState.targetEl;
@@ -22777,12 +23028,13 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
         updateBuilderUI();
       }
       function changeInspectorPage(dir) {
+        const pages = getActiveInspectorPages();
         inspectorPageIndex =
-          (inspectorPageIndex + dir + inspectorPages.length) %
-          inspectorPages.length;
+          (inspectorPageIndex + dir + pages.length) %
+          pages.length;
         syncInspectorUI();
         handleBuilderTutorialEvent("inspector-page-opened", {
-          page: inspectorPages[inspectorPageIndex] || "",
+          page: pages[inspectorPageIndex] || "",
           index: inspectorPageIndex,
         });
       }
@@ -23130,6 +23382,14 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
           gridRowSize: inferGridTrackSize(computed?.gridTemplateRows || "auto", "auto"),
           flexItemMode: el.dataset.flexItemMode || "auto",
           flexItemSize: el.dataset.flexItemSize || "220px",
+          animationName: computed?.animationName || "none",
+          animationDuration: computed?.animationDuration || "1.6s",
+          animationTimingFunction: computed?.animationTimingFunction || "ease-in-out",
+          animationDelay: computed?.animationDelay || "0s",
+          animationIterationCount: computed?.animationIterationCount || "infinite",
+          animationDirection: computed?.animationDirection || "normal",
+          animationFillMode: computed?.animationFillMode || "both",
+          animationPlayState: computed?.animationPlayState || "running",
         };
       }
     </script>
