@@ -19720,36 +19720,35 @@ console.log("Triggered ${eventName}", { source, event });
               "h-full",
               "pointer-events-none",
               "outline-none",
+              "ml-content",
+              "ml-text",
+              "ml-button",
+              "ml-link",
+              "ml-input",
+              "ml-textarea",
+              "ml-image",
             ].includes(cls),
         );
-        const semanticClasses = [
-          "ml-content",
-          type === "text" ? "ml-text" : "",
-          type === "button" ? "ml-button" : "",
-          type === "a" ? "ml-link" : "",
-          type === "input" ? "ml-input" : "",
-          type === "textarea" ? "ml-textarea" : "",
-          type === "img" ? "ml-image" : "",
-        ].filter(Boolean);
-        contentNode.className = [
-          ...new Set([...contentClasses, ...semanticClasses]),
-        ]
-          .join(" ")
-          .trim();
+        contentNode.className = [...new Set(contentClasses)].join(" ").trim();
         const contentStyle = contentNode.getAttribute("style") || "";
-        contentNode.removeAttribute("style");
-
-        const exportNode = document.createElement("div");
-        exportNode.id = cleanNode.id;
-        exportNode.className = ["ml-container", ...wrapperClasses]
-          .join(" ")
-          .trim();
-        exportNode.innerHTML = contentNode.outerHTML;
+        const wrapperStyle = cleanNode.getAttribute("style") || "";
+        const mergedStyle = [wrapperStyle, contentStyle].filter(Boolean).join("; ");
+        if (mergedStyle) {
+          contentNode.setAttribute("style", mergedStyle);
+        } else {
+          contentNode.removeAttribute("style");
+        }
+        if (!contentNode.id) contentNode.id = cleanNode.id;
+        if (wrapperClasses.length) {
+          contentNode.className = [...new Set([...contentClasses, ...wrapperClasses])]
+            .join(" ")
+            .trim();
+        }
 
         return {
-          node: exportNode,
+          node: contentNode,
           type,
-          wrapperStyle: cleanNode.getAttribute("style") || "",
+          wrapperStyle,
           contentStyle,
           interactions: normalizeElementInteractions(
             JSON.parse(sourceNode.dataset.interactions || "{}"),
@@ -19805,15 +19804,6 @@ ${lines.map((line) => `  ${line}`).join("\n")}
             "body",
             `margin: 0; min-height: 100vh; background: ${pageBackground}; font-family: Inter, system-ui, sans-serif; position: relative; overflow-x: hidden;`,
           ),
-          formatCssRule(".hidden", "display: none !important;"),
-          formatCssRule(
-            ".ml-container",
-            "position: absolute; box-sizing: border-box;",
-          ),
-          formatCssRule(
-            ".ml-content",
-            "box-sizing: border-box; width: 100%; height: 100%;",
-          ),
         ];
         const exportNodes = [];
         const interactionEntries = [];
@@ -19821,17 +19811,6 @@ ${lines.map((line) => `  ${line}`).join("\n")}
           .querySelectorAll(":scope > .canvas-element")
           .forEach((sourceNode, index) => {
             const clean = buildCleanExportNode(sourceNode, index);
-            cssBlocks.push(
-              formatCssRule(`#${clean.node.id}`, clean.wrapperStyle),
-            );
-            if (clean.contentStyle) {
-              cssBlocks.push(
-                formatCssRule(
-                  `#${clean.node.id} .ml-content`,
-                  clean.contentStyle,
-                ),
-              );
-            }
             exportNodes.push(clean.node.outerHTML);
             Object.entries(clean.interactions || {}).forEach(([eventName, action]) => {
               interactionEntries.push({
@@ -20339,16 +20318,21 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
       }
       function detectImportedCanvasType(node) {
         const content =
-          node.querySelector(".ml-content") || node.firstElementChild;
+          node.classList?.contains("ml-container")
+            ? node.querySelector(".ml-content") || node.firstElementChild
+            : node;
         if (!content) return "div";
         if (content.dataset.importType) return content.dataset.importType;
-        if (content.classList.contains("ml-text")) return "text";
-        if (content.classList.contains("ml-button")) return "button";
-        if (content.classList.contains("ml-link")) return "a";
-        if (content.classList.contains("ml-input")) return "input";
-        if (content.classList.contains("ml-textarea")) return "textarea";
-        if (content.classList.contains("ml-image")) return "img";
         const tag = content.tagName.toLowerCase();
+        if (
+          /^h[1-6]$/.test(tag) ||
+          tag === "p" ||
+          tag === "span" ||
+          tag === "strong" ||
+          tag === "em" ||
+          tag === "label"
+        )
+          return "text";
         if (
           tag === "button" ||
           tag === "a" ||
@@ -20375,11 +20359,15 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
           wrapper.setAttribute("data-type", type);
           wrapper.className =
             "canvas-element absolute group transition-shadow active:cursor-grabbing";
-          wrapper.setAttribute("style", node.getAttribute("style") || "");
+          const wrapperStyle = node.classList?.contains("ml-container")
+            ? node.getAttribute("style") || ""
+            : node.getAttribute("style") || "";
+          wrapper.setAttribute("style", wrapperStyle);
           wrapper.innerHTML = `${buildEditorHandles(type)}<div class="element-body w-full h-full overflow-visible"></div>`;
           const body = wrapper.querySelector(".element-body");
-          const importedContent =
-            node.querySelector(".ml-content") || node.firstElementChild;
+          const importedContent = node.classList?.contains("ml-container")
+            ? node.querySelector(".ml-content") || node.firstElementChild
+            : node;
           body.innerHTML = importedContent
             ? importedContent.outerHTML
             : node.innerHTML;
