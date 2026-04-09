@@ -685,6 +685,34 @@
         top: auto !important;
         cursor: grab;
       }
+      .builder-layout-scroll-assist {
+        position: absolute;
+        inset: 50% 8px auto 8px;
+        transform: translateY(-50%);
+        display: flex;
+        justify-content: space-between;
+        pointer-events: none;
+        z-index: 160;
+      }
+      .builder-layout-scroll-btn {
+        width: 28px;
+        height: 28px;
+        border-radius: 999px;
+        border: 1px solid rgba(148, 163, 184, 0.4);
+        background: rgba(2, 6, 23, 0.82);
+        color: #dbeafe;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        box-shadow: 0 10px 22px rgba(2, 6, 23, 0.45);
+        pointer-events: auto;
+      }
+      .builder-layout-scroll-btn:hover {
+        border-color: rgba(34, 211, 238, 0.65);
+        color: #67e8f9;
+        background: rgba(8, 47, 73, 0.9);
+      }
       .studio-menu-panel {
         position: absolute;
         top: calc(100% + 8px);
@@ -16307,6 +16335,27 @@
           layoutGuideSlotEl.style.height = `${Math.max(2, preview.slotRect.height)}px`;
         }
       }
+      function maybeAutoScrollLayoutHost(preview, event) {
+        const host = preview?.host;
+        if (!host || !(host instanceof HTMLElement)) return;
+        const hostRect = host.getBoundingClientRect();
+        const edgeThreshold = 34;
+        const scrollStep = 20;
+        if (host.scrollWidth > host.clientWidth) {
+          if (event.clientX - hostRect.left < edgeThreshold) {
+            host.scrollLeft -= scrollStep;
+          } else if (hostRect.right - event.clientX < edgeThreshold) {
+            host.scrollLeft += scrollStep;
+          }
+        }
+        if (host.scrollHeight > host.clientHeight) {
+          if (event.clientY - hostRect.top < edgeThreshold) {
+            host.scrollTop -= scrollStep;
+          } else if (hostRect.bottom - event.clientY < edgeThreshold) {
+            host.scrollTop += scrollStep;
+          }
+        }
+      }
       function detachElementFromLayoutFlow(el, canvas) {
         if (!el?.classList?.contains("in-layout-flow") || !canvas) return;
         const canvasRect = canvas.getBoundingClientRect();
@@ -16381,6 +16430,58 @@
         );
         const ref = host.children[dropIndex] || null;
         host.insertBefore(el, ref);
+      }
+      function isLayoutScrollableCanvasElement(el) {
+        if (!el || el.getAttribute("data-type") !== "div") return false;
+        const host = getLayoutHostNode(el);
+        if (!host) return false;
+        const display = window.getComputedStyle(host).display || "";
+        return display.includes("grid") || display.includes("flex");
+      }
+      function scrollBuilderLayoutContainerById(elementId = "", direction = 1) {
+        const el = document.getElementById(String(elementId || "").trim());
+        if (!el) return;
+        const host = getLayoutHostNode(el);
+        if (!host) return;
+        const normalizedDir = Number(direction) < 0 ? -1 : 1;
+        host.scrollBy({
+          left: normalizedDir * 150,
+          behavior: "smooth",
+        });
+      }
+      function syncLayoutScrollAssist() {
+        document
+          .querySelectorAll("#web-canvas .builder-layout-scroll-assist")
+          .forEach((node) => node.remove());
+        if (!selectedEl || !isLayoutScrollableCanvasElement(selectedEl)) return;
+        if (!String(selectedEl.id || "").trim()) {
+          selectedEl.id = `el_${Date.now()}`;
+        }
+        const host = getLayoutHostNode(selectedEl);
+        if (!host) return;
+        const wrapper = document.createElement("div");
+        wrapper.className = "builder-layout-scroll-assist";
+        const leftBtn = document.createElement("button");
+        leftBtn.type = "button";
+        leftBtn.className = "builder-layout-scroll-btn";
+        leftBtn.innerHTML = '<i class="fas fa-chevron-left"></i>';
+        leftBtn.addEventListener("pointerdown", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          scrollBuilderLayoutContainerById(selectedEl.id, -1);
+        });
+        const rightBtn = document.createElement("button");
+        rightBtn.type = "button";
+        rightBtn.className = "builder-layout-scroll-btn";
+        rightBtn.innerHTML = '<i class="fas fa-chevron-right"></i>';
+        rightBtn.addEventListener("pointerdown", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          scrollBuilderLayoutContainerById(selectedEl.id, 1);
+        });
+        wrapper.appendChild(leftBtn);
+        wrapper.appendChild(rightBtn);
+        selectedEl.appendChild(wrapper);
       }
       function hideBuilderPanels() {
         activeBuilderPanel = null;
@@ -18162,6 +18263,116 @@ console.log("Triggered ${eventName}", { source, event });
               s.borderRadius,
               "updateStyle('borderRadius', normalizeCssSize(this.value, '18px'))",
             );
+            if (type === "div") {
+              h += renderBuilderSelect(
+                "Display",
+                "display",
+                s.display,
+                [
+                  ["block", "Block"],
+                  ["flex", "Flex"],
+                  ["grid", "Grid"],
+                ],
+                "updateStyle('display', this.value)",
+              );
+              h += renderBuilderInput(
+                "Gap",
+                "text",
+                s.gap,
+                "updateStyle('gap', normalizeCssSize(this.value, '12px'))",
+              );
+              if (s.display === "flex" || s.display === "grid") {
+                h += renderBuilderSelect(
+                  "Overflow X",
+                  "overflowX",
+                  s.overflowX,
+                  [
+                    ["auto", "Auto Scroll"],
+                    ["scroll", "Always Scroll"],
+                    ["hidden", "Hidden"],
+                    ["visible", "Visible"],
+                  ],
+                  "updateStyle('overflowX', this.value)",
+                );
+                h += renderBuilderSelect(
+                  "Overflow Y",
+                  "overflowY",
+                  s.overflowY,
+                  [
+                    ["auto", "Auto Scroll"],
+                    ["scroll", "Always Scroll"],
+                    ["hidden", "Hidden"],
+                    ["visible", "Visible"],
+                  ],
+                  "updateStyle('overflowY', this.value)",
+                );
+              }
+              if (s.display === "flex") {
+                h += renderBuilderSelect(
+                  "Direction",
+                  "flexDirection",
+                  s.flexDirection,
+                  [
+                    ["row", "Row"],
+                    ["column", "Column"],
+                    ["row-reverse", "Row Reverse"],
+                    ["column-reverse", "Column Reverse"],
+                  ],
+                  "updateStyle('flexDirection', this.value)",
+                );
+                h += renderBuilderSelect(
+                  "Wrap",
+                  "flexWrap",
+                  s.flexWrap,
+                  [
+                    ["nowrap", "No Wrap"],
+                    ["wrap", "Wrap"],
+                    ["wrap-reverse", "Wrap Reverse"],
+                  ],
+                  "updateStyle('flexWrap', this.value)",
+                );
+                h += renderBuilderSelect(
+                  "Justify",
+                  "justifyContent",
+                  s.justifyContent,
+                  [
+                    ["flex-start", "Start"],
+                    ["center", "Center"],
+                    ["flex-end", "End"],
+                    ["space-between", "Space Between"],
+                    ["space-around", "Space Around"],
+                    ["space-evenly", "Space Evenly"],
+                  ],
+                  "updateStyle('justifyContent', this.value)",
+                );
+                h += renderBuilderSelect(
+                  "Align",
+                  "alignItems",
+                  s.alignItems,
+                  [
+                    ["stretch", "Stretch"],
+                    ["flex-start", "Start"],
+                    ["center", "Center"],
+                    ["flex-end", "End"],
+                    ["baseline", "Baseline"],
+                  ],
+                  "updateStyle('alignItems', this.value)",
+                );
+              } else if (s.display === "grid") {
+                h += renderBuilderInput(
+                  "Columns",
+                  "text",
+                  s.gridTemplateColumns,
+                  "updateStyle('gridTemplateColumns', this.value || 'repeat(2, minmax(0, 1fr))')",
+                );
+                h += renderBuilderInput(
+                  "Rows",
+                  "text",
+                  s.gridTemplateRows,
+                  "updateStyle('gridTemplateRows', this.value || 'auto')",
+                );
+              }
+            }
             break;
           case 3:
             h += renderBuilderSelect(
@@ -18551,6 +18762,7 @@ console.log("Triggered ${eventName}", { source, event });
                   layoutTargetMatch.layoutType,
                 );
                 showLayoutDropGuides(activeLayoutPreview);
+                maybeAutoScrollLayoutHost(activeLayoutPreview, ev);
               } else {
                 activeLayoutPreview = null;
                 clearLayoutDropGuides();
@@ -18577,6 +18789,7 @@ console.log("Triggered ${eventName}", { source, event });
           }
           hideBuilderGuides();
           clearLayoutDropGuides();
+          syncLayoutScrollAssist();
           saveToHistory();
           document.removeEventListener("pointermove", onPointerMove);
           document.removeEventListener("pointerup", onPointerUp);
@@ -18624,6 +18837,16 @@ console.log("Triggered ${eventName}", { source, event });
             height: "220px",
             padding: "30px",
             borderRadius: "26px",
+            display: "block",
+            flexDirection: "row",
+            flexWrap: "nowrap",
+            justifyContent: "flex-start",
+            alignItems: "stretch",
+            gap: "12px",
+            overflowX: "auto",
+            overflowY: "auto",
+            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+            gridTemplateRows: "auto",
             backgroundMode: "gradient",
             backgroundColor: "#ffffff",
             backgroundColorSecondary: "#dbeafe",
@@ -18760,6 +18983,22 @@ console.log("Triggered ${eventName}", { source, event });
           backdropFilterBlur: styles.backdropFilterBlur || "0px",
           rotate: styles.rotate || "0deg",
           mixBlendMode: styles.mixBlendMode || "normal",
+          display: styles.display || typeDefaults.display || "block",
+          flexDirection:
+            styles.flexDirection || typeDefaults.flexDirection || "row",
+          flexWrap: styles.flexWrap || typeDefaults.flexWrap || "nowrap",
+          justifyContent:
+            styles.justifyContent || typeDefaults.justifyContent || "flex-start",
+          alignItems: styles.alignItems || typeDefaults.alignItems || "stretch",
+          gap: styles.gap || typeDefaults.gap || "12px",
+          overflowX: styles.overflowX || typeDefaults.overflowX || "auto",
+          overflowY: styles.overflowY || typeDefaults.overflowY || "auto",
+          gridTemplateColumns:
+            styles.gridTemplateColumns ||
+            typeDefaults.gridTemplateColumns ||
+            "repeat(2, minmax(0, 1fr))",
+          gridTemplateRows:
+            styles.gridTemplateRows || typeDefaults.gridTemplateRows || "auto",
         };
       }
       function parseBackgroundImageUrl(backgroundImage = "") {
@@ -18823,9 +19062,22 @@ console.log("Triggered ${eventName}", { source, event });
                 backgroundPosition: "center",
                 backgroundRepeat: "repeat",
               };
+        const isLayoutContainer =
+          type === "div" &&
+          (String(styles.display || "").includes("grid") ||
+            String(styles.display || "").includes("flex"));
         const sharedBoxStyles = {
           ...backgroundLayerStyles,
-          display: "block",
+          display: styles.display || "block",
+          flexDirection: styles.flexDirection || "row",
+          flexWrap: styles.flexWrap || "nowrap",
+          justifyContent: styles.justifyContent || "flex-start",
+          alignItems: styles.alignItems || "stretch",
+          gap: styles.gap || "12px",
+          gridTemplateColumns: styles.gridTemplateColumns || "none",
+          gridTemplateRows: styles.gridTemplateRows || "none",
+          overflowX: isLayoutContainer ? styles.overflowX || "auto" : "visible",
+          overflowY: isLayoutContainer ? styles.overflowY || "auto" : "visible",
           borderRadius: styles.borderRadius,
           border: `${styles.borderWidth} ${styles.borderStyle} ${styles.borderColor}`,
           outline:
@@ -19219,6 +19471,7 @@ console.log("Triggered ${eventName}", { source, event });
           );
         });
         syncBuilderSelectionBadges();
+        syncLayoutScrollAssist();
       }
       function addElementSelection(el) {
         if (!selectedElements.includes(el)) {
@@ -21586,6 +21839,9 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
         document
           .querySelectorAll("#web-canvas .builder-selection-chip")
           .forEach((node) => node.remove());
+        document
+          .querySelectorAll("#web-canvas .builder-layout-scroll-assist")
+          .forEach((node) => node.remove());
         selectedElements.forEach((el) =>
           el.classList.remove(
             "ring-4",
@@ -21717,6 +21973,16 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
           rotate: "0deg",
           mixBlendMode: el.style.mixBlendMode || "normal",
           padding: computed?.padding || "16px",
+          display: computed?.display || "block",
+          flexDirection: computed?.flexDirection || "row",
+          flexWrap: computed?.flexWrap || "nowrap",
+          justifyContent: computed?.justifyContent || "flex-start",
+          alignItems: computed?.alignItems || "stretch",
+          gap: computed?.gap || "12px",
+          overflowX: computed?.overflowX || "auto",
+          overflowY: computed?.overflowY || "auto",
+          gridTemplateColumns: computed?.gridTemplateColumns || "repeat(2, minmax(0, 1fr))",
+          gridTemplateRows: computed?.gridTemplateRows || "auto",
         };
       }
     </script>
