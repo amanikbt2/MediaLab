@@ -19538,6 +19538,107 @@ console.log("Triggered ${eventName}", { source, event });
         const body = formatCssDeclarationBlock(styleText, `${indent}  `);
         return `${indent}${selector} {\n${body}\n${indent}}`;
       }
+      function parseInlineStyleMap(styleText = "") {
+        return String(styleText || "")
+          .split(";")
+          .map((part) => String(part || "").trim())
+          .filter(Boolean)
+          .reduce((acc, part) => {
+            const separatorIndex = part.indexOf(":");
+            if (separatorIndex <= 0) return acc;
+            const property = part.slice(0, separatorIndex).trim().toLowerCase();
+            const value = part.slice(separatorIndex + 1).trim();
+            if (!property || !value) return acc;
+            acc[property] = value;
+            return acc;
+          }, {});
+      }
+      function buildInlineStyleText(styleMap = {}) {
+        const orderedKeys = [
+          "position",
+          "left",
+          "top",
+          "right",
+          "bottom",
+          "z-index",
+          "width",
+          "height",
+          "min-height",
+          "max-width",
+          "max-height",
+          "opacity",
+          "mix-blend-mode",
+          "transform",
+        ];
+        const seen = new Set();
+        const output = [];
+        orderedKeys.forEach((key) => {
+          const value = String(styleMap?.[key] || "").trim();
+          if (!value) return;
+          seen.add(key);
+          output.push(`${key}: ${value}`);
+        });
+        Object.entries(styleMap || {}).forEach(([key, value]) => {
+          if (seen.has(key)) return;
+          const safeValue = String(value || "").trim();
+          if (!safeValue) return;
+          output.push(`${key}: ${safeValue}`);
+        });
+        return output.join("; ");
+      }
+      function splitExportNodeStyles(wrapperStyle = "", contentStyle = "") {
+        const layoutKeys = new Set([
+          "position",
+          "left",
+          "top",
+          "right",
+          "bottom",
+          "z-index",
+          "width",
+          "height",
+          "opacity",
+          "mix-blend-mode",
+          "transform",
+        ]);
+        const contentOmitKeys = new Set(["width", "height", "min-height"]);
+        const wrapperMap = parseInlineStyleMap(wrapperStyle);
+        const contentMap = parseInlineStyleMap(contentStyle);
+        const merged = {};
+        layoutKeys.forEach((key) => {
+          if (wrapperMap[key]) merged[key] = wrapperMap[key];
+        });
+        Object.entries(contentMap).forEach(([key, value]) => {
+          if (contentOmitKeys.has(key)) return;
+          merged[key] = value;
+        });
+        return buildInlineStyleText(merged);
+      }
+      function splitImportedElementStyles(styleText = "") {
+        const layoutKeys = new Set([
+          "position",
+          "left",
+          "top",
+          "right",
+          "bottom",
+          "z-index",
+          "width",
+          "height",
+          "opacity",
+          "mix-blend-mode",
+          "transform",
+        ]);
+        const styleMap = parseInlineStyleMap(styleText);
+        const wrapperMap = {};
+        const contentMap = {};
+        Object.entries(styleMap).forEach(([key, value]) => {
+          if (layoutKeys.has(key)) wrapperMap[key] = value;
+          else contentMap[key] = value;
+        });
+        return {
+          wrapperStyle: buildInlineStyleText(wrapperMap),
+          contentStyle: buildInlineStyleText(contentMap),
+        };
+      }
       function formatHtmlFragment(fragment = "", baseIndent = "    ") {
         const template = document.createElement("template");
         template.innerHTML = String(fragment || "").trim();
@@ -19631,55 +19732,79 @@ console.log("Triggered ${eventName}", { source, event });
         if (tag === "textarea") return "textarea";
         return "div";
       }
+      function sourceNodeLooksLayoutReady(node) {
+        if (!(node instanceof HTMLElement)) return false;
+        if (node.classList?.contains("ml-container")) return true;
+        const styleMap = parseInlineStyleMap(node.getAttribute("style") || "");
+        return (
+          String(styleMap.position || "").toLowerCase() === "absolute" ||
+          Boolean(styleMap.left) ||
+          Boolean(styleMap.top) ||
+          Boolean(styleMap.width) ||
+          Boolean(styleMap.height) ||
+          Boolean(styleMap["z-index"])
+        );
+      }
+      function buildSyntheticImportNode(sourceNode, index, stackedTop = 32) {
+        const type = inferBuilderImportType(sourceNode);
+        const wrapper = document.createElement("div");
+        const clonedContent = sourceNode.cloneNode(true);
+        clonedContent
+          .querySelectorAll("script,style,link,meta,noscript,template")
+          .forEach((node) => node.remove());
+        const currentStyle = String(sourceNode.getAttribute("style") || "").trim();
+        const widthByType = {
+          text: "460px",
+          button: "220px",
+          a: "220px",
+          img: "320px",
+          input: "320px",
+          textarea: "360px",
+          div: "520px",
+        };
+        const heightByType = {
+          text: "110px",
+          button: "58px",
+          a: "50px",
+          img: "240px",
+          input: "56px",
+          textarea: "140px",
+          div: "220px",
+        };
+        clonedContent.classList.add("ml-content");
+        wrapper.id = sourceNode.id || `imported-node-${Date.now()}-${index + 1}`;
+        wrapper.className = "ml-container";
+        wrapper.setAttribute("data-type", type);
+        wrapper.setAttribute(
+          "style",
+          [
+            "position: absolute",
+            `left: 32px`,
+            `top: ${stackedTop}px`,
+            `width: ${widthByType[type] || "460px"}`,
+            `height: ${heightByType[type] || "180px"}`,
+            currentStyle,
+          ]
+            .filter(Boolean)
+            .join("; "),
+        );
+        wrapper.innerHTML = clonedContent.outerHTML;
+        return wrapper;
+      }
       function buildSyntheticImportNodesFromDocument(doc) {
         const sourceNodes = getImportableBodyNodes(doc);
         let stackedTop = 32;
         return sourceNodes.map((sourceNode, index) => {
-          const type = inferBuilderImportType(sourceNode);
-          const wrapper = document.createElement("div");
-          const clonedContent = sourceNode.cloneNode(true);
-          clonedContent
-            .querySelectorAll("script,style,link,meta,noscript,template")
-            .forEach((node) => node.remove());
-          const currentStyle = String(sourceNode.getAttribute("style") || "").trim();
-          const widthByType = {
-            text: "460px",
-            button: "220px",
-            a: "220px",
-            img: "320px",
-            input: "320px",
-            textarea: "360px",
-            div: "520px",
-          };
-          const heightByType = {
-            text: "110px",
-            button: "58px",
-            a: "50px",
-            img: "240px",
-            input: "56px",
-            textarea: "140px",
-            div: "220px",
-          };
-          clonedContent.classList.add("ml-content");
-          wrapper.id = sourceNode.id || `imported-node-${Date.now()}-${index + 1}`;
-          wrapper.className = "ml-container";
-          wrapper.setAttribute("data-type", type);
-          wrapper.setAttribute(
-            "style",
-            [
-              "position: absolute",
-              `left: 32px`,
-              `top: ${stackedTop}px`,
-              `width: ${widthByType[type] || "460px"}`,
-              `height: ${heightByType[type] || "180px"}`,
-              currentStyle,
-            ]
-              .filter(Boolean)
-              .join("; "),
-          );
-          wrapper.innerHTML = clonedContent.outerHTML;
-          stackedTop += type === "text" ? 130 : type === "button" || type === "a" ? 90 : 260;
-          return wrapper;
+          if (sourceNodeLooksLayoutReady(sourceNode)) {
+            return sourceNode.cloneNode(true);
+          }
+          const node = buildSyntheticImportNode(sourceNode, index, stackedTop);
+          stackedTop += inferBuilderImportType(sourceNode) === "text"
+            ? 130
+            : ["button", "a"].includes(inferBuilderImportType(sourceNode))
+              ? 90
+              : 260;
+          return node;
         });
       }
       function buildCleanExportNode(sourceNode, index) {
@@ -19732,7 +19857,7 @@ console.log("Triggered ${eventName}", { source, event });
         contentNode.className = [...new Set(contentClasses)].join(" ").trim();
         const contentStyle = contentNode.getAttribute("style") || "";
         const wrapperStyle = cleanNode.getAttribute("style") || "";
-        const mergedStyle = [wrapperStyle, contentStyle].filter(Boolean).join("; ");
+        const mergedStyle = splitExportNodeStyles(wrapperStyle, contentStyle);
         if (mergedStyle) {
           contentNode.setAttribute("style", mergedStyle);
         } else {
@@ -20347,15 +20472,28 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
           wrapper.setAttribute("data-type", type);
           wrapper.className =
             "canvas-element absolute group transition-shadow active:cursor-grabbing";
-          const wrapperStyle = node.classList?.contains("ml-container")
-            ? node.getAttribute("style") || ""
-            : node.getAttribute("style") || "";
+          const importedStyleParts = node.classList?.contains("ml-container")
+            ? {
+                wrapperStyle: node.getAttribute("style") || "",
+                contentStyle: "",
+              }
+            : splitImportedElementStyles(node.getAttribute("style") || "");
+          const wrapperStyle = importedStyleParts.wrapperStyle || "";
           wrapper.setAttribute("style", wrapperStyle);
           wrapper.innerHTML = `${buildEditorHandles(type)}<div class="element-body w-full h-full overflow-visible"></div>`;
           const body = wrapper.querySelector(".element-body");
-          const importedContent = node.classList?.contains("ml-container")
-            ? node.querySelector(".ml-content") || node.firstElementChild
-            : node;
+          const importedContent = (
+            node.classList?.contains("ml-container")
+              ? node.querySelector(".ml-content") || node.firstElementChild
+              : node
+          )?.cloneNode(true);
+          if (importedContent && !node.classList?.contains("ml-container")) {
+            if (importedStyleParts.contentStyle) {
+              importedContent.setAttribute("style", importedStyleParts.contentStyle);
+            } else {
+              importedContent.removeAttribute("style");
+            }
+          }
           body.innerHTML = importedContent
             ? importedContent.outerHTML
             : node.innerHTML;
