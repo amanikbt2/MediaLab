@@ -646,6 +646,45 @@
         z-index: 145;
         box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.12);
       }
+      .builder-layout-guide-overlay {
+        position: absolute;
+        border: 1px dashed rgba(34, 211, 238, 0.85);
+        background: rgba(34, 211, 238, 0.05);
+        pointer-events: none;
+        z-index: 142;
+        border-radius: 14px;
+        box-shadow: inset 0 0 0 1px rgba(14, 165, 233, 0.18);
+      }
+      .builder-layout-guide-overlay.grid {
+        background-image:
+          linear-gradient(to right, rgba(34, 211, 238, 0.2) 1px, transparent 1px),
+          linear-gradient(to bottom, rgba(34, 211, 238, 0.2) 1px, transparent 1px);
+        background-position: 0 0, 0 0;
+      }
+      .builder-layout-guide-overlay.flex {
+        background-image: repeating-linear-gradient(
+          135deg,
+          rgba(34, 211, 238, 0.05) 0px,
+          rgba(34, 211, 238, 0.05) 8px,
+          rgba(34, 211, 238, 0) 8px,
+          rgba(34, 211, 238, 0) 16px
+        );
+      }
+      .builder-layout-slot-guide {
+        position: absolute;
+        border: 1px dashed rgba(56, 189, 248, 0.95);
+        background: rgba(56, 189, 248, 0.16);
+        pointer-events: none;
+        z-index: 143;
+        border-radius: 10px;
+        box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.22);
+      }
+      .canvas-element.in-layout-flow {
+        position: static !important;
+        left: auto !important;
+        top: auto !important;
+        cursor: grab;
+      }
       .studio-menu-panel {
         position: absolute;
         top: calc(100% + 8px);
@@ -14633,6 +14672,8 @@
       let guestBuilderDrafts = [];
       let guideXEl = null;
       let guideYEl = null;
+      let layoutGuideOverlayEl = null;
+      let layoutGuideSlotEl = null;
       let currentInspectorState = {
         type: null,
         targetEl: null,
@@ -16001,18 +16042,28 @@
         if (!guideXEl) {
           guideXEl = document.createElement("div");
           guideXEl.className = "builder-guide builder-guide-x hidden";
-          canvas.appendChild(guideXEl);
         }
+        if (!canvas.contains(guideXEl)) canvas.appendChild(guideXEl);
         if (!guideYEl) {
           guideYEl = document.createElement("div");
           guideYEl.className = "builder-guide builder-guide-y hidden";
-          canvas.appendChild(guideYEl);
         }
+        if (!canvas.contains(guideYEl)) canvas.appendChild(guideYEl);
         if (!selectionBoxEl) {
           selectionBoxEl = document.createElement("div");
           selectionBoxEl.className = "builder-selection-box hidden";
-          canvas.appendChild(selectionBoxEl);
         }
+        if (!canvas.contains(selectionBoxEl)) canvas.appendChild(selectionBoxEl);
+        if (!layoutGuideOverlayEl) {
+          layoutGuideOverlayEl = document.createElement("div");
+          layoutGuideOverlayEl.className = "builder-layout-guide-overlay hidden";
+        }
+        if (!canvas.contains(layoutGuideOverlayEl)) canvas.appendChild(layoutGuideOverlayEl);
+        if (!layoutGuideSlotEl) {
+          layoutGuideSlotEl = document.createElement("div");
+          layoutGuideSlotEl.className = "builder-layout-slot-guide hidden";
+        }
+        if (!canvas.contains(layoutGuideSlotEl)) canvas.appendChild(layoutGuideSlotEl);
       }
       function showBuilderGuides(x, y) {
         if (guideXEl) {
@@ -16027,6 +16078,309 @@
       function hideBuilderGuides() {
         guideXEl?.classList.add("hidden");
         guideYEl?.classList.add("hidden");
+      }
+      function clearLayoutDropGuides() {
+        layoutGuideOverlayEl?.classList.add("hidden");
+        layoutGuideOverlayEl?.classList.remove("grid", "flex");
+        layoutGuideSlotEl?.classList.add("hidden");
+      }
+      function splitCssTrackList(value = "") {
+        const raw = String(value || "").trim();
+        if (!raw || raw === "none") return [];
+        const tracks = [];
+        let current = "";
+        let depth = 0;
+        for (const char of raw) {
+          if (char === "(") depth += 1;
+          if (char === ")") depth = Math.max(0, depth - 1);
+          if (char === " " && depth === 0) {
+            if (current.trim()) tracks.push(current.trim());
+            current = "";
+          } else {
+            current += char;
+          }
+        }
+        if (current.trim()) tracks.push(current.trim());
+        return tracks;
+      }
+      function getLayoutHostNode(targetEl) {
+        return targetEl?.querySelector(":scope > .element-body") || targetEl || null;
+      }
+      function getLayoutTypeForTarget(targetEl) {
+        const host = getLayoutHostNode(targetEl);
+        if (!host) return "";
+        const display = window.getComputedStyle(host).display || "";
+        if (display.includes("grid")) return "grid";
+        if (display.includes("flex")) return "flex";
+        return "";
+      }
+      function getNearestLayoutDropTarget(event, draggedEl) {
+        const rawTarget = event.target instanceof Element ? event.target : null;
+        const fallbackFromPoint = document.elementFromPoint(event.clientX, event.clientY);
+        const startNode = rawTarget || fallbackFromPoint;
+        if (!startNode) return null;
+        let node = startNode;
+        while (node && node !== document.body) {
+          const candidate = node.closest?.(".canvas-element");
+          if (
+            candidate &&
+            candidate !== draggedEl &&
+            !candidate.contains(draggedEl) &&
+            candidate.getAttribute("data-type") === "div"
+          ) {
+            const layoutType = getLayoutTypeForTarget(candidate);
+            if (layoutType) {
+              return { target: candidate, layoutType };
+            }
+          }
+          node = node.parentElement;
+        }
+        return null;
+      }
+      function clampBuilderValue(value, min, max) {
+        return Math.min(Math.max(value, min), Math.max(min, max));
+      }
+      function buildLayoutDropPreview(event, draggedEl, layoutTarget, layoutType) {
+        const host = getLayoutHostNode(layoutTarget);
+        const canvas = document.getElementById("web-canvas");
+        if (!host || !canvas) return null;
+        const hostRect = host.getBoundingClientRect();
+        if (hostRect.width < 8 || hostRect.height < 8) return null;
+        const localX = event.clientX - hostRect.left;
+        const localY = event.clientY - hostRect.top;
+        if (layoutType === "grid") {
+          const computed = window.getComputedStyle(host);
+          const columns = Math.max(
+            1,
+            splitCssTrackList(computed.gridTemplateColumns).length || 1,
+          );
+          const existingChildren = Array.from(host.children).filter(
+            (child) => child.classList?.contains("canvas-element") && child !== draggedEl,
+          );
+          const explicitRows = splitCssTrackList(computed.gridTemplateRows).length;
+          const rows = Math.max(
+            1,
+            explicitRows || Math.ceil((existingChildren.length + 1) / columns),
+          );
+          const gapX = parseFloat(computed.columnGap || computed.gap || "0") || 0;
+          const gapY = parseFloat(computed.rowGap || computed.gap || "0") || 0;
+          const cellWidth = Math.max(
+            1,
+            (hostRect.width - gapX * (columns - 1)) / columns,
+          );
+          const cellHeight = Math.max(
+            1,
+            (hostRect.height - gapY * (rows - 1)) / rows,
+          );
+          const colIndex = clampBuilderValue(
+            Math.floor((localX + gapX / 2) / (cellWidth + gapX)),
+            0,
+            columns - 1,
+          );
+          const rowIndex = clampBuilderValue(
+            Math.floor((localY + gapY / 2) / (cellHeight + gapY)),
+            0,
+            rows - 1,
+          );
+          const dragRect = draggedEl.getBoundingClientRect();
+          const suggestedColSpan = clampBuilderValue(
+            Math.round((dragRect.width + gapX) / (cellWidth + gapX)),
+            1,
+            columns - colIndex,
+          );
+          const suggestedRowSpan = clampBuilderValue(
+            Math.round((dragRect.height + gapY) / (cellHeight + gapY)),
+            1,
+            rows - rowIndex,
+          );
+          const slotRect = {
+            left: hostRect.left + colIndex * (cellWidth + gapX),
+            top: hostRect.top + rowIndex * (cellHeight + gapY),
+            width: cellWidth * suggestedColSpan + gapX * (suggestedColSpan - 1),
+            height: cellHeight * suggestedRowSpan + gapY * (suggestedRowSpan - 1),
+          };
+          return {
+            layoutTarget,
+            host,
+            layoutType,
+            slotRect,
+            columns,
+            rows,
+            column: colIndex,
+            row: rowIndex,
+            colSpan: suggestedColSpan,
+            rowSpan: suggestedRowSpan,
+          };
+        }
+        const computed = window.getComputedStyle(host);
+        const isColumn = String(computed.flexDirection || "row").startsWith("column");
+        const flexChildren = Array.from(host.children).filter(
+          (child) => child.classList?.contains("canvas-element") && child !== draggedEl,
+        );
+        let insertIndex = flexChildren.length;
+        for (let i = 0; i < flexChildren.length; i += 1) {
+          const childRect = flexChildren[i].getBoundingClientRect();
+          const threshold = isColumn
+            ? childRect.top + childRect.height / 2
+            : childRect.left + childRect.width / 2;
+          const pointerCoord = isColumn ? event.clientY : event.clientX;
+          if (pointerCoord < threshold) {
+            insertIndex = i;
+            break;
+          }
+        }
+        let slotRect;
+        if (!flexChildren.length) {
+          slotRect = {
+            left: hostRect.left + 8,
+            top: hostRect.top + 8,
+            width: Math.max(20, hostRect.width - 16),
+            height: Math.max(20, hostRect.height - 16),
+          };
+        } else if (insertIndex >= flexChildren.length) {
+          const anchor = flexChildren[flexChildren.length - 1].getBoundingClientRect();
+          slotRect = isColumn
+            ? {
+                left: hostRect.left + 6,
+                top: Math.min(hostRect.bottom - 8, anchor.bottom + 3),
+                width: Math.max(20, hostRect.width - 12),
+                height: 4,
+              }
+            : {
+                left: Math.min(hostRect.right - 8, anchor.right + 3),
+                top: hostRect.top + 6,
+                width: 4,
+                height: Math.max(20, hostRect.height - 12),
+              };
+        } else {
+          const anchor = flexChildren[insertIndex].getBoundingClientRect();
+          slotRect = isColumn
+            ? {
+                left: hostRect.left + 6,
+                top: Math.max(hostRect.top + 4, anchor.top - 3),
+                width: Math.max(20, hostRect.width - 12),
+                height: 4,
+              }
+            : {
+                left: Math.max(hostRect.left + 4, anchor.left - 3),
+                top: hostRect.top + 6,
+                width: 4,
+                height: Math.max(20, hostRect.height - 12),
+              };
+        }
+        return {
+          layoutTarget,
+          host,
+          layoutType,
+          insertIndex,
+          slotRect,
+          isColumn,
+        };
+      }
+      function showLayoutDropGuides(preview) {
+        const canvas = document.getElementById("web-canvas");
+        if (!canvas || !preview?.host) {
+          clearLayoutDropGuides();
+          return;
+        }
+        const canvasRect = canvas.getBoundingClientRect();
+        const hostRect = preview.host.getBoundingClientRect();
+        if (layoutGuideOverlayEl) {
+          layoutGuideOverlayEl.classList.remove("hidden");
+          layoutGuideOverlayEl.classList.remove("grid", "flex");
+          layoutGuideOverlayEl.classList.add(preview.layoutType);
+          layoutGuideOverlayEl.style.left = `${hostRect.left - canvasRect.left + canvas.scrollLeft}px`;
+          layoutGuideOverlayEl.style.top = `${hostRect.top - canvasRect.top + canvas.scrollTop}px`;
+          layoutGuideOverlayEl.style.width = `${hostRect.width}px`;
+          layoutGuideOverlayEl.style.height = `${hostRect.height}px`;
+          if (preview.layoutType === "grid") {
+            layoutGuideOverlayEl.style.backgroundSize = `${100 / Math.max(1, preview.columns)}% 100%, 100% ${100 / Math.max(1, preview.rows)}%`;
+          } else {
+            layoutGuideOverlayEl.style.backgroundSize = "";
+          }
+        }
+        if (layoutGuideSlotEl && preview.slotRect) {
+          layoutGuideSlotEl.classList.remove("hidden");
+          layoutGuideSlotEl.style.left = `${preview.slotRect.left - canvasRect.left + canvas.scrollLeft}px`;
+          layoutGuideSlotEl.style.top = `${preview.slotRect.top - canvasRect.top + canvas.scrollTop}px`;
+          layoutGuideSlotEl.style.width = `${Math.max(2, preview.slotRect.width)}px`;
+          layoutGuideSlotEl.style.height = `${Math.max(2, preview.slotRect.height)}px`;
+        }
+      }
+      function detachElementFromLayoutFlow(el, canvas) {
+        if (!el?.classList?.contains("in-layout-flow") || !canvas) return;
+        const canvasRect = canvas.getBoundingClientRect();
+        const elementRect = el.getBoundingClientRect();
+        const nextLeft = clampBuilderValue(
+          elementRect.left - canvasRect.left + canvas.scrollLeft,
+          0,
+          canvas.clientWidth - Math.max(30, elementRect.width),
+        );
+        const nextTop = clampBuilderValue(
+          elementRect.top - canvasRect.top + canvas.scrollTop,
+          0,
+          canvas.scrollHeight - Math.max(30, elementRect.height),
+        );
+        canvas.appendChild(el);
+        el.classList.remove("in-layout-flow");
+        el.classList.add("absolute");
+        Object.assign(el.style, {
+          position: "absolute",
+          left: `${nextLeft}px`,
+          top: `${nextTop}px`,
+          width: `${Math.max(30, Math.round(elementRect.width))}px`,
+          height: `${Math.max(30, Math.round(elementRect.height))}px`,
+          gridColumn: "auto",
+          gridRow: "auto",
+          justifySelf: "auto",
+          alignSelf: "auto",
+          zIndex: el.style.zIndex || "10",
+        });
+      }
+      function attachElementToLayoutFlow(el, preview) {
+        if (!el || !preview?.host) return;
+        const host = preview.host;
+        el.classList.add("in-layout-flow");
+        el.classList.remove("absolute");
+        Object.assign(el.style, {
+          position: "static",
+          left: "auto",
+          top: "auto",
+        });
+        if (preview.layoutType === "flex") {
+          const siblings = Array.from(host.children).filter(
+            (child) => child.classList?.contains("canvas-element") && child !== el,
+          );
+          const ref = siblings[preview.insertIndex] || null;
+          host.insertBefore(el, ref);
+          Object.assign(el.style, {
+            gridColumn: "auto",
+            gridRow: "auto",
+            justifySelf: "auto",
+            alignSelf: "auto",
+            width: el.style.width || "auto",
+            height: el.style.height || "auto",
+          });
+          return;
+        }
+        const siblings = Array.from(host.children).filter(
+          (child) => child.classList?.contains("canvas-element") && child !== el,
+        );
+        host.appendChild(el);
+        Object.assign(el.style, {
+          gridColumn: `span ${preview.colSpan || 1}`,
+          gridRow: `span ${preview.rowSpan || 1}`,
+          justifySelf: "stretch",
+          alignSelf: "stretch",
+          width: "100%",
+          height: "100%",
+        });
+        const dropIndex = Math.min(
+          siblings.length,
+          Math.max(0, (preview.row || 0) * (preview.columns || 1) + (preview.column || 0)),
+        );
+        const ref = host.children[dropIndex] || null;
+        host.insertBefore(el, ref);
       }
       function hideBuilderPanels() {
         activeBuilderPanel = null;
@@ -18110,16 +18464,21 @@ console.log("Triggered ${eventName}", { source, event });
           selectElement(el);
         }
         if (!isResizer && !isDragHandle) return;
+        const movingSelection =
+          !isResizer &&
+          selectedElements.length > 1 &&
+          selectedElements.includes(el);
+        const canvas = document.getElementById("web-canvas");
+        ensureBuilderGuides(canvas);
+        if (!isResizer && !movingSelection && el.classList.contains("in-layout-flow")) {
+          detachElementFromLayoutFlow(el, canvas);
+        }
         const startX = e.clientX,
           startY = e.clientY;
         const startW = el.offsetWidth,
           startH = el.offsetHeight;
         const startL = el.offsetLeft,
           startT = el.offsetTop;
-        const movingSelection =
-          !isResizer &&
-          selectedElements.length > 1 &&
-          selectedElements.includes(el);
         const selectionStarts = movingSelection
           ? selectedElements.map((item) => ({
               el: item,
@@ -18128,18 +18487,18 @@ console.log("Triggered ${eventName}", { source, event });
             }))
           : [];
         const rType = e.target.classList[1];
-        const canvas = document.getElementById("web-canvas");
-        ensureBuilderGuides(canvas);
         const snap = (value) =>
           builderSnapEnabled
             ? Math.round(value / BUILDER_GRID_SIZE) * BUILDER_GRID_SIZE
             : value;
         const clamp = (value, min, max) =>
           Math.min(Math.max(value, min), Math.max(min, max));
+        let activeLayoutPreview = null;
         const onPointerMove = (ev) => {
           const dx = ev.clientX - startX,
             dy = ev.clientY - startY;
           if (isResizer) {
+            clearLayoutDropGuides();
             if (rType.includes("r")) {
               const maxWidth = canvas.clientWidth - startL;
               el.style.width =
@@ -18183,6 +18542,19 @@ console.log("Triggered ${eventName}", { source, event });
                 item.el.style.top = nextTop + "px";
               });
             } else {
+              const layoutTargetMatch = getNearestLayoutDropTarget(ev, el);
+              if (layoutTargetMatch) {
+                activeLayoutPreview = buildLayoutDropPreview(
+                  ev,
+                  el,
+                  layoutTargetMatch.target,
+                  layoutTargetMatch.layoutType,
+                );
+                showLayoutDropGuides(activeLayoutPreview);
+              } else {
+                activeLayoutPreview = null;
+                clearLayoutDropGuides();
+              }
               const nextLeft = clamp(
                 snap(startL + dx),
                 0,
@@ -18200,7 +18572,11 @@ console.log("Triggered ${eventName}", { source, event });
           showBuilderGuides(el.offsetLeft, el.offsetTop);
         };
         const onPointerUp = () => {
+          if (activeLayoutPreview && !isResizer && !movingSelection) {
+            attachElementToLayoutFlow(el, activeLayoutPreview);
+          }
           hideBuilderGuides();
+          clearLayoutDropGuides();
           saveToHistory();
           document.removeEventListener("pointermove", onPointerMove);
           document.removeEventListener("pointerup", onPointerUp);
