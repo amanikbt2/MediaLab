@@ -9,6 +9,10 @@
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
     />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/xterm@5.5.0/css/xterm.min.css"
+    />
     <link rel="manifest" href="/manifest.json" crossorigin="use-credentials" />
     <link rel="icon" href="/favicon.png" type="image/png" />
     <link rel="apple-touch-icon" href="/mediafiles/apple-touch-icon.png" />
@@ -98,6 +102,86 @@
         border-color: rgba(34, 211, 238, 0.25);
         color: #ecfeff;
         box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      }
+      .terminal-drawer {
+        position: absolute;
+        left: 1rem;
+        right: 1rem;
+        bottom: 1rem;
+        z-index: 125;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        min-height: 220px;
+        max-height: min(52vh, 420px);
+        padding: 0.9rem;
+        border-radius: 1.6rem;
+        border: 1px solid rgba(34, 211, 238, 0.14);
+        background:
+          radial-gradient(circle at top right, rgba(34, 211, 238, 0.1), transparent 28%),
+          linear-gradient(180deg, rgba(2, 6, 23, 0.98), rgba(3, 7, 18, 0.98));
+        backdrop-filter: blur(26px);
+        box-shadow: 0 30px 90px rgba(2, 6, 23, 0.52);
+        transform: translateY(calc(100% + 1rem));
+        opacity: 0;
+        pointer-events: none;
+        transition:
+          transform 0.28s ease,
+          opacity 0.22s ease;
+      }
+      .terminal-drawer.open {
+        transform: translateY(0);
+        opacity: 1;
+        pointer-events: auto;
+      }
+      .terminal-drawer-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+      }
+      .terminal-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55rem;
+        padding: 0.55rem 0.9rem;
+        border-radius: 999px;
+        border: 1px solid rgba(34, 211, 238, 0.18);
+        background: rgba(8, 15, 30, 0.84);
+        color: #67e8f9;
+        font-size: 10px;
+        font-weight: 900;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+      }
+      .terminal-surface {
+        position: relative;
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: hidden;
+        border-radius: 1.2rem;
+        border: 1px solid rgba(255, 255, 255, 0.07);
+        background: #030712;
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.03),
+          0 22px 55px rgba(0, 0, 0, 0.28);
+      }
+      .terminal-instance {
+        width: 100%;
+        height: 100%;
+        padding: 0.85rem;
+      }
+      .terminal-instance .xterm-viewport::-webkit-scrollbar {
+        width: 8px;
+      }
+      .terminal-instance .xterm-viewport::-webkit-scrollbar-thumb {
+        background: rgba(34, 211, 238, 0.18);
+        border-radius: 999px;
+      }
+      .terminal-toggle-active {
+        background: rgba(34, 211, 238, 0.14) !important;
+        border-color: rgba(34, 211, 238, 0.24) !important;
+        color: #cffafe !important;
       }
       @keyframes fadeIn {
         from {
@@ -7346,6 +7430,7 @@
           if (!res.ok || !data.success) {
             throw new Error(data.message || "Could not load that live project.");
           }
+          builderProjectName = extractBuilderProjectNameSeed(projectName || filename);
           switchTool("web-builder");
           setTimeout(() => {
             launchBossMode();
@@ -7360,6 +7445,7 @@
               projectName
                 ? `Editing ${projectName}`
                 : `Editing ${filename}`;
+            scheduleTerminalProjectSync(120);
             showBuilderSnackbar("Live project code loaded into the editor.", "success");
           }, 220);
         } catch (error) {
@@ -7430,6 +7516,8 @@
           clearInterval(currentLiveProjectHealthPoller);
           currentLiveProjectHealthPoller = null;
         }
+        currentLiveProjectDetail = null;
+        scheduleTerminalProjectSync(60);
         document
           .getElementById("live-project-detail-modal")
           ?.classList.add("hidden");
@@ -7827,6 +7915,7 @@
       function renderLiveProjectDetail(project, monitor = {}) {
         currentLiveProjectDetail = project || null;
         currentLiveProjectMonitor = monitor || null;
+        scheduleTerminalProjectSync(60);
         const primaryUrl = getProjectPrimaryUrl(project || {});
         const secondaryUrl = getProjectSecondaryUrl(project || {});
         const monetizeBtn = document.getElementById("project-monetize-btn");
@@ -12257,6 +12346,7 @@
         try {
           sessionStorage.setItem("medialab:lastTool", String(id || "console"));
         } catch {}
+        scheduleTerminalProjectSync(60);
         updateStudioToolSwitches();
         logUsageActivity("tool-open", `opened tool ${id}`, "tool-switch", {
           toolId: id,
@@ -12808,6 +12898,20 @@
                     </div>
                 </div>
             </div>
+            <div id="terminal-drawer" class="terminal-drawer">
+                <div class="terminal-drawer-header">
+                    <div class="min-w-0">
+                        <div id="terminal-project-chip" class="terminal-chip"><i class="fas fa-terminal text-[11px]"></i><span>medialab&gt;</span></div>
+                        <p id="terminal-status-text" class="mt-2 text-[11px] text-slate-400">Project-aware virtual shell ready.</p>
+                    </div>
+                    <button type="button" onclick="toggleTerminalDrawer(false)" class="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white transition-all">
+                        <i class="fas fa-chevron-down text-sm"></i>
+                    </button>
+                </div>
+                <div class="terminal-surface">
+                    <div id="terminal-instance" class="terminal-instance"></div>
+                </div>
+            </div>
             <div id="builder-explorer-shell" class="builder-explorer-shell hidden">
                 <div class="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
                     <div class="min-w-0">
@@ -12915,6 +13019,10 @@
                                     </select>
                                 </label>
                             </div>
+                            <button id="builder-terminal-toggle" type="button" onclick="toggleTerminalDrawer()" class="toolbar-item inline-flex h-8 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-[10px] font-black uppercase tracking-[0.18em] text-slate-300 hover:text-cyan-100">
+                                <i class="fas fa-terminal text-[11px]"></i>
+                                <span class="hidden sm:inline">Terminal</span>
+                            </button>
                         </div>
                         <div id="builder-responsive-controls" class="hidden items-center gap-2 rounded-lg border border-cyan-400/20 bg-cyan-500/[0.08] px-2.5 py-1.5">
                             <span class="text-[9px] font-black uppercase tracking-[0.2em] text-cyan-200">Responsive Width</span>
@@ -14734,6 +14842,19 @@
       let builderPanelIdleTimer = null;
       let builderLoadedTemplateSlug = "";
       let builderTemplateRuntimeDocument = "";
+      let terminalDrawerOpen = false;
+      let terminalRuntimePromise = null;
+      let terminalTerm = null;
+      let terminalFitAddon = null;
+      let terminalWebContainerInstance = null;
+      let terminalShellProcess = null;
+      let terminalShellWriter = null;
+      let terminalShellAttached = false;
+      let terminalProjectSyncTimer = null;
+      let terminalMirrorLoop = null;
+      let terminalActiveProjectFolder = "medialab";
+      let terminalLastIndexHtmlMirror = "";
+      let terminalSyncPauseUntil = 0;
       let selectionBoxEl = null;
       let builderConfirmAction = null;
       let builderConfirmSecondaryAction = null;
@@ -15103,6 +15224,7 @@
         selectedBuilderFilePath = activeBuilderFilePath;
         ensureBuilderProjectFiles();
         renderBuilderProjectExplorer();
+        scheduleTerminalProjectSync(80);
       }
       function getFirstBuilderHtmlFilePath(node = ensureBuilderProjectFiles(), currentPath = "") {
         if (node?.type !== "folder") return "";
@@ -15157,6 +15279,7 @@
         builderProjectName = extractBuilderProjectNameSeed(value);
         builderProjectNameEditing = false;
         syncBuilderProjectNameLabel();
+        scheduleTerminalProjectSync(80);
       }
       function handleBuilderProjectRenameKeydown(event) {
         if (event.key === "Enter") {
@@ -15544,6 +15667,305 @@
           path: String(item.path || "").split("/").slice(1).join("/") || "index.html",
         }));
       }
+      function normalizeTerminalProjectSeed(value = "") {
+        const trimmed = String(value || "").trim().replace(/\.[a-z0-9]+$/i, "");
+        return trimmed || "medialab";
+      }
+      function formatTerminalProjectFolder(value = "") {
+        const normalized = normalizeTerminalProjectSeed(value)
+          .replace(/[^a-zA-Z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "");
+        return normalized || "medialab";
+      }
+      function getActiveTerminalProjectContext() {
+        const stateName =
+          currentStudioToolId === "web-builder"
+            ? String(builderProjectName || "").trim()
+            : "";
+        const liveStateName = String(
+          currentLiveProjectDetail?.name ||
+            currentLiveProjectDetail?.fileName ||
+            currentLiveProjectDetail?.filename ||
+            "",
+        ).trim();
+        const domName = String(
+          document.getElementById("render-hosting-project-name")?.textContent || "",
+        ).trim();
+        const rawName = normalizeTerminalProjectSeed(
+          stateName || liveStateName || domName || "medialab",
+        );
+        const folderName = formatTerminalProjectFolder(rawName);
+        return {
+          name: rawName,
+          folderName,
+          prompt: `${folderName}>`,
+        };
+      }
+      function updateTerminalDrawerUI() {
+        const drawer = document.getElementById("terminal-drawer");
+        const toggle = document.getElementById("builder-terminal-toggle");
+        const chip = document.getElementById("terminal-project-chip");
+        const context = getActiveTerminalProjectContext();
+        if (drawer) {
+          drawer.classList.toggle("open", terminalDrawerOpen);
+        }
+        if (toggle) {
+          toggle.classList.toggle("terminal-toggle-active", terminalDrawerOpen);
+        }
+        if (chip) {
+          chip.innerHTML = `<i class="fas fa-terminal text-[11px]"></i><span>${escapeHtmlText(context.prompt)}</span>`;
+        }
+      }
+      function setTerminalStatus(message = "Project-aware virtual shell ready.") {
+        const node = document.getElementById("terminal-status-text");
+        if (node) node.textContent = String(message || "").trim();
+      }
+      function writeTerminalLine(message = "") {
+        if (!terminalTerm) return;
+        terminalTerm.writeln(String(message || ""));
+      }
+      async function writeTerminalShell(value = "") {
+        if (!terminalShellProcess || !String(value || "")) return;
+        try {
+          if (!terminalShellWriter && typeof terminalShellProcess.input?.getWriter === "function") {
+            terminalShellWriter = terminalShellProcess.input.getWriter();
+          }
+          if (terminalShellWriter?.write) {
+            await terminalShellWriter.write(String(value));
+            return;
+          }
+          if (typeof terminalShellProcess.input?.write === "function") {
+            await terminalShellProcess.input.write(String(value));
+          }
+        } catch (error) {
+          console.warn("Terminal shell write skipped:", error.message);
+        }
+      }
+      async function ensureTerminalDirectory(path = "") {
+        if (!terminalWebContainerInstance) return;
+        const parts = String(path || "")
+          .split("/")
+          .filter(Boolean);
+        let current = "";
+        for (const part of parts) {
+          current += `/${part}`;
+          try {
+            await terminalWebContainerInstance.fs.mkdir(current);
+          } catch {}
+        }
+      }
+      function buildTerminalPackageJson(folderName = "medialab") {
+        return JSON.stringify(
+          {
+            name: String(folderName || "medialab").toLowerCase(),
+            private: true,
+            version: "0.0.1",
+            scripts: {
+              start: "node index.js",
+            },
+          },
+          null,
+          2,
+        );
+      }
+      function buildTerminalIndexHtml(context = getActiveTerminalProjectContext()) {
+        const editor = document.getElementById("builder-code-editor");
+        const activeEditorValue = String(editor?.value || "").trim();
+        if (activeEditorValue) return editor.value;
+        const storedIndex = getBuilderFileContent("index.html");
+        if (String(storedIndex || "").trim()) return storedIndex;
+        return `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${escapeHtmlText(context.name)}</title>
+  </head>
+  <body>
+    <h1>${escapeHtmlText(context.name)}</h1>
+  </body>
+</html>`;
+      }
+      function getTerminalProjectEntries(context = getActiveTerminalProjectContext()) {
+        const fallbackIndex = buildTerminalIndexHtml(context);
+        if (currentStudioToolId === "web-builder") {
+          persistActiveBuilderFileContent();
+          const entries = stripRootBuilderFolder(
+            collectBuilderProjectFileEntries().filter((item) => item?.path),
+          );
+          const filtered = entries.filter((item) => String(item.path || "").trim());
+          const editor = document.getElementById("builder-code-editor");
+          const nextIndexContent = String(editor?.value || fallbackIndex);
+          const withoutIndex = filtered.filter(
+            (item) => normalizeBuilderFilePath(item.path) !== "index.html",
+          );
+          return [
+            ...withoutIndex,
+            { path: "index.html", content: nextIndexContent },
+            {
+              path: "package.json",
+              content:
+                filtered.find((item) => normalizeBuilderFilePath(item.path) === "package.json")
+                  ?.content || buildTerminalPackageJson(context.folderName),
+            },
+          ];
+        }
+        return [
+          { path: "index.html", content: fallbackIndex },
+          { path: "package.json", content: buildTerminalPackageJson(context.folderName) },
+        ];
+      }
+      async function syncTerminalProjectFiles(context = getActiveTerminalProjectContext()) {
+        if (!terminalWebContainerInstance) return;
+        const rootDir = `/${context.folderName}`;
+        await ensureTerminalDirectory(rootDir);
+        const entries = getTerminalProjectEntries(context);
+        for (const entry of entries) {
+          const relativePath = normalizeBuilderFilePath(entry.path || "");
+          if (!relativePath) continue;
+          const fullPath = `${rootDir}/${relativePath}`;
+          const parent = fullPath.split("/").slice(0, -1).join("/");
+          await ensureTerminalDirectory(parent);
+          await terminalWebContainerInstance.fs.writeFile(fullPath, String(entry.content || ""));
+        }
+        terminalLastIndexHtmlMirror = String(
+          entries.find((item) => normalizeBuilderFilePath(item.path) === "index.html")?.content || "",
+        );
+      }
+      async function activateTerminalProjectContext(options = {}) {
+        if (!terminalWebContainerInstance) return;
+        const { forceReset = false } = options;
+        const context = getActiveTerminalProjectContext();
+        await syncTerminalProjectFiles(context);
+        updateTerminalDrawerUI();
+        setTerminalStatus(`Attached to ${context.folderName} workspace.`);
+        if (terminalTerm && (forceReset || terminalActiveProjectFolder !== context.folderName)) {
+          terminalTerm.reset();
+          writeTerminalLine(`MediaLab Virtual Terminal`);
+          writeTerminalLine(`Project: ${context.name}`);
+          writeTerminalLine("");
+        }
+        terminalActiveProjectFolder = context.folderName;
+        await writeTerminalShell(
+          `mkdir -p "/${context.folderName}" && cd "/${context.folderName}" && export PS1="${context.prompt} " \n`,
+        );
+      }
+      async function ensureTerminalRuntime() {
+        if (terminalRuntimePromise) return terminalRuntimePromise;
+        terminalRuntimePromise = (async () => {
+          const host = document.getElementById("terminal-instance");
+          if (!host) return;
+          setTerminalStatus("Loading terminal engine...");
+          const [{ Terminal }, { FitAddon }, { WebContainer }] = await Promise.all([
+            import("https://esm.sh/xterm@5.5.0"),
+            import("https://esm.sh/xterm-addon-fit@0.8.0"),
+            import("https://esm.sh/@webcontainer/api@1.3.0"),
+          ]);
+          if (!terminalTerm) {
+            terminalTerm = new Terminal({
+              convertEol: true,
+              cursorBlink: true,
+              fontSize: 13,
+              lineHeight: 1.28,
+              theme: {
+                background: "#030712",
+                foreground: "#22d3ee",
+                cursor: "#22d3ee",
+              },
+            });
+            terminalFitAddon = new FitAddon();
+            terminalTerm.loadAddon(terminalFitAddon);
+            terminalTerm.open(host);
+          }
+          requestAnimationFrame(() => terminalFitAddon?.fit?.());
+          if (!terminalWebContainerInstance) {
+            terminalWebContainerInstance = await WebContainer.boot();
+            await terminalWebContainerInstance.mount({
+              medialab: {
+                directory: {
+                  "index.html": { file: { contents: buildTerminalIndexHtml() } },
+                  "package.json": { file: { contents: buildTerminalPackageJson("medialab") } },
+                },
+              },
+            });
+          }
+          if (!terminalShellProcess) {
+            terminalShellProcess = await terminalWebContainerInstance.spawn("jsh");
+          }
+          if (!terminalShellAttached) {
+            terminalShellAttached = true;
+            terminalShellProcess.output.pipeTo(
+              new WritableStream({
+                write(data) {
+                  terminalTerm?.write(String(data || ""));
+                },
+              }),
+            ).catch(() => {});
+            terminalTerm.onData((data) => {
+              writeTerminalShell(data);
+            });
+            window.addEventListener("resize", () => {
+              terminalFitAddon?.fit?.();
+            });
+          }
+          startTerminalMirrorLoop();
+          await activateTerminalProjectContext({ forceReset: true });
+        })().catch((error) => {
+          terminalRuntimePromise = null;
+          setTerminalStatus(error.message || "Terminal engine could not start here.");
+          if (terminalTerm) {
+            terminalTerm.reset();
+            writeTerminalLine("MediaLab terminal could not boot in this browser context.");
+            writeTerminalLine(error.message || "WebContainer API unavailable.");
+          }
+          throw error;
+        });
+        return terminalRuntimePromise;
+      }
+      function startTerminalMirrorLoop() {
+        if (terminalMirrorLoop) return;
+        terminalMirrorLoop = setInterval(async () => {
+          if (!terminalWebContainerInstance || currentStudioToolId !== "web-builder") return;
+          const editor = document.getElementById("builder-code-editor");
+          if (!editor || document.activeElement === editor) return;
+          const context = getActiveTerminalProjectContext();
+          try {
+            const content = await terminalWebContainerInstance.fs.readFile(
+              `/${context.folderName}/index.html`,
+              "utf-8",
+            );
+            const nextValue = String(content || "");
+            if (!nextValue || nextValue === terminalLastIndexHtmlMirror) return;
+            terminalLastIndexHtmlMirror = nextValue;
+            if (editor.value === nextValue) return;
+            terminalSyncPauseUntil = Date.now() + 1200;
+            editor.value = nextValue;
+            updateBuilderFileContent(activeBuilderFilePath || "index.html", nextValue);
+            handleBuilderCodeInput();
+            syncCodeEditorScroll();
+          } catch {}
+        }, 1400);
+      }
+      function scheduleTerminalProjectSync(delay = 220) {
+        if (Date.now() < terminalSyncPauseUntil) return;
+        clearTimeout(terminalProjectSyncTimer);
+        terminalProjectSyncTimer = setTimeout(() => {
+          activateTerminalProjectContext().catch(() => {});
+        }, delay);
+      }
+      async function syncTerminalProjectContext(options = {}) {
+        updateTerminalDrawerUI();
+        if (!terminalWebContainerInstance) return;
+        await activateTerminalProjectContext(options);
+      }
+      async function toggleTerminalDrawer(forceValue = null) {
+        terminalDrawerOpen =
+          typeof forceValue === "boolean" ? forceValue : !terminalDrawerOpen;
+        updateTerminalDrawerUI();
+        if (!terminalDrawerOpen) return;
+        await ensureTerminalRuntime().catch(() => {});
+        requestAnimationFrame(() => terminalFitAddon?.fit?.());
+      }
       function resolveBuilderProjectPath(fromPath = "", targetPath = "") {
         const raw = String(targetPath || "").trim();
         if (!raw || /^([a-z]+:)?\/\//i.test(raw) || raw.startsWith("/") || raw.startsWith("data:") || raw.startsWith("blob:")) {
@@ -15806,6 +16228,8 @@
           renderBuilderDrafts();
           renderBuilderProjectExplorer();
         }
+        updateTerminalDrawerUI();
+        scheduleTerminalProjectSync(120);
         scheduleBuilderTutorial();
       }
       function performExitStudio() {
@@ -21141,6 +21565,7 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
         highlight.scrollTop = editor.scrollTop;
         highlight.scrollLeft = editor.scrollLeft;
         if (lineGutter) lineGutter.scrollTop = editor.scrollTop;
+        scheduleTerminalProjectSync(260);
         clearTimeout(codeApplyTimer);
         codeApplyTimer = setTimeout(() => {
           const activePath = normalizeBuilderFilePath(activeBuilderFilePath || "index.html");

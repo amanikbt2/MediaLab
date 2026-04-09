@@ -337,6 +337,61 @@ async function createBulkNotifications(userIds = [], payload = {}) {
   }
 }
 
+function extractUserProjectNames(user = {}) {
+  const liveProjects = Array.isArray(user?.liveProjects) ? user.liveProjects : [];
+  const historyProjects = Array.isArray(user?.projects) ? user.projects : [];
+  const names = [...liveProjects, ...historyProjects]
+    .map((item) =>
+      String(
+        item?.name ||
+          item?.fileName ||
+          item?.filename ||
+          item?.title ||
+          "",
+      ).trim(),
+    )
+    .filter(Boolean);
+  return [...new Set(names)];
+}
+
+function resolveProjectTokenValue(projectNames = [], tokenArg = "") {
+  const safeProjects = Array.isArray(projectNames) ? projectNames.filter(Boolean) : [];
+  if (!safeProjects.length) return "your latest project";
+  const raw = String(tokenArg || "").trim().toLowerCase();
+  if (!raw) return safeProjects[0];
+  if (raw === "nth") return safeProjects[safeProjects.length - 1];
+  const numeric = Number.parseInt(raw, 10);
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return safeProjects[safeProjects.length - 1];
+  }
+  return safeProjects[Math.min(numeric - 1, safeProjects.length - 1)] || safeProjects[safeProjects.length - 1];
+}
+
+function renderAdminNotificationTemplate(template = "", user = {}) {
+  const safeTemplate = String(template || "");
+  if (!safeTemplate) return "";
+  const projectNames = extractUserProjectNames(user);
+  return safeTemplate.replace(/\{([a-z0-9_-]+)\}/gi, (_match, rawToken) => {
+    const token = String(rawToken || "").trim().toLowerCase();
+    if (token === "username") {
+      return String(user?.name || "Creator").trim() || "Creator";
+    }
+    if (token === "email") {
+      return String(user?.email || "").trim() || "no-email";
+    }
+    if (token === "projectname") {
+      return resolveProjectTokenValue(projectNames);
+    }
+    if (token.startsWith("projectname-")) {
+      return resolveProjectTokenValue(projectNames, token.slice("projectname-".length));
+    }
+    if (token === "projectcount" || token === "publishedprojectcount") {
+      return String(projectNames.length);
+    }
+    return _match;
+  });
+}
+
 function computeSellerRatingMeta(user = {}) {
   const ratings = Array.isArray(user?.sellerRatings) ? user.sellerRatings : [];
   const count = ratings.length;
@@ -2773,6 +2828,7 @@ app.post("/api/admin/notifications", adminRateLimit, requireAdminApi, express.js
       if (!user) {
         return res.status(404).json({ success: false, message: "User not found for that email." });
       }
+      const renderedMessage = renderAdminNotificationTemplate(message, user);
       const notification = await createUserNotification({
         userId: user._id,
         toEmail: user.email || "",
@@ -2781,29 +2837,33 @@ app.post("/api/admin/notifications", adminRateLimit, requireAdminApi, express.js
         deliveryScope: "individual",
         type: "admin",
         title: "New admin message",
-        message,
+        message: renderedMessage,
         targetType: "console",
-        metadata: { scope: "individual", email },
+        metadata: { scope: "individual", email, templateSource: message },
       });
       if (!notification) {
         return res.status(500).json({ success: false, message: "Could not send this notification right now." });
       }
       return res.json({ success: true, message: "Notification sent to the selected user." });
     }
-    const users = await User.find({}).select("_id").lean();
-    const notifications = await createBulkNotifications(
-      users.map((user) => user._id),
-      {
+    const users = await User.find({}).select("_id email name liveProjects projects").lean();
+    const notifications = [];
+    for (const user of users) {
+      const renderedMessage = renderAdminNotificationTemplate(message, user);
+      const notification = await createUserNotification({
+        userId: user._id,
+        toEmail: user.email || "",
         fromEmail: "dev@gmail.com",
         fromName: "ML Community",
         deliveryScope: "all",
         type: "admin",
         title: "New admin announcement",
-        message,
+        message: renderedMessage,
         targetType: "console",
-        metadata: { scope: "all" },
-      },
-    );
+        metadata: { scope: "all", templateSource: message },
+      });
+      if (notification) notifications.push(notification);
+    }
     if (!notifications.length) {
       return res.status(500).json({ success: false, message: "Could not send notifications right now." });
     }
