@@ -20191,18 +20191,6 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
           /(&lt;|&gt;|\/&gt;)/g,
           '<span class="code-token-bracket">$1</span>',
         );
-        html = html.replace(
-          /(^|\n)([.#]?[a-zA-Z0-9_:\-\s>,]+)(\s*\{)/g,
-          '$1<span class="code-token-selector">$2</span><span class="code-token-bracket">$3</span>',
-        );
-        html = html.replace(
-          /([a-zA-Z-]+)(:\s*)([^;\n]+)(;)/g,
-          '<span class="code-token-property">$1</span>$2<span class="code-token-value">$3</span><span class="code-token-bracket">$4</span>',
-        );
-        html = html.replace(
-          /\b(html|body|head|style|class|id)\b/g,
-          '<span class="code-token-keyword">$1</span>',
-        );
         return html;
       }
       function handleBuilderCodeInput() {
