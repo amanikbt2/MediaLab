@@ -19,6 +19,14 @@
         touch-action: none;
         cursor: grab;
         border-radius: 20px;
+        border: 2px solid rgba(255, 255, 255, 0.28);
+        background:
+          radial-gradient(circle at 22% 18%, rgba(255, 255, 255, 0.18), transparent 46%),
+          radial-gradient(circle at 80% 84%, rgba(99, 102, 241, 0.2), transparent 45%),
+          linear-gradient(155deg, #2f0b63 0%, #20124a 46%, #111836 100%);
+        box-shadow:
+          0 22px 44px rgba(0, 0, 0, 0.38),
+          inset 0 0 0 1px rgba(255, 255, 255, 0.07);
       }
       canvas:active {
         cursor: grabbing;
@@ -300,6 +308,14 @@
       const ROWS = 8,
         COLS = 8;
       const CANDY_EMOJIS = ["🍭", "🍬", "🍫", "🧁", "🍪", "🍩"];
+      const CANDY_COLORS = [
+        "#fb7185",
+        "#38bdf8",
+        "#a78bfa",
+        "#facc15",
+        "#4ade80",
+        "#f97316",
+      ];
       const POWER_STRIPE = 7,
         POWER_BOMB = 9;
       const JELLY = 10;
@@ -482,6 +498,7 @@
 
       function drawWithOffset(r1, c1, r2, c2, ox, oy) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawBoardLayer();
         for (let r = 0; r < ROWS; r++) {
           for (let c = 0; c < COLS; c++) {
             let drawX = c * CELL + CELL / 2;
@@ -497,12 +514,7 @@
 
             const type = grid[r][c];
             if (!type) continue;
-
-            ctx.font = `${CELL * 0.82}px system-ui`;
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            let emoji = type === JELLY ? "🟦" : CANDY_EMOJIS[type - 1] || "💣";
-            ctx.fillText(emoji, drawX, drawY);
+            drawCandyPiece(drawX, drawY, type);
           }
         }
       }
@@ -548,6 +560,7 @@
 
       function draw() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawBoardLayer();
 
         for (let r = 0; r < ROWS; r++) {
           for (let c = 0; c < COLS; c++) {
@@ -555,12 +568,7 @@
             if (!type) continue;
             const x = c * CELL + CELL / 2;
             const y = r * CELL + CELL / 2;
-
-            ctx.font = `${CELL * 0.82}px system-ui`;
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            let emoji = type === JELLY ? "🟦" : CANDY_EMOJIS[type - 1] || "💣";
-            ctx.fillText(emoji, x, y);
+            drawCandyPiece(x, y, type);
           }
         }
 
@@ -573,12 +581,83 @@
             (p.endRow - p.startRow) * CELL * ease +
             CELL / 2 +
             bounce;
-          ctx.fillText(
-            CANDY_EMOJIS[p.type - 1],
-            p.startCol * CELL + CELL / 2,
-            y,
-          );
+          drawCandyPiece(p.startCol * CELL + CELL / 2, y, p.type);
         }
+      }
+      function drawBoardLayer() {
+        const corner = Math.max(6, CELL * 0.2);
+        for (let r = 0; r < ROWS; r++) {
+          for (let c = 0; c < COLS; c++) {
+            const x = c * CELL + 2;
+            const y = r * CELL + 2;
+            const size = CELL - 4;
+            ctx.save();
+            roundedRectPath(x, y, size, size, corner);
+            const fill = ctx.createLinearGradient(x, y, x, y + size);
+            fill.addColorStop(0, "rgba(255,255,255,0.08)");
+            fill.addColorStop(1, "rgba(255,255,255,0.02)");
+            ctx.fillStyle = fill;
+            ctx.fill();
+            ctx.strokeStyle = "rgba(236,72,153,0.25)";
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            ctx.restore();
+          }
+        }
+      }
+      function drawCandyPiece(x, y, type) {
+        if (!type) return;
+        const radius = CELL * 0.38;
+        const emoji = type === JELLY ? "🟦" : CANDY_EMOJIS[type - 1] || "💣";
+        const color =
+          type === JELLY
+            ? "#60a5fa"
+            : CANDY_COLORS[(type - 1) % CANDY_COLORS.length] || "#f472b6";
+        ctx.save();
+        const glow = ctx.createRadialGradient(
+          x - radius * 0.25,
+          y - radius * 0.25,
+          2,
+          x,
+          y,
+          radius * 1.25,
+        );
+        glow.addColorStop(0, "rgba(255,255,255,0.34)");
+        glow.addColorStop(1, `${color}00`);
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(x, y, radius * 1.25, 0, Math.PI * 2);
+        ctx.fill();
+        const candyFill = ctx.createLinearGradient(x, y - radius, x, y + radius);
+        candyFill.addColorStop(0, "rgba(255,255,255,0.28)");
+        candyFill.addColorStop(0.22, color);
+        candyFill.addColorStop(1, "rgba(17,24,39,0.56)");
+        ctx.fillStyle = candyFill;
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "rgba(255,255,255,0.3)";
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.font = `${CELL * 0.68}px system-ui, "Apple Color Emoji", "Segoe UI Emoji", sans-serif`;
+        ctx.shadowColor = "rgba(15,23,42,0.45)";
+        ctx.shadowBlur = 5;
+        ctx.fillText(emoji, x + 0.5, y + 1);
+        ctx.restore();
+      }
+      function roundedRectPath(x, y, width, height, radius) {
+        const r = Math.min(radius, width / 2, height / 2);
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + width, y, x + width, y + height, r);
+        ctx.arcTo(x + width, y + height, x, y + height, r);
+        ctx.arcTo(x, y + height, x, y, r);
+        ctx.arcTo(x, y, x + width, y, r);
+        ctx.closePath();
       }
 
       // ================== INPUT ==================
