@@ -20393,6 +20393,12 @@ console.log("Triggered ${eventName}", { source, event });
           opacity: styles.opacity,
           mixBlendMode: styles.mixBlendMode,
           transform: `rotate(${styles.rotate})`,
+          padding: "0px",
+        });
+        el.dataset.animationStack = JSON.stringify(
+          normalizeAnimationStack(styles.animationStack),
+        );
+        const sharedAnimationStyles = {
           animationName: animationCss.animationName,
           animationDuration: animationCss.animationDuration,
           animationTimingFunction: animationCss.animationTimingFunction,
@@ -20401,11 +20407,7 @@ console.log("Triggered ${eventName}", { source, event });
           animationDirection: animationCss.animationDirection,
           animationFillMode: animationCss.animationFillMode,
           animationPlayState: animationCss.animationPlayState,
-          padding: "0px",
-        });
-        el.dataset.animationStack = JSON.stringify(
-          normalizeAnimationStack(styles.animationStack),
-        );
+        };
         const sharedTextStyles = {
           color: styles.color,
           fontSize: styles.fontSize,
@@ -20464,7 +20466,7 @@ console.log("Triggered ${eventName}", { source, event });
         el.dataset.flexItemMode = styles.flexItemMode || "auto";
         el.dataset.flexItemSize = styles.flexItemSize || "220px";
         if (type === "text") {
-          Object.assign(inner.style, sharedTextStyles, {
+          Object.assign(inner.style, sharedAnimationStyles, sharedTextStyles, {
             width: "100%",
             height: "100%",
             display: "block",
@@ -20484,7 +20486,7 @@ console.log("Triggered ${eventName}", { source, event });
             boxSizing: "border-box",
           });
         } else if (type === "img") {
-          Object.assign(inner.style, {
+          Object.assign(inner.style, sharedAnimationStyles, {
             width: "100%",
             height: "100%",
             objectFit:
@@ -20501,7 +20503,7 @@ console.log("Triggered ${eventName}", { source, event });
             boxShadow: styles.boxShadow,
           });
         } else {
-          Object.assign(inner.style, sharedTextStyles, sharedBoxStyles);
+          Object.assign(inner.style, sharedAnimationStyles, sharedTextStyles, sharedBoxStyles);
         }
         if (type === "button" || type === "a") {
           Object.assign(inner.style, {
@@ -20519,7 +20521,7 @@ console.log("Triggered ${eventName}", { source, event });
         }
         if (type === "input" || type === "textarea") {
           inner.placeholder = attrs.placeholder || "Enter text...";
-          Object.assign(inner.style, {
+          Object.assign(inner.style, sharedAnimationStyles, {
             width: "100%",
             height: "100%",
             ...backgroundLayerStyles,
@@ -20548,6 +20550,7 @@ console.log("Triggered ${eventName}", { source, event });
           Object.assign(inner.style, {
             accentColor: styles.backgroundColor,
             boxShadow: styles.boxShadow,
+            ...sharedAnimationStyles,
           });
         }
         if (type === "text") inner.textContent = attrs.text || "Add Text";
