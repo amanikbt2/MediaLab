@@ -17522,7 +17522,7 @@
   <body>
     <h1>${escapeHtmlText(context.name)}</h1>
   </body>
-</html>`;
+</html>`);
       }
       function getTerminalProjectEntries(context = getActiveTerminalProjectContext()) {
         const fallbackIndex = buildTerminalIndexHtml(context);
@@ -23540,9 +23540,10 @@ console.log("Triggered ${eventName}", { source, event });
           lines.push(`(() => { const source = ${sourceRef}; if (!source) return; source.addEventListener(${JSON.stringify(eventName)}, (event) => { ${body} }); })();`);
         });
         if (!lines.length) return "";
+        const scriptLines = lines.map((line) => `  ${line}`).join("\n");
         return `<script>
 document.addEventListener("DOMContentLoaded", () => {
-${lines.map((line) => `  ${line}`).join("\n")}
+${scriptLines}
 });
 <\/script>`;
       }
