@@ -5630,9 +5630,9 @@
         const message = document.getElementById("builder-collab-inactive-message");
         if (!overlay || !title || !message) return;
         const roomLabel = collaborationRoomId ? `Meeting ID_${collaborationRoomId}` : "This meeting";
-        if (type === "host-ended") {
-          title.textContent = "This meeting has been ended by the host.";
-          message.textContent = "The meeting has been ended by the host. You can continue anyway with normal MediaLab.";
+        if (type === "host-ended" || type === "host-exited") {
+          title.textContent = "This meeting has been ended forcefully.";
+          message.textContent = "The meeting has been ended forcefully by the host. You can continue anyway with normal MediaLab.";
         } else {
           title.textContent = `${roomLabel} has expired.`;
           message.textContent = `${roomLabel} has expired. You can continue anyway with normal MediaLab.`;
@@ -6516,7 +6516,7 @@
                   <p class="mt-1 text-sm text-slate-300">${escapeHtmlText(collaborationShareLink || buildCollaborationShareLink(collaborationRoomId))}</p>
                 </div>
               </div>
-              ${collaborationIsHost ? `<button onclick="endCollaborationRoomSession()" class="rounded-xl border border-rose-400/20 bg-rose-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-rose-200 hover:bg-rose-500/20">End Meeting</button>` : ""}
+              ${collaborationIsHost ? `<button onclick="endCollaborationRoomSession()" class="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-rose-400/30 bg-rose-500/15 text-rose-200 shadow-[0_14px_34px_rgba(244,63,94,0.18)] hover:bg-rose-500/25" title="Stop meeting"><i class="fas fa-stop"></i></button>` : ""}
             </div>
           </div>
           <div class="max-h-[52vh] overflow-y-auto px-4 py-4 custom-scrollbar">${usersMarkup}</div>
@@ -6791,7 +6791,11 @@
         collaborationAutoReconnectEnabled = false;
         stopCollaborationLocalMediaTracks();
         updateCollaborationUi();
-        showCollaborationInactiveOverlay(payload.reason === "host-ended" ? "host-ended" : "expired");
+        showCollaborationInactiveOverlay(
+          payload.reason === "host-ended" || payload.reason === "host-exited"
+            ? "host-ended"
+            : "expired",
+        );
       });
       socket.on("collaboration:room-state", (payload = {}) => {
         if (String(payload.roomId || "") !== collaborationRoomId) return;
@@ -6834,7 +6838,9 @@
         collaborationAutoReconnectEnabled = false;
         stopCollaborationLocalMediaTracks();
         updateCollaborationUi();
-        showCollaborationInactiveOverlay("host-ended");
+        showCollaborationInactiveOverlay(
+          payload.reason === "host-exited" ? "host-exited" : "host-ended",
+        );
       });
       socket.on("collaboration:permit-edit", (payload = {}) => {
         if (String(payload.roomId || "") !== collaborationRoomId) return;

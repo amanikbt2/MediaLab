@@ -329,24 +329,11 @@ function removeSocketFromCollaborationRoom(socketId = "") {
   const room = collaborationRooms.get(roomId);
   socketCollaborationMembership.delete(socketId);
   if (!room) return;
-  room.users.delete(socketId);
   if (room.hostSocketId === socketId) {
-    room.hostSocketId = "";
-    const nextHost = Array.from(room.users.values())[0] || null;
-    if (nextHost) {
-      nextHost.isHost = true;
-      nextHost.canEdit = true;
-      room.hostSocketId = nextHost.socketId;
-      io.to(nextHost.socketId).emit("collaboration:permit-edit", {
-        roomId,
-        grantedBy: "system",
-      });
-      io.to(nextHost.socketId).emit("collaboration:host-changed", {
-        roomId,
-        hostSocketId: nextHost.socketId,
-      });
-    }
+    endCollaborationRoom(roomId, "host-exited");
+    return;
   }
+  room.users.delete(socketId);
   if (!room.users.size) {
     collaborationRooms.delete(roomId);
     return;
