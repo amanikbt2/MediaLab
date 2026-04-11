@@ -480,6 +480,25 @@
         color: #67e8f9;
         flex-shrink: 0;
       }
+      .builder-collab-inactive-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 1705;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+        background: rgba(2, 6, 23, 0.5);
+        backdrop-filter: blur(10px);
+      }
+      .builder-collab-inactive-card {
+        width: min(92vw, 460px);
+        border-radius: 1.8rem;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: linear-gradient(180deg, rgba(8, 15, 30, 0.98), rgba(2, 6, 23, 0.96));
+        box-shadow: 0 30px 90px rgba(2, 6, 23, 0.52);
+        padding: 1.4rem;
+      }
       .builder-collab-lobby-card {
         border-radius: 1.5rem;
         border: 1px solid rgba(255, 255, 255, 0.08);
@@ -2653,11 +2672,11 @@
           </div>
           <div
             data-tool-switch="image-pdf"
-            onclick="switchTool('image-pdf')"
+            onclick="switchTool('data-explorer')"
             class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 px-5 py-2.5 rounded-3xl cursor-pointer"
           >
-            <i class="fas fa-image text-cyan-400"></i>
-            <span class="font-medium text-sm text-gray-200">Image → PDF</span>
+            <i class="fas fa-database text-cyan-400"></i>
+            <span class="font-medium text-sm text-gray-200">Database</span>
           </div>
           <div
             data-tool-switch="text-doc"
@@ -2794,15 +2813,15 @@
               Standard Tools
             </p>
             <div
-              onclick="switchTool('image-pdf')"
+              onclick="switchTool('data-explorer')"
               class="flex items-center gap-x-4 px-5 py-3.5 hover:bg-gray-800 rounded-2xl cursor-pointer group transition-all"
             >
               <i
-                class="fas fa-image text-lg text-gray-500 group-hover:text-cyan-400"
+                class="fas fa-database text-lg text-gray-500 group-hover:text-cyan-400"
               ></i>
               <span
                 class="font-bold text-sm text-gray-400 group-hover:text-white"
-                >Image → PDF</span
+                >Database</span
               >
             </div>
             <div
@@ -2949,12 +2968,12 @@
               </button>
               <button
                 data-tool-switch="image-pdf"
-                onclick="switchTool('image-pdf')"
+                onclick="switchTool('data-explorer')"
                 class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 border border-white/5 px-5 py-2.5 rounded-3xl cursor-pointer"
               >
-                <i class="fas fa-image text-cyan-400"></i
+                <i class="fas fa-database text-cyan-400"></i
                 ><span class="font-medium text-sm text-gray-200"
-                  >Image to PDF</span
+                  >Database</span
                 >
               </button>
               <button
@@ -4858,6 +4877,7 @@
       let collaborationAudioContext = null;
       let collaborationMediaUpdateToken = 0;
       let collaborationMediaUpdating = false;
+      let collaborationMediaUpdateCooldownTimer = null;
       let collaborationOfferRetryTimers = new Map();
       let collaborationVideoDragState = null;
       let collaborationLocalVideoWindowPosition = null;
@@ -4865,6 +4885,7 @@
       let collaborationMediaPromptShownForRoom = "";
       let collaborationMediaPromptAudioSelected = false;
       let collaborationMediaPromptVideoSelected = true;
+      let collaborationInactiveOverlay = null;
       const collaborationIceConfiguration = {
         iceServers: [
           { urls: "stun:stun.relay.metered.ca:80" },
@@ -4900,6 +4921,7 @@
       let dataExplorerFields = [];
       let dataExplorerViewMode = "table";
       let dataExplorerLoading = false;
+      let dataExplorerUriDraft = "";
       let dataExplorerBindTarget = null;
       let currentRenderHostingProject = null;
       let currentRenderLiveProject = null;
@@ -5085,9 +5107,9 @@
         },
         {
           id: "image-pdf",
-          title: "Image → PDF",
-          icon: "fa-image",
-          desc: "Multiple images → one PDF",
+          title: "Database",
+          icon: "fa-database",
+          desc: "Connect MongoDB and inspect live collections",
         },
         {
           id: "data-explorer",
@@ -5493,6 +5515,57 @@
         collaborationMediaPromptDismissed = true;
         document.getElementById("builder-collab-media-prompt")?.classList.add("hidden");
       }
+      function showCollaborationInactiveOverlay(type = "expired") {
+        collaborationInactiveOverlay = type || "expired";
+        const overlay = document.getElementById("builder-collab-inactive-overlay");
+        const title = document.getElementById("builder-collab-inactive-title");
+        const message = document.getElementById("builder-collab-inactive-message");
+        if (!overlay || !title || !message) return;
+        const roomLabel = collaborationRoomId ? `Meeting ID_${collaborationRoomId}` : "This meeting";
+        if (type === "host-ended") {
+          title.textContent = "This meeting has been ended by the host.";
+          message.textContent = "The meeting has been ended by the host. You can continue anyway with normal MediaLab.";
+        } else {
+          title.textContent = `${roomLabel} has expired.`;
+          message.textContent = `${roomLabel} has expired. You can continue anyway with normal MediaLab.`;
+        }
+        overlay.classList.remove("hidden");
+      }
+      function hideCollaborationInactiveOverlay() {
+        collaborationInactiveOverlay = null;
+        document.getElementById("builder-collab-inactive-overlay")?.classList.add("hidden");
+      }
+      function resetCollaborationClientState() {
+        collaborationJoined = false;
+        collaborationIsHost = false;
+        collaborationCanEdit = true;
+        collaborationDropdownOpen = false;
+        collaborationAutoReconnectEnabled = false;
+        collaborationUsers = [];
+        collaborationCursorMap.clear();
+        collaborationShareLink = "";
+        collaborationAudioEnabled = false;
+        collaborationVideoEnabled = false;
+        collaborationMediaPromptDismissed = true;
+        collaborationMediaPromptShownForRoom = "";
+        stopCollaborationLocalMediaTracks();
+        closeCollaborationDropdown();
+        closeCollaborationMediaPrompt();
+        hideCollaborationInactiveOverlay();
+      }
+      function continueAnywayFromCollaboration() {
+        try {
+          const nextUrl = new URL(window.location.href);
+          nextUrl.searchParams.delete("room");
+          resetCollaborationClientState();
+          collaborationRoomId = "";
+          window.location.href = nextUrl.toString();
+          return;
+        } catch {}
+        resetCollaborationClientState();
+        collaborationRoomId = "";
+        window.location.href = `${window.location.origin}${window.location.pathname}`;
+      }
       function renderCollaborationMediaPrompt() {
         const audioButton = document.getElementById("builder-collab-prompt-audio");
         const videoButton = document.getElementById("builder-collab-prompt-video");
@@ -5517,10 +5590,31 @@
         }, delay);
         collaborationOfferRetryTimers.set(key, timer);
       }
+      function setCollaborationMediaUpdating(active, cooldownMs = 0) {
+        clearTimeout(collaborationMediaUpdateCooldownTimer);
+        if (active) {
+          collaborationMediaUpdating = true;
+          collaborationMediaUpdateCooldownTimer = setTimeout(() => {
+            collaborationMediaUpdating = false;
+            updateCollaborationUi();
+          }, 3200);
+          updateCollaborationUi();
+          return;
+        }
+        const release = () => {
+          collaborationMediaUpdating = false;
+          updateCollaborationUi();
+        };
+        if (cooldownMs > 0) {
+          collaborationMediaUpdateCooldownTimer = setTimeout(release, cooldownMs);
+        } else {
+          release();
+        }
+      }
       async function applyCollaborationMediaState(audioEnabled = false, videoEnabled = false) {
         if (!isCollaborationActive()) return false;
         const requestToken = ++collaborationMediaUpdateToken;
-        collaborationMediaUpdating = true;
+        setCollaborationMediaUpdating(true);
         collaborationAudioEnabled = Boolean(audioEnabled);
         collaborationVideoEnabled = Boolean(videoEnabled);
         if (!collaborationAudioEnabled && !collaborationVideoEnabled) {
@@ -5532,7 +5626,7 @@
             if (requestToken !== collaborationMediaUpdateToken) return false;
             collaborationAudioEnabled = false;
             collaborationVideoEnabled = false;
-            collaborationMediaUpdating = false;
+            setCollaborationMediaUpdating(false, 900);
             updateCollaborationUi();
             renderCollaborationMediaPrompt();
             return false;
@@ -5542,7 +5636,7 @@
         await pushCollaborationMediaState();
         await syncCollaborationPeerMesh(true);
         if (requestToken !== collaborationMediaUpdateToken) return false;
-        collaborationMediaUpdating = false;
+        setCollaborationMediaUpdating(false, 900);
         updateCollaborationUi();
         renderCollaborationMediaPrompt();
         return true;
@@ -6148,18 +6242,27 @@
           : `<div class="rounded-[1.1rem] bg-white/[0.03] px-4 py-5 text-sm text-slate-400">Waiting for collaborators to join.</div>`;
         panel.innerHTML = `
           <div class="border-b border-white/10 px-4 py-4">
-            <div class="flex items-center gap-3">
-              <span class="collaboration-pulse-dot"></span>
-              <div>
-                <p class="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-300">Live Session Active</p>
-                <p class="mt-1 text-sm text-slate-300">${escapeHtmlText(collaborationShareLink || buildCollaborationShareLink(collaborationRoomId))}</p>
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-center gap-3">
+                <span class="collaboration-pulse-dot"></span>
+                <div>
+                  <p class="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-300">Live Session Active</p>
+                  <p class="mt-1 text-sm text-slate-300">${escapeHtmlText(collaborationShareLink || buildCollaborationShareLink(collaborationRoomId))}</p>
+                </div>
               </div>
+              ${collaborationIsHost ? `<button onclick="endCollaborationRoomSession()" class="rounded-xl border border-rose-400/20 bg-rose-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-rose-200 hover:bg-rose-500/20">End Meeting</button>` : ""}
             </div>
           </div>
           <div class="max-h-[52vh] overflow-y-auto px-4 py-4 custom-scrollbar">${usersMarkup}</div>
         `;
         panel.classList.remove("hidden");
         positionCollaborationDropdown();
+      }
+      function endCollaborationRoomSession() {
+        if (!collaborationRoomId || !collaborationIsHost) return;
+        socket.emit("collaboration:end-room", {
+          roomId: collaborationRoomId,
+        });
       }
       function updateCollaborationUi() {
         const toggle = document.getElementById("builder-collaboration-toggle");
@@ -6245,6 +6348,7 @@
       }
       function joinCollaborationRoom(forceHost = false) {
         if (!collaborationRoomId || !socket.connected) return;
+        hideCollaborationInactiveOverlay();
         collaborationAutoReconnectEnabled = true;
         const identity = getCollaborationIdentity();
         socket.emit("collaboration:join-room", {
@@ -6255,11 +6359,12 @@
           color: identity.color,
           isGuest: identity.isGuest,
           canEdit: Boolean(forceHost || collaborationIsHost),
-          canAudio: Boolean(collaborationAudioEnabled || collaborationVideoEnabled),
+          canAudio: Boolean(collaborationAudioEnabled),
           canVideo: Boolean(collaborationVideoEnabled),
         });
       }
       function generateCollaborationLink() {
+        hideCollaborationInactiveOverlay();
         collaborationRoomId = String(globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`);
         collaborationShareLink = buildCollaborationShareLink(collaborationRoomId);
         collaborationIsHost = true;
@@ -6396,6 +6501,7 @@
       window.addEventListener("pointerup", stopCollaborationVideoDrag);
       socket.on("collaboration:joined", (payload = {}) => {
         if (String(payload.roomId || "") !== collaborationRoomId) return;
+        hideCollaborationInactiveOverlay();
         collaborationJoined = true;
         collaborationMediaPromptDismissed = false;
         collaborationMediaPromptShownForRoom = "";
@@ -6406,6 +6512,14 @@
         }
         updateCollaborationUi();
         maybeShowCollaborationMediaPrompt();
+      });
+      socket.on("collaboration:join-invalid", (payload = {}) => {
+        if (String(payload.roomId || "") !== String(collaborationRoomId || "")) return;
+        collaborationJoined = false;
+        collaborationAutoReconnectEnabled = false;
+        stopCollaborationLocalMediaTracks();
+        updateCollaborationUi();
+        showCollaborationInactiveOverlay(payload.reason === "host-ended" ? "host-ended" : "expired");
       });
       socket.on("collaboration:room-state", (payload = {}) => {
         if (String(payload.roomId || "") !== collaborationRoomId) return;
@@ -6437,6 +6551,14 @@
         updateCollaborationUi();
         syncCollaborationPeerMesh().catch(() => {});
         maybeShowCollaborationMediaPrompt();
+      });
+      socket.on("collaboration:room-ended", (payload = {}) => {
+        if (String(payload.roomId || "") !== String(collaborationRoomId || "")) return;
+        collaborationJoined = false;
+        collaborationAutoReconnectEnabled = false;
+        stopCollaborationLocalMediaTracks();
+        updateCollaborationUi();
+        showCollaborationInactiveOverlay("host-ended");
       });
       socket.on("collaboration:permit-edit", (payload = {}) => {
         if (String(payload.roomId || "") !== collaborationRoomId) return;
@@ -7002,7 +7124,7 @@
           marketplace: "Loading Marketplace...",
           history: "Loading Projects...",
           "web-builder": "Loading Web Builder...",
-          "image-pdf": "Loading Image to PDF...",
+          "image-pdf": "Loading Database...",
           "text-doc": "Loading Data Explorer...",
           "data-explorer": "Loading Data Explorer...",
           "video-audio": "Loading Video to Audio...",
@@ -7054,11 +7176,12 @@
       }
       async function connectDataExplorer() {
         const input = document.getElementById("data-explorer-uri-input");
-        const uri = String(input?.value || "").trim();
+        const uri = String(input?.value || dataExplorerUriDraft || "").trim();
         if (!uri) {
           showBuilderSnackbar("Enter a MongoDB URI first.", "error");
           return;
         }
+        dataExplorerUriDraft = uri;
         dataExplorerLoading = true;
         renderDataExplorerTool();
         try {
@@ -7084,6 +7207,7 @@
           if (dataExplorerSelectedCollection) {
             await loadDataExplorerCollection(dataExplorerSelectedCollection);
           }
+          dataExplorerUriDraft = "";
           showBuilderSnackbar("Database connected.", "success");
         } catch (error) {
           showBuilderSnackbar(error.message || "Could not connect to MongoDB.", "error");
@@ -7113,6 +7237,10 @@
       async function loadDataExplorerCollection(collectionName = "") {
         const collection = String(collectionName || "").trim();
         if (!collection) return;
+        if (collection === dataExplorerSelectedCollection && dataExplorerDocuments.length) {
+          renderDataExplorerTool();
+          return;
+        }
         dataExplorerSelectedCollection = collection;
         dataExplorerLoading = true;
         renderDataExplorerTool();
@@ -7134,8 +7262,13 @@
         }
       }
       function setDataExplorerViewMode(mode = "table") {
-        dataExplorerViewMode = mode === "json" ? "json" : "table";
+        const nextMode = mode === "json" ? "json" : "table";
+        if (nextMode === dataExplorerViewMode) return;
+        dataExplorerViewMode = nextMode;
         renderDataExplorerTool();
+      }
+      function setDataExplorerUriDraft(value = "") {
+        dataExplorerUriDraft = String(value || "");
       }
       function beginDataExplorerInlineEdit(documentId = "", fieldPath = "", triggerButton = null) {
         const cell = triggerButton?.closest?.("[data-data-explorer-cell]");
@@ -7190,32 +7323,45 @@
         if (!dataExplorerNeedsRender()) return;
         const area = document.getElementById("tool-display");
         if (!area) return;
+        let root = document.getElementById("data-explorer-root");
+        if (!root) {
+          area.innerHTML = `<div id="data-explorer-root" class="data-explorer-shell animate-fadeIn">
+            <div class="data-explorer-panel p-5 sm:p-6">
+              <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                <div>
+                  <p class="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-300">Database</p>
+                  <h2 class="mt-2 text-3xl font-semibold tracking-tight text-white">Real-time MongoDB collections inside Studio.</h2>
+                  <p id="data-explorer-summary" class="mt-2 text-sm text-slate-400"></p>
+                </div>
+                <div id="data-explorer-view-actions" class="flex flex-wrap gap-3"></div>
+              </div>
+            </div>
+            <div id="data-explorer-content"></div>
+          </div>`;
+          root = document.getElementById("data-explorer-root");
+        }
+        const summary = document.getElementById("data-explorer-summary");
+        const actions = document.getElementById("data-explorer-view-actions");
+        const content = document.getElementById("data-explorer-content");
+        if (!root || !summary || !actions || !content) return;
+        summary.textContent = dataExplorerConnected
+          ? `Connected to ${dataExplorerDbName || "database"} • ${dataExplorerUriLabel}`
+          : "Connect a MongoDB URI and inspect live collections in a spreadsheet-style grid.";
+        actions.innerHTML = `<button onclick="setDataExplorerViewMode('table')" class="rounded-2xl border px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] ${dataExplorerViewMode === "table" ? "border-cyan-400/30 bg-cyan-500/10 text-cyan-100" : "border-white/10 bg-white/5 text-slate-300"}">Table</button>
+                <button onclick="setDataExplorerViewMode('json')" class="rounded-2xl border px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] ${dataExplorerViewMode === "json" ? "border-cyan-400/30 bg-cyan-500/10 text-cyan-100" : "border-white/10 bg-white/5 text-slate-300"}">JSON</button>`;
         const collectionMarkup = dataExplorerCollections.length
           ? dataExplorerCollections.map((name) => `<button onclick="loadDataExplorerCollection('${escapeAttr(name)}')" class="data-explorer-collection-btn ${name === dataExplorerSelectedCollection ? "active" : ""} w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left text-sm text-slate-200 transition-all hover:border-cyan-400/25 hover:bg-white/[0.05]">${escapeHtmlText(name)}</button>`).join("")
           : `<div class="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-sm text-slate-500">No collections found yet.</div>`;
-        const gridFields = dataExplorerFields.length ? dataExplorerFields.slice(0, 10) : ["_id"];
+        const gridFields = dataExplorerFields.length ? dataExplorerFields : ["_id"];
         const tableRows = dataExplorerDocuments.length
           ? dataExplorerDocuments.map((doc) => {
               const docId = String(doc?._id || "");
               return `<tr>${gridFields.map((field) => `<td class="border-t border-white/5 px-3 py-3 align-top"><div data-data-explorer-cell="true" class="data-explorer-cell rounded-xl px-2 py-2 ${docId === flashDocumentId ? "flash" : ""}"><button ondblclick="beginDataExplorerInlineEdit('${escapeAttr(docId)}','${escapeAttr(field)}', this)" class="w-full text-left text-xs leading-5 ${field === "_id" ? "data-explorer-mono text-cyan-200" : "text-slate-200"}">${escapeHtmlText(formatDataExplorerCellValue(getDataExplorerFieldValue(doc, field)) || " ")}</button></div></td>`).join("")}</tr>`;
             }).join("")
           : `<tr><td colspan="${gridFields.length}" class="px-4 py-8 text-center text-sm text-slate-500">No documents loaded.</td></tr>`;
-        area.innerHTML = `<div class="data-explorer-shell animate-fadeIn">
-          <div class="data-explorer-panel p-5 sm:p-6">
-            <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-              <div>
-                <p class="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-300">Data Explorer</p>
-                <h2 class="mt-2 text-3xl font-semibold tracking-tight text-white">Real-time MongoDB collections inside Studio.</h2>
-                <p class="mt-2 text-sm text-slate-400">${dataExplorerConnected ? `Connected to ${escapeHtmlText(dataExplorerDbName || "database")} • ${escapeHtmlText(dataExplorerUriLabel)}` : "Connect a MongoDB URI and inspect live collections in a spreadsheet-style grid."}</p>
-              </div>
-              <div class="flex flex-wrap gap-3">
-                <button onclick="setDataExplorerViewMode('table')" class="rounded-2xl border px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] ${dataExplorerViewMode === "table" ? "border-cyan-400/30 bg-cyan-500/10 text-cyan-100" : "border-white/10 bg-white/5 text-slate-300"}">Table</button>
-                <button onclick="setDataExplorerViewMode('json')" class="rounded-2xl border px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] ${dataExplorerViewMode === "json" ? "border-cyan-400/30 bg-cyan-500/10 text-cyan-100" : "border-white/10 bg-white/5 text-slate-300"}">JSON</button>
-              </div>
-            </div>
-          </div>
-          ${!dataExplorerConnected ? `<div class="data-explorer-panel p-6 sm:p-8"><div class="mx-auto max-w-3xl"><p class="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-300">Connect To Database</p><div class="mt-4 flex flex-col gap-3 lg:flex-row"><input id="data-explorer-uri-input" class="data-explorer-mono min-w-0 flex-1 rounded-[1.4rem] border border-cyan-400/20 bg-[#020617] px-5 py-4 text-sm text-cyan-100 outline-none focus:border-cyan-400" placeholder="mongodb+srv://..." value="" /><button onclick="connectDataExplorer()" class="rounded-[1.4rem] bg-cyan-500 px-6 py-4 text-sm font-black text-slate-950 hover:bg-cyan-400">${dataExplorerLoading ? "Connecting..." : "Verify & Connect"}</button></div></div></div>` : `<div class="data-explorer-grid"><aside class="data-explorer-panel p-4 sm:p-5"><div class="flex items-center justify-between gap-3"><p class="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-300">Collections</p><button onclick="refreshDataExplorerCollections()" class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-200 hover:bg-white/10">Refresh</button></div><div class="mt-4 space-y-2 max-h-[62vh] overflow-y-auto custom-scrollbar">${collectionMarkup}</div></aside><section class="data-explorer-panel p-4 sm:p-5 overflow-hidden"><div><p class="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-300">${escapeHtmlText(dataExplorerSelectedCollection || "Collection")}</p><p class="mt-1 text-sm text-slate-400">${dataExplorerDocuments.length} documents loaded • Double-click a cell to edit</p></div><div class="mt-4 overflow-auto custom-scrollbar rounded-[1.4rem] border border-white/10">${dataExplorerViewMode === "json" ? `<pre class="data-explorer-mono min-h-[420px] whitespace-pre-wrap px-4 py-4 text-xs leading-6 text-slate-200">${escapeHtmlText(JSON.stringify(dataExplorerDocuments, null, 2))}</pre>` : `<table class="min-w-full table-fixed border-collapse"><thead class="bg-white/[0.03]"><tr>${gridFields.map((field) => `<th class="px-3 py-3 text-left text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">${escapeHtmlText(field)}</th>`).join("")}</tr></thead><tbody>${tableRows}</tbody></table>`}</div></section></div>`}
-        </div>`;
+        content.innerHTML = !dataExplorerConnected
+          ? `<div class="data-explorer-panel p-6 sm:p-8"><div class="mx-auto max-w-3xl"><p class="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-300">Connect To Database</p><div class="mt-4 flex flex-col gap-3 lg:flex-row"><input id="data-explorer-uri-input" oninput="setDataExplorerUriDraft(this.value)" class="data-explorer-mono min-w-0 flex-1 rounded-[1.4rem] border border-cyan-400/20 bg-[#020617] px-5 py-4 text-sm text-cyan-100 outline-none focus:border-cyan-400" placeholder="mongodb+srv://..." value="${escapeAttr(dataExplorerUriDraft)}" /><button onclick="connectDataExplorer()" class="rounded-[1.4rem] bg-cyan-500 px-6 py-4 text-sm font-black text-slate-950 hover:bg-cyan-400">${dataExplorerLoading ? "Connecting..." : "Verify & Connect"}</button></div></div></div>`
+          : `<div class="data-explorer-grid"><aside class="data-explorer-panel p-4 sm:p-5"><div class="flex items-center justify-between gap-3"><p class="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-300">Collections</p><button onclick="refreshDataExplorerCollections()" class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-200 hover:bg-white/10">Refresh</button></div><div class="mt-4 space-y-2 max-h-[62vh] overflow-y-auto custom-scrollbar">${collectionMarkup}</div></aside><section class="data-explorer-panel p-4 sm:p-5 overflow-hidden"><div><p class="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-300">${escapeHtmlText(dataExplorerSelectedCollection || "Collection")}</p><p class="mt-1 text-sm text-slate-400">${dataExplorerDocuments.length} documents loaded • Double-click a cell to edit</p></div><div class="mt-4 overflow-auto custom-scrollbar rounded-[1.4rem] border border-white/10">${dataExplorerViewMode === "json" ? `<pre class="data-explorer-mono min-h-[420px] whitespace-pre-wrap px-4 py-4 text-xs leading-6 text-slate-200">${escapeHtmlText(JSON.stringify(dataExplorerDocuments, null, 2))}</pre>` : `<table class="min-w-full table-fixed border-collapse"><thead class="bg-white/[0.03]"><tr>${gridFields.map((field) => `<th class="px-3 py-3 text-left text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">${escapeHtmlText(field)}</th>`).join("")}</tr></thead><tbody>${tableRows}</tbody></table>`}</div></section></div>`;
       }
       function openBuilderDataBindingModal() {
         if (!dataExplorerConnected) {
@@ -12965,7 +13111,7 @@
           "candycrush-template": "Candy Crush Premium Template",
           "voice-clone": "AI Voice Clone Pro",
           "text-to-speech": "Text to Speech Pro",
-          "image-pdf": "Image to PDF Pro",
+          "image-pdf": "Database",
           "video-audio": "Video to Audio Pro",
                       "text-doc": "Data Explorer",
                       "data-explorer": "Data Explorer",
@@ -14929,6 +15075,23 @@
                     <div class="flex items-center justify-between gap-3 border-t border-white/10 px-5 py-4">
                         <button type="button" onclick="closeCollaborationMediaPrompt()" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-black text-slate-200 hover:bg-white/10">Not now</button>
                         <button type="button" onclick="applyCollaborationMediaPromptSelection()" class="rounded-2xl bg-cyan-500 px-4 py-3 text-sm font-black text-slate-950 hover:bg-cyan-400">Continue</button>
+                    </div>
+                </div>
+            </div>
+            <div id="builder-collab-inactive-overlay" class="builder-collab-inactive-overlay hidden">
+                <div class="builder-collab-inactive-card">
+                    <div class="flex items-start gap-4">
+                        <div class="flex h-12 w-12 items-center justify-center rounded-[1.2rem] border border-rose-400/20 bg-rose-500/10 text-rose-200">
+                            <i class="fas fa-link-slash text-lg"></i>
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <p class="text-[10px] font-black uppercase tracking-[0.22em] text-rose-300">Meeting Unavailable</p>
+                            <h3 id="builder-collab-inactive-title" class="mt-2 text-xl font-semibold text-white">This meeting is not active.</h3>
+                            <p id="builder-collab-inactive-message" class="mt-2 text-sm leading-6 text-slate-300">The meeting ID is no longer available.</p>
+                        </div>
+                    </div>
+                    <div class="mt-5 flex justify-end">
+                        <button type="button" onclick="continueAnywayFromCollaboration()" class="rounded-2xl bg-cyan-500 px-4 py-3 text-sm font-black text-slate-950 hover:bg-cyan-400">Continue Anyway</button>
                     </div>
                 </div>
             </div>

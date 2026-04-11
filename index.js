@@ -74,6 +74,7 @@ const USER_NOTIFICATION_ROOM_PREFIX = "user:";
 const COLLAB_ROOM_PREFIX = "collab:";
 const collaborationRooms = new Map();
 const socketCollaborationMembership = new Map();
+const endedCollaborationRooms = new Map();
 const dataExplorerConnections = new Map();
 const dataExplorerWatchers = new Map();
 
@@ -258,6 +259,28 @@ function ensureCollaborationRoom(roomId = "") {
   return collaborationRooms.get(normalizedRoomId);
 }
 
+function markCollaborationRoomEnded(roomId = "", reason = "ended") {
+  const normalizedRoomId = normalizeCollaborationRoomId(roomId);
+  if (!normalizedRoomId) return;
+  endedCollaborationRooms.set(normalizedRoomId, {
+    roomId: normalizedRoomId,
+    reason: String(reason || "ended").trim() || "ended",
+    endedAt: Date.now(),
+  });
+}
+
+function getEndedCollaborationRoom(roomId = "") {
+  const normalizedRoomId = normalizeCollaborationRoomId(roomId);
+  if (!normalizedRoomId) return null;
+  const ended = endedCollaborationRooms.get(normalizedRoomId);
+  if (!ended) return null;
+  if (Date.now() - Number(ended.endedAt || 0) > 1000 * 60 * 60 * 24) {
+    endedCollaborationRooms.delete(normalizedRoomId);
+    return null;
+  }
+  return ended;
+}
+
 function serializeCollaborationUser(user = {}) {
   return {
     socketId: String(user.socketId || "").trim(),
@@ -329,6 +352,24 @@ function removeSocketFromCollaborationRoom(socketId = "") {
     return;
   }
   emitCollaborationRoomState(roomId);
+}
+
+function endCollaborationRoom(roomId = "", reason = "host-ended") {
+  const normalizedRoomId = normalizeCollaborationRoomId(roomId);
+  if (!normalizedRoomId) return;
+  const room = collaborationRooms.get(normalizedRoomId);
+  if (room) {
+    Array.from(room.users.values()).forEach((user) => {
+      socketCollaborationMembership.delete(user.socketId);
+      io.to(user.socketId).emit("collaboration:room-ended", {
+        roomId: normalizedRoomId,
+        reason,
+        endedAt: Date.now(),
+      });
+    });
+    collaborationRooms.delete(normalizedRoomId);
+  }
+  markCollaborationRoomEnded(normalizedRoomId, reason);
 }
 
 function createMemoryRateLimiter({
@@ -8199,9 +8240,28 @@ io.on("connection", (socket) => {
     try {
       const roomId = normalizeCollaborationRoomId(payload.roomId);
       if (!roomId) return;
-      const room = ensureCollaborationRoom(roomId);
-      if (!room) return;
       const requestedHost = Boolean(payload.isHost);
+      const endedRoom = getEndedCollaborationRoom(roomId);
+      if (!requestedHost && endedRoom) {
+        socket.emit("collaboration:join-invalid", {
+          roomId,
+          reason: endedRoom.reason || "expired",
+        });
+        return;
+      }
+      const existingRoom = collaborationRooms.get(roomId);
+      if (!requestedHost && !existingRoom) {
+        socket.emit("collaboration:join-invalid", {
+          roomId,
+          reason: "expired",
+        });
+        return;
+      }
+      const room = requestedHost ? ensureCollaborationRoom(roomId) : existingRoom;
+      if (!room) return;
+      if (requestedHost) {
+        endedCollaborationRooms.delete(roomId);
+      }
       removeSocketFromCollaborationRoom(socket.id);
       socket.join(`${COLLAB_ROOM_PREFIX}${roomId}`);
       const hasHost = Boolean(room.hostSocketId && room.users.has(room.hostSocketId));
@@ -8240,6 +8300,14 @@ io.on("connection", (socket) => {
     } catch (error) {
       console.warn("Collaboration join failed:", error.message);
     }
+  });
+  socket.on("collaboration:end-room", (payload = {}) => {
+    const roomId = normalizeCollaborationRoomId(payload.roomId);
+    if (!roomId) return;
+    const room = collaborationRooms.get(roomId);
+    const actingUser = room?.users?.get(socket.id);
+    if (!room || !actingUser?.isHost) return;
+    endCollaborationRoom(roomId, "host-ended");
   });
   socket.on("collaboration:set-permission", (payload = {}) => {
     const roomId = normalizeCollaborationRoomId(payload.roomId);
