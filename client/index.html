@@ -21996,11 +21996,14 @@ console.log("Triggered ${eventName}", { source, event });
           lines.push(`(() => { const source = ${sourceRef}; if (!source) return; source.addEventListener(${JSON.stringify(eventName)}, (event) => { ${body} }); })();`);
         });
         if (!lines.length) return "";
-        return `<script>
-document.addEventListener("DOMContentLoaded", () => {
-${lines.map((line) => `  ${line}`).join("\n")}
-});
-<\/script>`;
+        const scriptLines = lines.map((line) => `  ${line}`).join("\n");
+        return [
+          "<script>",
+          'document.addEventListener("DOMContentLoaded", () => {',
+          scriptLines,
+          "});",
+          "</scr" + "ipt>",
+        ].join("\n");
       }
       function buildExportPayload(baseName = "medialab-page") {
         const canvas = document.getElementById("web-canvas");
@@ -22034,6 +22037,7 @@ ${lines.map((line) => `  ${line}`).join("\n")}
         const interactionScript = buildInteractionScriptForExport(
           interactionEntries,
         );
+        const interactionBlock = interactionScript ? `\n  ${interactionScript}` : "";
         const html = `<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -22044,7 +22048,7 @@ ${lines.map((line) => `  ${line}`).join("\n")}
   </head>
   <body>
 ${body}
-${interactionScript ? `\n  ${interactionScript}` : ""}
+${interactionBlock}
   </body>
 </html>`;
         return { html, css, body, interactionScript };
@@ -22053,6 +22057,13 @@ ${interactionScript ? `\n  ${interactionScript}` : ""}
         if (builderRawImportDocument) return builderRawImportDocument;
         const payload = buildExportPayload("medialab-page");
         if (!payload) return "";
+        const cssBlock = payload.css
+          .split("\n")
+          .map((line) => (line ? `    ${line}` : ""))
+          .join("\n");
+        const interactionBlock = payload.interactionScript
+          ? `\n${payload.interactionScript}`
+          : "";
         return `<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -22060,15 +22071,12 @@ ${interactionScript ? `\n  ${interactionScript}` : ""}
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MediaLab Creative Export</title>
     <style>
-${payload.css
-  .split("\n")
-  .map((line) => (line ? `    ${line}` : ""))
-  .join("\n")}
+${cssBlock}
     </style>
   </head>
   <body>
 ${payload.body || "  "}
-${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
+${interactionBlock}
   </body>
 </html>`;
       }
@@ -22129,6 +22137,7 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
             });
           });
         const interactionScript = buildInteractionScriptForExport(interactionEntries);
+        const interactionBlock = interactionScript ? `\n${interactionScript}` : "";
         return `<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -22172,7 +22181,7 @@ ${animationKeyframesCss}
   </head>
   <body>
     <div id="medialab-run-stage">${clone.innerHTML}</div>
-${interactionScript ? `\n${interactionScript}` : ""}
+${interactionBlock}
   </body>
 </html>`;
       }

@@ -17871,49 +17871,51 @@
         return injectBuilderDataBindingRuntime(runtimeDocument);
       }
       function buildBuilderDataBindingRuntimeScript() {
-        return `<script>
-(() => {
-  const resolveValue = (obj, path) => String(path || "").split(".").filter(Boolean).reduce((acc, key) => acc == null ? acc : acc[key], obj);
-  const applyValue = (el, value) => {
-    const text = value == null ? "" : typeof value === "object" ? JSON.stringify(value) : String(value);
-    const body = el.querySelector(".element-body > *") || el.querySelector(".element-body") || el;
-    if (!body) return;
-    if (body.tagName === "IMG") {
-      body.src = text;
-      return;
-    }
-    if (body.tagName === "INPUT" || body.tagName === "TEXTAREA") {
-      body.value = text;
-      return;
-    }
-    body.textContent = text;
-  };
-  const hydrate = async () => {
-    const nodes = Array.from(document.querySelectorAll("[data-bind-collection][data-bind-field]"));
-    if (!nodes.length) return;
-    const groups = new Map();
-    nodes.forEach((node) => {
-      const collection = node.getAttribute("data-bind-collection") || "";
-      if (!groups.has(collection)) groups.set(collection, []);
-      groups.get(collection).push(node);
-    });
-    for (const [collection, items] of groups.entries()) {
-      try {
-        const res = await fetch('/api/data-explorer/collection/' + encodeURIComponent(collection) + '?limit=60', { credentials: 'include' });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data.success) continue;
-        items.forEach((node) => {
-          const fieldPath = node.getAttribute("data-bind-field") || "";
-          const index = Math.max(0, Number(node.getAttribute("data-bind-index") || 0) || 0);
-          const doc = Array.isArray(data.documents) ? data.documents[index] : null;
-          applyValue(node, resolveValue(doc || {}, fieldPath));
-        });
-      } catch {}
-    }
-  };
-  hydrate();
-})();
-</script>`;
+        return [
+          "<script>",
+          "(() => {",
+          '  const resolveValue = (obj, path) => String(path || "").split(".").filter(Boolean).reduce((acc, key) => acc == null ? acc : acc[key], obj);',
+          '  const applyValue = (el, value) => {',
+          '    const text = value == null ? "" : typeof value === "object" ? JSON.stringify(value) : String(value);',
+          '    const body = el.querySelector(".element-body > *") || el.querySelector(".element-body") || el;',
+          "    if (!body) return;",
+          '    if (body.tagName === "IMG") {',
+          "      body.src = text;",
+          "      return;",
+          "    }",
+          '    if (body.tagName === "INPUT" || body.tagName === "TEXTAREA") {',
+          "      body.value = text;",
+          "      return;",
+          "    }",
+          "    body.textContent = text;",
+          "  };",
+          "  const hydrate = async () => {",
+          '    const nodes = Array.from(document.querySelectorAll("[data-bind-collection][data-bind-field]"));',
+          "    if (!nodes.length) return;",
+          "    const groups = new Map();",
+          "    nodes.forEach((node) => {",
+          '      const collection = node.getAttribute("data-bind-collection") || "";',
+          "      if (!groups.has(collection)) groups.set(collection, []);",
+          "      groups.get(collection).push(node);",
+          "    });",
+          "    for (const [collection, items] of groups.entries()) {",
+          "      try {",
+          "        const res = await fetch('/api/data-explorer/collection/' + encodeURIComponent(collection) + '?limit=60', { credentials: 'include' });",
+          "        const data = await res.json().catch(() => ({}));",
+          "        if (!res.ok || !data.success) continue;",
+          "        items.forEach((node) => {",
+          '          const fieldPath = node.getAttribute("data-bind-field") || "";',
+          '          const index = Math.max(0, Number(node.getAttribute("data-bind-index") || 0) || 0);',
+          "          const doc = Array.isArray(data.documents) ? data.documents[index] : null;",
+          "          applyValue(node, resolveValue(doc || {}, fieldPath));",
+          "        });",
+          "      } catch {}",
+          "    }",
+          "  };",
+          "  hydrate();",
+          "})();",
+          "</scr" + "ipt>",
+        ].join("\n");
       }
       function injectBuilderDataBindingRuntime(documentHtml = "") {
         const html = String(documentHtml || "");
@@ -23541,11 +23543,13 @@ console.log("Triggered ${eventName}", { source, event });
         });
         if (!lines.length) return "";
         const scriptLines = lines.map((line) => `  ${line}`).join("\n");
-        return `<script>
-document.addEventListener("DOMContentLoaded", () => {
-${scriptLines}
-});
-<\/script>`;
+        return [
+          "<script>",
+          'document.addEventListener("DOMContentLoaded", () => {',
+          scriptLines,
+          "});",
+          "</scr" + "ipt>",
+        ].join("\n");
       }
       function buildExportPayload(baseName = "medialab-page") {
         const canvas = document.getElementById("web-canvas");
@@ -23579,6 +23583,7 @@ ${scriptLines}
         const interactionScript = buildInteractionScriptForExport(
           interactionEntries,
         );
+        const interactionBlock = interactionScript ? `\n  ${interactionScript}` : "";
         const html = `<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -23589,7 +23594,7 @@ ${scriptLines}
   </head>
   <body>
 ${body}
-${interactionScript ? `\n  ${interactionScript}` : ""}
+${interactionBlock}
   </body>
 </html>`;
         return { html, css, body, interactionScript };
@@ -23598,6 +23603,13 @@ ${interactionScript ? `\n  ${interactionScript}` : ""}
         if (builderRawImportDocument) return builderRawImportDocument;
         const payload = buildExportPayload("medialab-page");
         if (!payload) return "";
+        const cssBlock = payload.css
+          .split("\n")
+          .map((line) => (line ? `    ${line}` : ""))
+          .join("\n");
+        const interactionBlock = payload.interactionScript
+          ? `\n${payload.interactionScript}`
+          : "";
         return `<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -23605,15 +23617,12 @@ ${interactionScript ? `\n  ${interactionScript}` : ""}
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MediaLab Creative Export</title>
     <style>
-${payload.css
-  .split("\n")
-  .map((line) => (line ? `    ${line}` : ""))
-  .join("\n")}
+${cssBlock}
     </style>
   </head>
   <body>
 ${payload.body || "  "}
-${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
+${interactionBlock}
   </body>
 </html>`;
       }
@@ -23672,8 +23681,9 @@ ${payload.interactionScript ? `\n${payload.interactionScript}` : ""}
                 action,
               });
             });
-          });
+        });
         const interactionScript = buildInteractionScriptForExport(interactionEntries);
+        const interactionBlock = interactionScript ? `\n${interactionScript}` : "";
         return `<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -23717,9 +23727,9 @@ ${animationKeyframesCss}
   </head>
   <body>
     <div id="medialab-run-stage">${clone.innerHTML}</div>
-${interactionScript ? `\n${interactionScript}` : ""}
+${interactionBlock}
   </body>
-</html>`);
+</html>`;
       }
       function openBuilderPublishModal() {
         if (!loggedIn || !currentUser) {
