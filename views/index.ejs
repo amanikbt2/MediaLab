@@ -6008,6 +6008,13 @@
         const cached = collaborationPeerConnections.get(peerSocketId);
         if (cached?.pc) return cached.pc;
         const pc = new RTCPeerConnection(collaborationIceConfiguration);
+        pc.onnegotiationneeded = () => {
+          const self = getCollaborationSelfUser();
+          if (!self) return;
+          if (collaborationAudioEnabled || collaborationVideoEnabled || collaborationUserHasLiveMedia(self)) {
+            scheduleCollaborationPeerOffer(peerSocketId, 90);
+          }
+        };
         pc.onicecandidate = (event) => {
           if (!event.candidate || !collaborationRoomId) return;
           socket.emit("collaboration:webrtc-signal", {
@@ -6062,7 +6069,18 @@
         const pc = createCollaborationPeerConnection(peerSocketId);
         if (!pc) return;
         updateCollaborationPeerSenders(pc);
-        const shouldInitiate = String(socket.id || "") > String(peerSocketId || "");
+        const self = getCollaborationSelfUser();
+        const peer = collaborationUsers.find((user) => String(user.socketId || "") === String(peerSocketId || "")) || null;
+        const selfLive = Boolean(
+          collaborationAudioEnabled || collaborationVideoEnabled || collaborationUserHasLiveMedia(self),
+        );
+        const peerLive = Boolean(collaborationUserHasLiveMedia(peer));
+        const shouldInitiate =
+          selfLive && !peerLive
+            ? true
+            : !selfLive && peerLive
+              ? false
+              : String(socket.id || "") > String(peerSocketId || "");
         if (!shouldInitiate) return;
         if (pc.signalingState !== "stable") {
           scheduleCollaborationPeerOffer(peerSocketId);
