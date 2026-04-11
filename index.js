@@ -74,6 +74,167 @@ const USER_NOTIFICATION_ROOM_PREFIX = "user:";
 const COLLAB_ROOM_PREFIX = "collab:";
 const collaborationRooms = new Map();
 const socketCollaborationMembership = new Map();
+const dataExplorerConnections = new Map();
+const dataExplorerWatchers = new Map();
+
+function normalizeDataExplorerCollectionName(value = "") {
+  return String(value || "")
+    .trim()
+    .replace(/[^\w.-]/g, "")
+    .slice(0, 120);
+}
+
+function getDataExplorerChannelId(req) {
+  if (!req?.session) return "";
+  if (!req.session.dataExplorerChannelId) {
+    req.session.dataExplorerChannelId = crypto.randomUUID();
+  }
+  return String(req.session.dataExplorerChannelId || "").trim();
+}
+
+function getDataExplorerSessionState(req) {
+  if (!req?.session?.dataExplorer) return null;
+  return req.session.dataExplorer;
+}
+
+function serializeExplorerValue(value) {
+  if (value == null) return value;
+  if (Array.isArray(value)) return value.map((item) => serializeExplorerValue(item));
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "object") {
+    if (value?._bsontype === "ObjectId" || value?.constructor?.name === "ObjectId") {
+      return String(value);
+    }
+    if (value?._bsontype === "Decimal128") {
+      return String(value);
+    }
+    const output = {};
+    Object.entries(value).forEach(([key, inner]) => {
+      output[key] = serializeExplorerValue(inner);
+    });
+    return output;
+  }
+  return value;
+}
+
+function collectExplorerFieldPaths(value, prefix = "", bucket = new Set()) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return bucket;
+  Object.entries(value).forEach(([key, inner]) => {
+    const nextKey = prefix ? `${prefix}.${key}` : key;
+    bucket.add(nextKey);
+    if (inner && typeof inner === "object" && !Array.isArray(inner) && !(inner instanceof Date)) {
+      collectExplorerFieldPaths(inner, nextKey, bucket);
+    }
+  });
+  return bucket;
+}
+
+function parseExplorerInputValue(rawValue) {
+  const text = typeof rawValue === "string" ? rawValue.trim() : rawValue;
+  if (text === "null") return null;
+  if (text === "true") return true;
+  if (text === "false") return false;
+  if (text === "") return "";
+  if (typeof text === "string" && /^-?\d+(\.\d+)?$/.test(text)) {
+    return Number(text);
+  }
+  if (typeof text === "string" && (text.startsWith("{") || text.startsWith("["))) {
+    try {
+      return JSON.parse(text);
+    } catch {
+      return rawValue;
+    }
+  }
+  return rawValue;
+}
+
+function getDataExplorerConnectionKey(uri = "") {
+  return crypto.createHash("sha1").update(String(uri || "")).digest("hex");
+}
+
+async function getOrCreateDataExplorerConnection(uri = "") {
+  const normalizedUri = String(uri || "").trim();
+  if (!normalizedUri) {
+    throw new Error("MongoDB URI is required.");
+  }
+  const key = getDataExplorerConnectionKey(normalizedUri);
+  const existing = dataExplorerConnections.get(key);
+  if (existing?.connection?.readyState === 1) {
+    return existing;
+  }
+  const connection = mongoose.createConnection(normalizedUri, {
+    serverSelectionTimeoutMS: 8000,
+    socketTimeoutMS: 15000,
+    maxPoolSize: 8,
+    minPoolSize: 0,
+  });
+  await connection.asPromise();
+  const state = {
+    key,
+    uri: normalizedUri,
+    connection,
+    dbName: connection.name,
+    createdAt: new Date(),
+  };
+  dataExplorerConnections.set(key, state);
+  return state;
+}
+
+function closeDataExplorerWatcher(key = "") {
+  const watcher = dataExplorerWatchers.get(key);
+  if (!watcher) return;
+  try {
+    watcher.changeStream?.close?.();
+  } catch {}
+  dataExplorerWatchers.delete(key);
+}
+
+async function ensureDataExplorerWatcher({
+  ioInstance,
+  connectionState,
+  collectionName,
+  channelId,
+}) {
+  const roomCollection = normalizeDataExplorerCollectionName(collectionName);
+  if (!ioInstance || !connectionState?.connection || !roomCollection || !channelId) return;
+  const watcherKey = `${connectionState.key}:${roomCollection}`;
+  const existing = dataExplorerWatchers.get(watcherKey);
+  if (existing) {
+    existing.channels.add(channelId);
+    return;
+  }
+  let changeStream = null;
+  try {
+    changeStream = connectionState.connection.collection(roomCollection).watch([], {
+      fullDocument: "updateLookup",
+    });
+  } catch (error) {
+    console.warn(`Data Explorer watch unavailable for ${roomCollection}:`, error.message);
+    return;
+  }
+  const channels = new Set([channelId]);
+  changeStream.on("change", (change) => {
+    const payload = {
+      collection: roomCollection,
+      operationType: String(change?.operationType || "").trim(),
+      documentId:
+        change?.documentKey?._id != null ? String(change.documentKey._id) : "",
+      fullDocument: serializeExplorerValue(change?.fullDocument || null),
+      updatedFields: serializeExplorerValue(change?.updateDescription?.updatedFields || {}),
+      removedFields: Array.isArray(change?.updateDescription?.removedFields)
+        ? change.updateDescription.removedFields
+        : [],
+      updatedAt: Date.now(),
+    };
+    channels.forEach((channel) => {
+      ioInstance.to(`data-explorer:${channel}`).emit("data-explorer:change", payload);
+    });
+  });
+  const cleanup = () => closeDataExplorerWatcher(watcherKey);
+  changeStream.on("error", cleanup);
+  changeStream.on("close", cleanup);
+  dataExplorerWatchers.set(watcherKey, { changeStream, channels });
+}
 
 function normalizeCollaborationRoomId(value = "") {
   return String(value || "")
@@ -3063,6 +3224,164 @@ app.use(
 
 app.use(passport.initialize());
 app.use(passport.session());
+
+app.get("/api/data-explorer/status", async (req, res) => {
+  try {
+    const state = getDataExplorerSessionState(req);
+    res.json({
+      success: true,
+      connected: Boolean(state?.uri),
+      channelId: getDataExplorerChannelId(req),
+      dbName: state?.dbName || "",
+      uriLabel: state?.uriLabel || "",
+      collections: Array.isArray(state?.collections) ? state.collections : [],
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message || "Could not read explorer state." });
+  }
+});
+
+app.post("/api/data-explorer/connect", async (req, res) => {
+  try {
+    const uri = String(req.body?.uri || "").trim();
+    if (!uri) {
+      return res.status(400).json({ success: false, message: "MongoDB URI is required." });
+    }
+    const connectionState = await getOrCreateDataExplorerConnection(uri);
+    const collections = await connectionState.connection.db
+      .listCollections({}, { nameOnly: true })
+      .toArray();
+    const collectionNames = collections
+      .map((item) => normalizeDataExplorerCollectionName(item?.name || ""))
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+    const uriLabel = (() => {
+      try {
+        const parsed = new URL(uri);
+        return `${parsed.hostname}${parsed.pathname || ""}`;
+      } catch {
+        return uri.replace(/\/\/.*@/, "//***@");
+      }
+    })();
+    req.session.dataExplorer = {
+      uri,
+      uriLabel,
+      dbName: connectionState.dbName,
+      collections: collectionNames,
+      connectedAt: Date.now(),
+    };
+    res.json({
+      success: true,
+      dbName: connectionState.dbName,
+      uriLabel,
+      channelId: getDataExplorerChannelId(req),
+      collections: collectionNames,
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error.message || "Could not connect to that MongoDB database.",
+    });
+  }
+});
+
+app.get("/api/data-explorer/collections", async (req, res) => {
+  try {
+    const state = getDataExplorerSessionState(req);
+    if (!state?.uri) {
+      return res.status(400).json({ success: false, message: "Connect a MongoDB database first." });
+    }
+    const connectionState = await getOrCreateDataExplorerConnection(state.uri);
+    const collections = await connectionState.connection.db
+      .listCollections({}, { nameOnly: true })
+      .toArray();
+    const collectionNames = collections
+      .map((item) => normalizeDataExplorerCollectionName(item?.name || ""))
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+    req.session.dataExplorer = {
+      ...(req.session.dataExplorer || {}),
+      collections: collectionNames,
+      dbName: connectionState.dbName,
+    };
+    res.json({ success: true, collections: collectionNames, dbName: connectionState.dbName });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message || "Could not list collections." });
+  }
+});
+
+app.get("/api/data-explorer/collection/:name", async (req, res) => {
+  try {
+    const state = getDataExplorerSessionState(req);
+    if (!state?.uri) {
+      return res.status(400).json({ success: false, message: "Connect a MongoDB database first." });
+    }
+    const collectionName = normalizeDataExplorerCollectionName(req.params?.name || "");
+    if (!collectionName) {
+      return res.status(400).json({ success: false, message: "Collection name is required." });
+    }
+    const limit = Math.max(1, Math.min(200, Number(req.query?.limit || 50) || 50));
+    const connectionState = await getOrCreateDataExplorerConnection(state.uri);
+    await ensureDataExplorerWatcher({
+      ioInstance: io,
+      connectionState,
+      collectionName,
+      channelId: getDataExplorerChannelId(req),
+    });
+    const documents = await connectionState.connection.collection(collectionName)
+      .find({})
+      .limit(limit)
+      .toArray();
+    const serializedDocuments = documents.map((doc) => serializeExplorerValue(doc));
+    const fieldSet = new Set();
+    serializedDocuments.forEach((doc) => collectExplorerFieldPaths(doc, "", fieldSet));
+    const fields = Array.from(fieldSet).sort((a, b) => a.localeCompare(b));
+    res.json({
+      success: true,
+      collection: collectionName,
+      documents: serializedDocuments,
+      fields,
+      limit,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message || "Could not load collection data." });
+  }
+});
+
+app.patch("/api/data-explorer/document", async (req, res) => {
+  try {
+    const state = getDataExplorerSessionState(req);
+    if (!state?.uri) {
+      return res.status(400).json({ success: false, message: "Connect a MongoDB database first." });
+    }
+    const collectionName = normalizeDataExplorerCollectionName(req.body?.collection || "");
+    const documentId = String(req.body?.documentId || "").trim();
+    const fieldPath = String(req.body?.fieldPath || "").trim();
+    if (!collectionName || !documentId || !fieldPath) {
+      return res.status(400).json({ success: false, message: "Collection, document, and field are required." });
+    }
+    const connectionState = await getOrCreateDataExplorerConnection(state.uri);
+    const filter = { _id: new mongoose.Types.ObjectId(documentId) };
+    const value = parseExplorerInputValue(req.body?.value);
+    await connectionState.connection.collection(collectionName).updateOne(filter, {
+      $set: { [fieldPath]: value },
+    });
+    const updated = await connectionState.connection.collection(collectionName).findOne(filter);
+    const serialized = serializeExplorerValue(updated || null);
+    io.to(`data-explorer:${getDataExplorerChannelId(req)}`).emit("data-explorer:change", {
+      collection: collectionName,
+      operationType: "update",
+      documentId,
+      fullDocument: serialized,
+      updatedFields: serializeExplorerValue({ [fieldPath]: value }),
+      removedFields: [],
+      updatedAt: Date.now(),
+    });
+    res.json({ success: true, document: serialized });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message || "Could not update that field." });
+  }
+});
 
 // Serving
 app.get("/", (_req, res) => {
@@ -7866,6 +8185,11 @@ app.get("/api/admin/analytics", adminRateLimit, requireAdminApi, async (_req, re
 
 io.on("connection", (socket) => {
   console.log(`🔌 Client connected: ${socket.id}`);
+  socket.on("data-explorer:subscribe", (payload = {}) => {
+    const channelId = String(payload.channelId || "").trim();
+    if (!channelId) return;
+    socket.join(`data-explorer:${channelId}`);
+  });
   socket.on("register-user", (userId) => {
     const normalizedUserId = String(userId || "").trim();
     if (!normalizedUserId) return;

@@ -185,6 +185,44 @@
         border-color: rgba(34, 211, 238, 0.24) !important;
         color: #cffafe !important;
       }
+      .data-explorer-shell {
+        min-height: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 1.25rem;
+      }
+      .data-explorer-panel {
+        border: 1px solid rgba(34, 211, 238, 0.16);
+        background: linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(2, 6, 23, 0.96));
+        border-radius: 1.75rem;
+        box-shadow: 0 24px 70px rgba(2, 6, 23, 0.34);
+      }
+      .data-explorer-mono {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      }
+      .data-explorer-grid {
+        display: grid;
+        grid-template-columns: 280px minmax(0, 1fr);
+        gap: 1rem;
+        min-height: 68vh;
+      }
+      .data-explorer-collection-btn.active {
+        border-color: rgba(34, 211, 238, 0.32);
+        background: rgba(34, 211, 238, 0.1);
+        color: #cffafe;
+      }
+      .data-explorer-cell.flash {
+        animation: dataExplorerFlash 1.1s ease;
+      }
+      @keyframes dataExplorerFlash {
+        0% { background: rgba(34, 211, 238, 0.28); }
+        100% { background: transparent; }
+      }
+      @media (max-width: 1024px) {
+        .data-explorer-grid {
+          grid-template-columns: 1fr;
+        }
+      }
       .builder-collab-badge {
         display: inline-flex;
         align-items: center;
@@ -2514,7 +2552,7 @@
           </div>
           <div
             data-tool-switch="text-doc"
-            onclick="switchTool('text-doc')"
+                                                onclick="switchTool('data-explorer')"
             class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 px-5 py-2.5 rounded-3xl cursor-pointer"
           >
             <i class="fas fa-file-alt text-cyan-400"></i>
@@ -2659,7 +2697,7 @@
               >
             </div>
             <div
-              onclick="switchTool('text-doc')"
+                                onclick="switchTool('data-explorer')"
               class="flex items-center gap-x-4 px-5 py-3.5 hover:bg-gray-800 rounded-2xl cursor-pointer group transition-all"
             >
               <i
@@ -2812,12 +2850,12 @@
               </button>
               <button
                 data-tool-switch="text-doc"
-                onclick="switchTool('text-doc')"
+                        onclick="switchTool('data-explorer')"
                 class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 border border-white/5 px-5 py-2.5 rounded-3xl cursor-pointer"
               >
-                <i class="fas fa-file-word text-cyan-400"></i
+                <i class="fas fa-database text-cyan-400"></i
                 ><span class="font-medium text-sm text-gray-200"
-                  >Word Processor</span
+                  >Data Explorer</span
                 >
               </button>
               <button
@@ -4733,6 +4771,17 @@
           },
         ],
       };
+      let dataExplorerChannelId = "";
+      let dataExplorerConnected = false;
+      let dataExplorerDbName = "";
+      let dataExplorerUriLabel = "";
+      let dataExplorerCollections = [];
+      let dataExplorerSelectedCollection = "";
+      let dataExplorerDocuments = [];
+      let dataExplorerFields = [];
+      let dataExplorerViewMode = "table";
+      let dataExplorerLoading = false;
+      let dataExplorerBindTarget = null;
       let currentRenderHostingProject = null;
       let currentRenderLiveProject = null;
       let renderProjectSyncPoller = null;
@@ -4922,10 +4971,10 @@
           desc: "Multiple images → one PDF",
         },
         {
-          id: "text-doc",
-          title: "Text → Document",
-          icon: "fa-file-alt",
-          desc: "Text → PDF, DOCX, TXT, XLS",
+          id: "data-explorer",
+          title: "Data Explorer",
+          icon: "fa-database",
+          desc: "Connect MongoDB and inspect live collections",
         },
         {
           id: "voice-clone",
@@ -5138,6 +5187,9 @@
         console.log("Connected to AI Engine. ID:", clientSocketId);
         if (loggedIn && currentUser?._id) {
           socket.emit("register-user", currentUser._id);
+        }
+        if (dataExplorerChannelId) {
+          socket.emit("data-explorer:subscribe", { channelId: dataExplorerChannelId });
         }
         if (collaborationRoomId && collaborationAutoReconnectEnabled) {
           joinCollaborationRoom(collaborationIsHost);
@@ -5978,6 +6030,19 @@
           showBuilderSnackbar("Live media sync hit a temporary issue.", "error");
         });
       });
+      socket.on("data-explorer:change", (payload = {}) => {
+        const collection = String(payload.collection || "").trim();
+        const documentId = String(payload.documentId || "").trim();
+        if (!collection || collection !== dataExplorerSelectedCollection || !payload.fullDocument) return;
+        const existingIndex = dataExplorerDocuments.findIndex(
+          (item) => String(item?._id || "") === documentId,
+        );
+        if (existingIndex >= 0) dataExplorerDocuments[existingIndex] = payload.fullDocument;
+        else dataExplorerDocuments.unshift(payload.fullDocument);
+        if (dataExplorerNeedsRender()) {
+          renderDataExplorerTool(documentId);
+        }
+      });
       // UNIVERSAL PROGRESS LISTENER
       socket.on("conversion-progress", (data) => {
         const type = data.type; // 'video' or 'voice'
@@ -6470,7 +6535,8 @@
           history: "Loading Projects...",
           "web-builder": "Loading Web Builder...",
           "image-pdf": "Loading Image to PDF...",
-          "text-doc": "Loading Word Processor...",
+          "text-doc": "Loading Data Explorer...",
+          "data-explorer": "Loading Data Explorer...",
           "video-audio": "Loading Video to Audio...",
           "text-to-speech": "Loading Text to Speech...",
           "voice-clone": "Loading Voice Clone...",
@@ -6489,6 +6555,223 @@
       function formatMarketplacePrice(price = 0) {
         const amount = Number(price || 0);
         return amount <= 0 ? "Free" : `$${amount.toFixed(2)}`;
+      }
+      function getDataExplorerFieldValue(documentValue = {}, fieldPath = "") {
+        return String(fieldPath || "")
+          .split(".")
+          .filter(Boolean)
+          .reduce((acc, key) => (acc == null ? acc : acc[key]), documentValue);
+      }
+      function formatDataExplorerCellValue(value) {
+        if (value == null) return "";
+        return typeof value === "object" ? JSON.stringify(value) : String(value);
+      }
+      function dataExplorerNeedsRender() {
+        return currentStudioToolId === "data-explorer" || currentStudioToolId === "text-doc";
+      }
+      async function initializeDataExplorerSession() {
+        try {
+          const res = await fetch("/api/data-explorer/status", { credentials: "include" });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data.success) return;
+          dataExplorerChannelId = String(data.channelId || "").trim();
+          dataExplorerConnected = Boolean(data.connected);
+          dataExplorerDbName = String(data.dbName || "");
+          dataExplorerUriLabel = String(data.uriLabel || "");
+          dataExplorerCollections = Array.isArray(data.collections) ? data.collections : [];
+          if (dataExplorerChannelId && socket.connected) {
+            socket.emit("data-explorer:subscribe", { channelId: dataExplorerChannelId });
+          }
+        } catch {}
+      }
+      async function connectDataExplorer() {
+        const input = document.getElementById("data-explorer-uri-input");
+        const uri = String(input?.value || "").trim();
+        if (!uri) {
+          showBuilderSnackbar("Enter a MongoDB URI first.", "error");
+          return;
+        }
+        dataExplorerLoading = true;
+        renderDataExplorerTool();
+        try {
+          const res = await fetch("/api/data-explorer/connect", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ uri }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data.success) {
+            throw new Error(data.message || "Could not connect to that MongoDB URI.");
+          }
+          dataExplorerConnected = true;
+          dataExplorerDbName = String(data.dbName || "");
+          dataExplorerUriLabel = String(data.uriLabel || "");
+          dataExplorerCollections = Array.isArray(data.collections) ? data.collections : [];
+          dataExplorerChannelId = String(data.channelId || dataExplorerChannelId || "");
+          if (dataExplorerChannelId && socket.connected) {
+            socket.emit("data-explorer:subscribe", { channelId: dataExplorerChannelId });
+          }
+          dataExplorerSelectedCollection = dataExplorerCollections[0] || "";
+          if (dataExplorerSelectedCollection) {
+            await loadDataExplorerCollection(dataExplorerSelectedCollection);
+          }
+          showBuilderSnackbar("Database connected.", "success");
+        } catch (error) {
+          showBuilderSnackbar(error.message || "Could not connect to MongoDB.", "error");
+        } finally {
+          dataExplorerLoading = false;
+          renderDataExplorerTool();
+        }
+      }
+      async function refreshDataExplorerCollections() {
+        try {
+          const res = await fetch("/api/data-explorer/collections", { credentials: "include" });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data.success) {
+            throw new Error(data.message || "Could not load collections.");
+          }
+          dataExplorerConnected = true;
+          dataExplorerCollections = Array.isArray(data.collections) ? data.collections : [];
+          dataExplorerDbName = String(data.dbName || dataExplorerDbName || "");
+          if (!dataExplorerSelectedCollection && dataExplorerCollections.length) {
+            dataExplorerSelectedCollection = dataExplorerCollections[0];
+          }
+          renderDataExplorerTool();
+        } catch (error) {
+          showBuilderSnackbar(error.message || "Could not refresh collections.", "error");
+        }
+      }
+      async function loadDataExplorerCollection(collectionName = "") {
+        const collection = String(collectionName || "").trim();
+        if (!collection) return;
+        dataExplorerSelectedCollection = collection;
+        dataExplorerLoading = true;
+        renderDataExplorerTool();
+        try {
+          const res = await fetch(`/api/data-explorer/collection/${encodeURIComponent(collection)}?limit=60`, {
+            credentials: "include",
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data.success) {
+            throw new Error(data.message || "Could not load that collection.");
+          }
+          dataExplorerDocuments = Array.isArray(data.documents) ? data.documents : [];
+          dataExplorerFields = Array.isArray(data.fields) ? data.fields : [];
+        } catch (error) {
+          showBuilderSnackbar(error.message || "Could not load collection.", "error");
+        } finally {
+          dataExplorerLoading = false;
+          renderDataExplorerTool();
+        }
+      }
+      function setDataExplorerViewMode(mode = "table") {
+        dataExplorerViewMode = mode === "json" ? "json" : "table";
+        renderDataExplorerTool();
+      }
+      function beginDataExplorerInlineEdit(documentId = "", fieldPath = "", triggerButton = null) {
+        const cell = triggerButton?.closest?.("[data-data-explorer-cell]");
+        if (!cell) return;
+        const currentValue = formatDataExplorerCellValue(
+          getDataExplorerFieldValue(
+            dataExplorerDocuments.find((item) => String(item?._id || "") === String(documentId || "")) || {},
+            fieldPath,
+          ),
+        );
+        cell.innerHTML = `<input class="w-full rounded-xl border border-cyan-400/25 bg-slate-950/90 px-3 py-2 text-xs text-white outline-none focus:border-cyan-400 data-explorer-mono" value="${escapeAttr(currentValue)}" onkeydown="handleDataExplorerInlineEditKey(event, '${escapeAttr(documentId)}', '${escapeAttr(fieldPath)}')" onblur="commitDataExplorerInlineEdit('${escapeAttr(documentId)}', '${escapeAttr(fieldPath)}', this.value)" />`;
+        const input = cell.querySelector("input");
+        input?.focus();
+        input?.select();
+      }
+      function handleDataExplorerInlineEditKey(event, documentId = "", fieldPath = "") {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          commitDataExplorerInlineEdit(documentId, fieldPath, event.currentTarget.value);
+        } else if (event.key === "Escape") {
+          renderDataExplorerTool();
+        }
+      }
+      async function commitDataExplorerInlineEdit(documentId = "", fieldPath = "", value = "") {
+        try {
+          const res = await fetch("/api/data-explorer/document", {
+            method: "PATCH",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              collection: dataExplorerSelectedCollection,
+              documentId,
+              fieldPath,
+              value,
+            }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data.success) {
+            throw new Error(data.message || "Could not update that field.");
+          }
+          const index = dataExplorerDocuments.findIndex((item) => String(item?._id || "") === String(documentId || ""));
+          if (index >= 0 && data.document) {
+            dataExplorerDocuments[index] = data.document;
+          }
+          renderDataExplorerTool(documentId);
+        } catch (error) {
+          showBuilderSnackbar(error.message || "Could not update the document.", "error");
+          renderDataExplorerTool();
+        }
+      }
+      function renderDataExplorerTool(flashDocumentId = "") {
+        if (!dataExplorerNeedsRender()) return;
+        const area = document.getElementById("tool-display");
+        if (!area) return;
+        const collectionMarkup = dataExplorerCollections.length
+          ? dataExplorerCollections.map((name) => `<button onclick="loadDataExplorerCollection('${escapeAttr(name)}')" class="data-explorer-collection-btn ${name === dataExplorerSelectedCollection ? "active" : ""} w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left text-sm text-slate-200 transition-all hover:border-cyan-400/25 hover:bg-white/[0.05]">${escapeHtmlText(name)}</button>`).join("")
+          : `<div class="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-sm text-slate-500">No collections found yet.</div>`;
+        const gridFields = dataExplorerFields.length ? dataExplorerFields.slice(0, 10) : ["_id"];
+        const tableRows = dataExplorerDocuments.length
+          ? dataExplorerDocuments.map((doc) => {
+              const docId = String(doc?._id || "");
+              return `<tr>${gridFields.map((field) => `<td class="border-t border-white/5 px-3 py-3 align-top"><div data-data-explorer-cell="true" class="data-explorer-cell rounded-xl px-2 py-2 ${docId === flashDocumentId ? "flash" : ""}"><button ondblclick="beginDataExplorerInlineEdit('${escapeAttr(docId)}','${escapeAttr(field)}', this)" class="w-full text-left text-xs leading-5 ${field === "_id" ? "data-explorer-mono text-cyan-200" : "text-slate-200"}">${escapeHtmlText(formatDataExplorerCellValue(getDataExplorerFieldValue(doc, field)) || " ")}</button></div></td>`).join("")}</tr>`;
+            }).join("")
+          : `<tr><td colspan="${gridFields.length}" class="px-4 py-8 text-center text-sm text-slate-500">No documents loaded.</td></tr>`;
+        area.innerHTML = `<div class="data-explorer-shell animate-fadeIn">
+          <div class="data-explorer-panel p-5 sm:p-6">
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <p class="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-300">Data Explorer</p>
+                <h2 class="mt-2 text-3xl font-semibold tracking-tight text-white">Real-time MongoDB collections inside Studio.</h2>
+                <p class="mt-2 text-sm text-slate-400">${dataExplorerConnected ? `Connected to ${escapeHtmlText(dataExplorerDbName || "database")} • ${escapeHtmlText(dataExplorerUriLabel)}` : "Connect a MongoDB URI and inspect live collections in a spreadsheet-style grid."}</p>
+              </div>
+              <div class="flex flex-wrap gap-3">
+                <button onclick="setDataExplorerViewMode('table')" class="rounded-2xl border px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] ${dataExplorerViewMode === "table" ? "border-cyan-400/30 bg-cyan-500/10 text-cyan-100" : "border-white/10 bg-white/5 text-slate-300"}">Table</button>
+                <button onclick="setDataExplorerViewMode('json')" class="rounded-2xl border px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] ${dataExplorerViewMode === "json" ? "border-cyan-400/30 bg-cyan-500/10 text-cyan-100" : "border-white/10 bg-white/5 text-slate-300"}">JSON</button>
+              </div>
+            </div>
+          </div>
+          ${!dataExplorerConnected ? `<div class="data-explorer-panel p-6 sm:p-8"><div class="mx-auto max-w-3xl"><p class="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-300">Connect To Database</p><div class="mt-4 flex flex-col gap-3 lg:flex-row"><input id="data-explorer-uri-input" class="data-explorer-mono min-w-0 flex-1 rounded-[1.4rem] border border-cyan-400/20 bg-[#020617] px-5 py-4 text-sm text-cyan-100 outline-none focus:border-cyan-400" placeholder="mongodb+srv://..." value="" /><button onclick="connectDataExplorer()" class="rounded-[1.4rem] bg-cyan-500 px-6 py-4 text-sm font-black text-slate-950 hover:bg-cyan-400">${dataExplorerLoading ? "Connecting..." : "Verify & Connect"}</button></div></div></div>` : `<div class="data-explorer-grid"><aside class="data-explorer-panel p-4 sm:p-5"><div class="flex items-center justify-between gap-3"><p class="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-300">Collections</p><button onclick="refreshDataExplorerCollections()" class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-200 hover:bg-white/10">Refresh</button></div><div class="mt-4 space-y-2 max-h-[62vh] overflow-y-auto custom-scrollbar">${collectionMarkup}</div></aside><section class="data-explorer-panel p-4 sm:p-5 overflow-hidden"><div><p class="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-300">${escapeHtmlText(dataExplorerSelectedCollection || "Collection")}</p><p class="mt-1 text-sm text-slate-400">${dataExplorerDocuments.length} documents loaded • Double-click a cell to edit</p></div><div class="mt-4 overflow-auto custom-scrollbar rounded-[1.4rem] border border-white/10">${dataExplorerViewMode === "json" ? `<pre class="data-explorer-mono min-h-[420px] whitespace-pre-wrap px-4 py-4 text-xs leading-6 text-slate-200">${escapeHtmlText(JSON.stringify(dataExplorerDocuments, null, 2))}</pre>` : `<table class="min-w-full table-fixed border-collapse"><thead class="bg-white/[0.03]"><tr>${gridFields.map((field) => `<th class="px-3 py-3 text-left text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">${escapeHtmlText(field)}</th>`).join("")}</tr></thead><tbody>${tableRows}</tbody></table>`}</div></section></div>`}
+        </div>`;
+      }
+      function openBuilderDataBindingModal() {
+        if (!dataExplorerConnected) {
+          showBuilderSnackbar("Connect Data Explorer first.", "error");
+          return;
+        }
+        const modal = document.getElementById("builder-data-binding-modal");
+        const body = document.getElementById("builder-data-binding-body");
+        if (!modal || !body) return;
+        const binding = currentInspectorState.attributes?.dataBinding || {};
+        body.innerHTML = `<label class="block"><span class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Collection</span><select id="builder-data-binding-collection" class="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none focus:border-cyan-400">${dataExplorerCollections.map((name) => `<option value="${escapeAttr(name)}" ${binding.collection === name ? "selected" : ""}>${escapeHtmlText(name)}</option>`).join("")}</select></label><label class="mt-4 block"><span class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Field Path</span><input id="builder-data-binding-field" class="data-explorer-mono mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none focus:border-cyan-400" value="${escapeAttr(binding.fieldPath || "")}" placeholder="title or profile.name" /></label><label class="mt-4 block"><span class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Document Index</span><input id="builder-data-binding-index" type="number" min="0" class="data-explorer-mono mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none focus:border-cyan-400" value="${escapeAttr(String(binding.documentIndex ?? 0))}" /></label>`;
+        modal.classList.remove("hidden");
+      }
+      function closeBuilderDataBindingModal() {
+        document.getElementById("builder-data-binding-modal")?.classList.add("hidden");
+      }
+      function applyBuilderDataBinding() {
+        const collection = String(document.getElementById("builder-data-binding-collection")?.value || "").trim();
+        const fieldPath = String(document.getElementById("builder-data-binding-field")?.value || "").trim();
+        const documentIndex = Math.max(0, Number(document.getElementById("builder-data-binding-index")?.value || 0) || 0);
+        currentInspectorState.attributes.dataBinding = collection && fieldPath ? { collection, fieldPath, documentIndex } : null;
+        syncInspectorUI(true);
+        closeBuilderDataBindingModal();
+        showBuilderSnackbar(collection && fieldPath ? "Data binding saved." : "Data binding cleared.", "success");
       }
       function getMarketplacePreviewImageAt(item = {}, tick = marketplacePreviewTick) {
         const shots = Array.isArray(item?.screenshots) && item.screenshots.length
@@ -12216,7 +12499,8 @@
           "text-to-speech": "Text to Speech Pro",
           "image-pdf": "Image to PDF Pro",
           "video-audio": "Video to Audio Pro",
-          "text-doc": "Document Studio Pro",
+                      "text-doc": "Data Explorer",
+                      "data-explorer": "Data Explorer",
           "image-edit": "AI Image Editor Pro",
         };
         return labels[currentStudioToolId] || "MediaLab Pro";
@@ -13380,7 +13664,7 @@
                                 <span>Save .${formatType.toUpperCase()} to Device</span>
                             </button>
                            
-                            <button onclick="switchTool('text-doc')"
+                    <button onclick="switchTool('data-explorer')"
                                     class="text-sm font-black text-gray-500 hover:text-cyan-400 uppercase tracking-widest transition-all mt-4">
                                 <i class="fas fa-edit mr-2"></i> Return to Editor
                             </button>
@@ -13425,7 +13709,7 @@
                   <h3 class="text-2xl font-bold text-white">Document Exported</h3>
                   <p class="text-gray-400 mt-2">Your <b>.${format}</b> file has been generated with all styles preserved.</p>
                   <div class="flex gap-4 justify-center mt-8">
-                      <button onclick="switchTool('text-doc')" class="text-[10px] text-gray-500 hover:text-cyan-400 uppercase font-black tracking-widest transition-all">
+                    <button onclick="switchTool('data-explorer')" class="text-[10px] text-gray-500 hover:text-cyan-400 uppercase font-black tracking-widest transition-all">
                           <i class="fas fa-redo mr-2"></i> New Document
                       </button>
                   </div>
@@ -14228,6 +14512,25 @@
                     </div>
                 </div>
             </div>
+            <div id="builder-data-binding-modal" onclick="if (event.target === this) closeBuilderDataBindingModal()" class="hidden absolute inset-0 z-[146] bg-slate-950/72 p-4 backdrop-blur-xl">
+                <div class="mx-auto mt-12 w-full max-w-xl rounded-[2rem] border border-cyan-400/15 bg-[#08111f] shadow-[0_28px_90px_rgba(2,6,23,0.58)]">
+                    <div class="flex items-start justify-between gap-4 border-b border-white/10 px-5 py-4">
+                        <div>
+                            <p class="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-300">Bind Data</p>
+                            <h3 class="mt-2 text-xl font-semibold text-white">Link this element to MongoDB</h3>
+                            <p class="mt-1 text-sm text-slate-400">Pick the collection field this element should display in run mode.</p>
+                        </div>
+                        <button onclick="closeBuilderDataBindingModal()" class="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div id="builder-data-binding-body" class="space-y-5 px-5 py-5"></div>
+                    <div class="flex items-center justify-end gap-3 border-t border-white/10 px-5 py-4">
+                        <button onclick="closeBuilderDataBindingModal()" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-slate-200 hover:bg-white/10">Cancel</button>
+                        <button onclick="applyBuilderDataBinding()" class="rounded-2xl bg-cyan-500 px-4 py-3 text-sm font-black text-slate-950 hover:bg-cyan-400">Apply Binding</button>
+                    </div>
+                </div>
+            </div>
             <div id="code-mode-panel" class="hidden flex-1 px-2 sm:px-4 pt-2 sm:pt-4 pb-2 sm:pb-4">
                 <div class="code-mode-shell w-full max-w-[1680px] mx-auto">
                     <div class="flex flex-wrap items-center justify-end gap-3 px-1">
@@ -14446,6 +14749,12 @@
                     </button>
                 </div>
             </div>`;
+        }
+        // =============================================================
+        // 4. DATA EXPLORER
+        // =============================================================
+        else if (id === "data-explorer") {
+          html = `<div></div>`;
         }
         // =============================================================
         // 4. TEXT → DOCUMENT
@@ -14755,6 +15064,9 @@
         // Inject the final HTML into the main viewport
         if (switchToken !== studioToolSwitchToken || currentStudioToolId !== id || !area) return;
         area.innerHTML = html;
+        if (id === "data-explorer") {
+          renderDataExplorerTool();
+        }
       } // ====================== HELPER: RENDER HISTORY ITEMS ======================
       function handleDragOver(e) {
         e.preventDefault();
@@ -15908,6 +16220,7 @@
           }
           window.history.replaceState({}, document.title, "/");
         }
+        await initializeDataExplorerSession();
         const collaborationActivated = await activateCollaborationFromUrl();
         try {
           const lastTool = String(sessionStorage.getItem("medialab:lastTool") || "").trim();
@@ -17199,7 +17512,7 @@
         if (activeEditorValue) return editor.value;
         const storedIndex = getBuilderFileContent("index.html");
         if (String(storedIndex || "").trim()) return storedIndex;
-        return `<!DOCTYPE html>
+        return injectBuilderDataBindingRuntime(`<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -17530,7 +17843,7 @@
           doc.body.appendChild(script);
         });
         if (!inlineLocalAssets) {
-          return "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
+          return injectBuilderDataBindingRuntime("<!DOCTYPE html>\n" + doc.documentElement.outerHTML);
         }
         Array.from(doc.querySelectorAll('link[rel="stylesheet"][href]')).forEach((node) => {
           const href = String(node.getAttribute("href") || "").trim();
@@ -17554,7 +17867,62 @@
           script.textContent = String(jsNode.content || "");
           node.replaceWith(script);
         });
-        return "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
+        const runtimeDocument = "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
+        return injectBuilderDataBindingRuntime(runtimeDocument);
+      }
+      function buildBuilderDataBindingRuntimeScript() {
+        return `<script>
+(() => {
+  const resolveValue = (obj, path) => String(path || "").split(".").filter(Boolean).reduce((acc, key) => acc == null ? acc : acc[key], obj);
+  const applyValue = (el, value) => {
+    const text = value == null ? "" : typeof value === "object" ? JSON.stringify(value) : String(value);
+    const body = el.querySelector(".element-body > *") || el.querySelector(".element-body") || el;
+    if (!body) return;
+    if (body.tagName === "IMG") {
+      body.src = text;
+      return;
+    }
+    if (body.tagName === "INPUT" || body.tagName === "TEXTAREA") {
+      body.value = text;
+      return;
+    }
+    body.textContent = text;
+  };
+  const hydrate = async () => {
+    const nodes = Array.from(document.querySelectorAll("[data-bind-collection][data-bind-field]"));
+    if (!nodes.length) return;
+    const groups = new Map();
+    nodes.forEach((node) => {
+      const collection = node.getAttribute("data-bind-collection") || "";
+      if (!groups.has(collection)) groups.set(collection, []);
+      groups.get(collection).push(node);
+    });
+    for (const [collection, items] of groups.entries()) {
+      try {
+        const res = await fetch('/api/data-explorer/collection/' + encodeURIComponent(collection) + '?limit=60', { credentials: 'include' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) continue;
+        items.forEach((node) => {
+          const fieldPath = node.getAttribute("data-bind-field") || "";
+          const index = Math.max(0, Number(node.getAttribute("data-bind-index") || 0) || 0);
+          const doc = Array.isArray(data.documents) ? data.documents[index] : null;
+          applyValue(node, resolveValue(doc || {}, fieldPath));
+        });
+      } catch {}
+    }
+  };
+  hydrate();
+})();
+</script>`;
+      }
+      function injectBuilderDataBindingRuntime(documentHtml = "") {
+        const html = String(documentHtml || "");
+        if (!/data-bind-collection=/i.test(html)) return html;
+        const runtimeScript = buildBuilderDataBindingRuntimeScript();
+        if (html.includes("</body>")) {
+          return html.replace("</body>", `${runtimeScript}\n</body>`);
+        }
+        return `${html}\n${runtimeScript}`;
       }
       function buildBuilderPublishPackage() {
         persistActiveBuilderFileContent();
@@ -19097,6 +19465,18 @@
             body.innerHTML = `<div class="w-full h-full block"></div>`;
         }
       }
+      function applyDataBindingAttributes(el, binding = null) {
+        if (!el) return;
+        if (binding?.collection && binding?.fieldPath) {
+          el.dataset.bindCollection = String(binding.collection || "");
+          el.dataset.bindField = String(binding.fieldPath || "");
+          el.dataset.bindIndex = String(Number(binding.documentIndex || 0) || 0);
+        } else {
+          delete el.dataset.bindCollection;
+          delete el.dataset.bindField;
+          delete el.dataset.bindIndex;
+        }
+      }
       function normalizeElementInteractions(interactions = {}) {
         const normalized = {};
         if (!interactions || typeof interactions !== "object") return normalized;
@@ -19204,6 +19584,7 @@ console.log("Triggered ${eventName}", { source, event });
         });
         applyElementContentStyles(wrap, type, normalizedStyles, mergedAttrs);
         applyCustomCssRulesToElement(wrap, mergedAttrs.customCssRules);
+        applyDataBindingAttributes(wrap, mergedAttrs.dataBinding);
         wrap.dataset.interactions = JSON.stringify(mergedAttrs.interactions || {});
         hydrateCanvasElement(wrap);
         refreshElementInteractionBadge(wrap);
@@ -20346,6 +20727,13 @@ console.log("Triggered ${eventName}", { source, event });
                 customCssRules: normalizeCustomCssRules(
                   JSON.parse(existingEl.dataset.customCssRules || "[]"),
                 ),
+                dataBinding: existingEl.dataset.bindCollection
+                  ? {
+                      collection: String(existingEl.dataset.bindCollection || ""),
+                      fieldPath: String(existingEl.dataset.bindField || ""),
+                      documentIndex: Number(existingEl.dataset.bindIndex || 0) || 0,
+                    }
+                  : null,
                 interactions: normalizeElementInteractions(
                   JSON.parse(existingEl.dataset.interactions || "{}"),
                 ),
@@ -20360,6 +20748,7 @@ console.log("Triggered ${eventName}", { source, event });
                 src: "",
                 className: "",
                 customCssRules: normalizeCustomCssRules(),
+                dataBinding: null,
                 interactions: normalizeElementInteractions(),
               },
         };
@@ -20526,12 +20915,13 @@ console.log("Triggered ${eventName}", { source, event });
         let h = `<div class="space-y-3">`;
         switch (inspectorPageIndex) {
           case 0:
-            h += renderBuilderInput(
+          h += renderBuilderInput(
               "System ID",
               "text",
               a.id,
               "updateAttr('id', this.value)",
             );
+            h += `<button type="button" onclick="openBuilderDataBindingModal()" class="w-full rounded-2xl border border-cyan-400/20 bg-cyan-500/10 px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-cyan-100 hover:bg-cyan-500/15 transition-all">Bind Data${a.dataBinding?.fieldPath ? ` • ${escapeHtmlText(a.dataBinding.collection || "")}.${escapeHtmlText(a.dataBinding.fieldPath || "")}` : ""}</button>`;
             if (
               ["text", "button", "a"].includes(type) ||
               (type === "div" &&
@@ -23328,7 +23718,7 @@ ${animationKeyframesCss}
     <div id="medialab-run-stage">${clone.innerHTML}</div>
 ${interactionScript ? `\n${interactionScript}` : ""}
   </body>
-</html>`;
+</html>`);
       }
       function openBuilderPublishModal() {
         if (!loggedIn || !currentUser) {
@@ -24386,6 +24776,7 @@ ${interactionScript ? `\n${interactionScript}` : ""}
             el,
             currentInspectorState.attributes.customCssRules,
           );
+          applyDataBindingAttributes(el, currentInspectorState.attributes.dataBinding);
           el.dataset.interactions = JSON.stringify(
             normalizeElementInteractions(currentInspectorState.attributes.interactions),
           );
