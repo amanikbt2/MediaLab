@@ -7890,8 +7890,8 @@ io.on("connection", (socket) => {
         isGuest: Boolean(payload.isGuest),
         isHost,
         canEdit: isHost ? true : Boolean(payload.canEdit),
-        canAudio: Boolean(payload.canAudio && isHost),
-        canVideo: Boolean(payload.canVideo && isHost),
+        canAudio: Boolean(payload.canAudio),
+        canVideo: Boolean(payload.canVideo),
         awaitingApproval: false,
         pendingRequestKind: "",
         joinedAt: new Date(),
@@ -8072,6 +8072,20 @@ io.on("connection", (socket) => {
         grantedBy: actingUser.displayName,
       });
     }
+    emitCollaborationRoomState(roomId);
+  });
+  socket.on("collaboration:set-media-state", (payload = {}) => {
+    const roomId = normalizeCollaborationRoomId(payload.roomId);
+    if (!roomId) return;
+    const room = collaborationRooms.get(roomId);
+    const user = room?.users?.get(socket.id);
+    if (!room || !user) return;
+    const audioEnabled = Boolean(payload.audioEnabled);
+    const videoEnabled = Boolean(payload.videoEnabled);
+    user.canAudio = audioEnabled || videoEnabled;
+    user.canVideo = videoEnabled;
+    user.awaitingApproval = false;
+    user.pendingRequestKind = "";
     emitCollaborationRoomState(roomId);
   });
   socket.on("collaboration:webrtc-signal", (payload = {}) => {
