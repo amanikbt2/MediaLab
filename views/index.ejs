@@ -4967,6 +4967,8 @@
       let collaborationHostToken = "";
       let collaborationShareLink = "";
       let collaborationUsers = [];
+      let collaborationPresenceKnownUsers = new Map();
+      let collaborationPresencePrimed = false;
       let collaborationIsHost = false;
       let collaborationCanEdit = true;
       let collaborationJoined = false;
@@ -5804,6 +5806,8 @@
         collaborationDropdownOpen = false;
         collaborationAutoReconnectEnabled = false;
         collaborationUsers = [];
+        collaborationPresenceKnownUsers.clear();
+        collaborationPresencePrimed = false;
         collaborationCursorMap.clear();
         collaborationShareLink = "";
         collaborationHostToken = "";
@@ -5836,6 +5840,39 @@
           collaborationUsers.find((user) => Boolean(user?.isHost))?.displayName ||
           ""
         );
+      }
+      function announceCollaborationPresence(nextUsers = []) {
+        const nextMap = new Map(
+          (Array.isArray(nextUsers) ? nextUsers : []).map((user) => [
+            String(user?.socketId || ""),
+            user,
+          ]),
+        );
+        if (!collaborationPresencePrimed) {
+          collaborationPresenceKnownUsers = nextMap;
+          collaborationPresencePrimed = true;
+          return;
+        }
+        const selfSocketId = String(socket.id || "");
+        nextMap.forEach((user, socketId) => {
+          if (!socketId || socketId === selfSocketId) return;
+          if (!collaborationPresenceKnownUsers.has(socketId)) {
+            showBuilderSnackbar(
+              `${user?.displayName || "A collaborator"} has joined the meeting`,
+              "success",
+            );
+          }
+        });
+        collaborationPresenceKnownUsers.forEach((user, socketId) => {
+          if (!socketId || socketId === selfSocketId) return;
+          if (!nextMap.has(socketId)) {
+            showBuilderSnackbar(
+              `${user?.displayName || "A collaborator"} has left the meeting`,
+              "error",
+            );
+          }
+        });
+        collaborationPresenceKnownUsers = nextMap;
       }
       function syncCollaborationPrebootOverlay(message = "", progress = 0) {
         const title = document.getElementById("collaboration-preboot-title");
@@ -6385,6 +6422,41 @@
         };
         collaborationRemoteStreams.set(key, nextEntry);
         return nextEntry;
+      }
+      function pruneCollaborationRemoteStream(peerSocketId = "", canAudio = false, canVideo = false) {
+        const key = String(peerSocketId || "").trim();
+        const entry = collaborationRemoteStreams.get(key);
+        if (!entry?.stream) return;
+        const stream = entry.stream;
+        stream.getAudioTracks().forEach((track) => {
+          if (!canAudio) {
+            try {
+              stream.removeTrack(track);
+            } catch {}
+            try {
+              track.stop();
+            } catch {}
+          }
+        });
+        stream.getVideoTracks().forEach((track) => {
+          if (!canVideo) {
+            try {
+              stream.removeTrack(track);
+            } catch {}
+            try {
+              track.stop();
+            } catch {}
+          }
+        });
+        if (!stream.getTracks().length) {
+          collaborationRemoteStreams.delete(key);
+          cleanupCollaborationAudioMeter(key);
+          return;
+        }
+        collaborationRemoteStreams.set(key, {
+          ...entry,
+          stream,
+        });
       }
       function createCollaborationPeerConnection(peerSocketId = "") {
         if (!peerSocketId) return null;
@@ -7007,6 +7079,7 @@
       socket.on("collaboration:room-state", (payload = {}) => {
         if (String(payload.roomId || "") !== collaborationRoomId) return;
         collaborationUsers = Array.isArray(payload.users) ? payload.users : [];
+        announceCollaborationPresence(collaborationUsers);
         if (!collaborationJoined) {
           showCollaborationJoinProgress("Connected. Loading collaborators and project state...", 84);
         }
@@ -7022,6 +7095,15 @@
             )
             .map((user) => String(user.socketId || "")),
         );
+        collaborationUsers.forEach((user) => {
+          const peerSocketId = String(user?.socketId || "");
+          if (!peerSocketId || peerSocketId === String(socket.id || "")) return;
+          pruneCollaborationRemoteStream(
+            peerSocketId,
+            Boolean(user?.canAudio),
+            Boolean(user?.canVideo),
+          );
+        });
         collaborationRemoteStreams.forEach((entry, peerSocketId) => {
           if (!livePeerIds.has(String(peerSocketId || ""))) {
             collaborationRemoteStreams.delete(peerSocketId);
