@@ -75,6 +75,7 @@ const COLLAB_ROOM_PREFIX = "collab:";
 const collaborationRooms = new Map();
 const socketCollaborationMembership = new Map();
 const endedCollaborationRooms = new Map();
+const collaborationHostGraceTimers = new Map();
 const dataExplorerConnections = new Map();
 const dataExplorerWatchers = new Map();
 
@@ -244,6 +245,37 @@ function normalizeCollaborationRoomId(value = "") {
     .slice(0, 120);
 }
 
+function normalizeCollaborationHostToken(value = "") {
+  return String(value || "")
+    .trim()
+    .replace(/[^a-zA-Z0-9-]/g, "")
+    .slice(0, 180);
+}
+
+function clearCollaborationHostGrace(roomId = "") {
+  const normalizedRoomId = normalizeCollaborationRoomId(roomId);
+  const timer = collaborationHostGraceTimers.get(normalizedRoomId);
+  if (timer) {
+    clearTimeout(timer);
+    collaborationHostGraceTimers.delete(normalizedRoomId);
+  }
+}
+
+function scheduleCollaborationHostGrace(roomId = "", delayMs = 15000) {
+  const normalizedRoomId = normalizeCollaborationRoomId(roomId);
+  if (!normalizedRoomId) return;
+  clearCollaborationHostGrace(normalizedRoomId);
+  const timer = setTimeout(() => {
+    collaborationHostGraceTimers.delete(normalizedRoomId);
+    const room = collaborationRooms.get(normalizedRoomId);
+    if (!room) return;
+    const hasLiveHost = Boolean(room.hostSocketId && room.users.has(room.hostSocketId));
+    if (hasLiveHost) return;
+    endCollaborationRoom(normalizedRoomId, "host-exited");
+  }, Math.max(1500, Number(delayMs) || 15000));
+  collaborationHostGraceTimers.set(normalizedRoomId, timer);
+}
+
 function ensureCollaborationRoom(roomId = "") {
   const normalizedRoomId = normalizeCollaborationRoomId(roomId);
   if (!normalizedRoomId) return null;
@@ -251,6 +283,7 @@ function ensureCollaborationRoom(roomId = "") {
     collaborationRooms.set(normalizedRoomId, {
       id: normalizedRoomId,
       hostSocketId: "",
+      hostToken: crypto.randomUUID(),
       users: new Map(),
       latestSnapshot: null,
       createdAt: new Date(),
@@ -330,12 +363,22 @@ function removeSocketFromCollaborationRoom(socketId = "") {
   socketCollaborationMembership.delete(socketId);
   if (!room) return;
   if (room.hostSocketId === socketId) {
-    endCollaborationRoom(roomId, "host-exited");
+    room.users.delete(socketId);
+    room.hostSocketId = "";
+    scheduleCollaborationHostGrace(roomId, 15000);
+    if (room.users.size) {
+      emitCollaborationRoomState(roomId);
+    }
     return;
   }
   room.users.delete(socketId);
   if (!room.users.size) {
-    collaborationRooms.delete(roomId);
+    if (!room.hostSocketId) {
+      scheduleCollaborationHostGrace(roomId, 15000);
+    } else {
+      collaborationRooms.delete(roomId);
+      clearCollaborationHostGrace(roomId);
+    }
     return;
   }
   emitCollaborationRoomState(roomId);
@@ -344,6 +387,7 @@ function removeSocketFromCollaborationRoom(socketId = "") {
 function endCollaborationRoom(roomId = "", reason = "host-ended") {
   const normalizedRoomId = normalizeCollaborationRoomId(roomId);
   if (!normalizedRoomId) return;
+  clearCollaborationHostGrace(normalizedRoomId);
   const room = collaborationRooms.get(normalizedRoomId);
   if (room) {
     Array.from(room.users.values()).forEach((user) => {
@@ -8228,6 +8272,7 @@ io.on("connection", (socket) => {
       const roomId = normalizeCollaborationRoomId(payload.roomId);
       if (!roomId) return;
       const requestedHost = Boolean(payload.isHost);
+      const providedHostToken = normalizeCollaborationHostToken(payload.hostToken);
       const endedRoom = getEndedCollaborationRoom(roomId);
       if (!requestedHost && endedRoom) {
         socket.emit("collaboration:join-invalid", {
@@ -8249,10 +8294,15 @@ io.on("connection", (socket) => {
       if (requestedHost) {
         endedCollaborationRooms.delete(roomId);
       }
+      if (!room.hostToken) {
+        room.hostToken = providedHostToken || crypto.randomUUID();
+      }
       removeSocketFromCollaborationRoom(socket.id);
       socket.join(`${COLLAB_ROOM_PREFIX}${roomId}`);
       const hasHost = Boolean(room.hostSocketId && room.users.has(room.hostSocketId));
-      const isHost = requestedHost || !hasHost;
+      const hostTokenMatches =
+        Boolean(providedHostToken) && providedHostToken === String(room.hostToken || "");
+      const isHost = requestedHost && (!hasHost ? hostTokenMatches : hostTokenMatches);
       const entry = {
         socketId: socket.id,
         userId: String(payload.userId || "").trim(),
@@ -8260,7 +8310,7 @@ io.on("connection", (socket) => {
         color: String(payload.color || "#22d3ee").trim().slice(0, 24) || "#22d3ee",
         isGuest: Boolean(payload.isGuest),
         isHost,
-        canEdit: isHost ? true : Boolean(payload.canEdit),
+        canEdit: isHost ? true : Boolean(payload.canEdit) && !requestedHost,
         canAudio: Boolean(payload.canAudio),
         canVideo: Boolean(payload.canVideo),
         awaitingApproval: false,
@@ -8268,6 +8318,7 @@ io.on("connection", (socket) => {
         joinedAt: new Date(),
       };
       if (isHost) {
+        clearCollaborationHostGrace(roomId);
         room.hostSocketId = socket.id;
       }
       room.users.set(socket.id, entry);
@@ -8276,6 +8327,7 @@ io.on("connection", (socket) => {
         roomId,
         user: serializeCollaborationUser(entry),
         latestSnapshot: room.latestSnapshot || null,
+        hostToken: isHost ? String(room.hostToken || "") : "",
       });
       emitCollaborationRoomState(roomId);
       if (room.latestSnapshot) {

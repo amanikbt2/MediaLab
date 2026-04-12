@@ -4964,6 +4964,7 @@
         "#a78bfa",
       ];
       let collaborationRoomId = "";
+      let collaborationHostToken = "";
       let collaborationShareLink = "";
       let collaborationUsers = [];
       let collaborationIsHost = false;
@@ -5584,6 +5585,16 @@
           return "";
         }
       }
+      function getCollaborationHostTokenParam() {
+        try {
+          return String(new URL(window.location.href).searchParams.get("host") || "")
+            .trim()
+            .replace(/[^a-zA-Z0-9-]/g, "")
+            .slice(0, 180);
+        } catch {
+          return "";
+        }
+      }
       function hasCollaborationRoomParam() {
         return Boolean(getCollaborationRoomParam());
       }
@@ -5652,6 +5663,38 @@
           return base.toString();
         } catch {
           return `${COLLAB_SHARE_BASE_URL}/?room=${encodeURIComponent(normalizedRoomId)}`;
+        }
+      }
+      function buildCollaborationHostLink(roomId = "", hostToken = "") {
+        const normalizedRoomId = String(roomId || "").trim();
+        const normalizedHostToken = String(hostToken || "").trim();
+        if (!normalizedRoomId || !normalizedHostToken) {
+          return buildCollaborationShareLink(normalizedRoomId);
+        }
+        try {
+          const base = new URL(window.location.origin || COLLAB_SHARE_BASE_URL);
+          base.pathname = "/";
+          base.search = `?room=${encodeURIComponent(normalizedRoomId)}&host=${encodeURIComponent(normalizedHostToken)}`;
+          return base.toString();
+        } catch {
+          return `${COLLAB_SHARE_BASE_URL}/?room=${encodeURIComponent(normalizedRoomId)}&host=${encodeURIComponent(normalizedHostToken)}`;
+        }
+      }
+      function syncCollaborationHostUrl(replace = true) {
+        if (!collaborationRoomId) return;
+        const url = new URL(window.location.href);
+        url.searchParams.set("room", collaborationRoomId);
+        if (collaborationHostToken && collaborationIsHost) {
+          url.searchParams.set("host", collaborationHostToken);
+        } else {
+          url.searchParams.delete("host");
+        }
+        const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+        const state = window.history.state || {};
+        if (replace) {
+          window.history.replaceState(state, document.title, nextUrl);
+        } else {
+          window.history.pushState(state, document.title, nextUrl);
         }
       }
       function buildCollaborationSnapshot() {
@@ -5757,6 +5800,7 @@
         collaborationUsers = [];
         collaborationCursorMap.clear();
         collaborationShareLink = "";
+        collaborationHostToken = "";
         collaborationAudioEnabled = false;
         collaborationVideoEnabled = false;
         collaborationMediaPromptDismissed = true;
@@ -5771,6 +5815,7 @@
         try {
           const nextUrl = new URL(window.location.href);
           nextUrl.searchParams.delete("room");
+          nextUrl.searchParams.delete("host");
           resetCollaborationClientState();
           collaborationRoomId = "";
           window.location.href = nextUrl.toString();
@@ -6732,17 +6777,20 @@
           canEdit: Boolean(forceHost || collaborationIsHost),
           canAudio: Boolean(collaborationAudioEnabled),
           canVideo: Boolean(collaborationVideoEnabled),
+          hostToken: Boolean(forceHost || collaborationIsHost) ? collaborationHostToken : "",
         });
       }
       function generateCollaborationLink() {
         hideCollaborationInactiveOverlay();
         collaborationRoomId = String(globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`);
+        collaborationHostToken = String(globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`);
         collaborationShareLink = buildCollaborationShareLink(collaborationRoomId);
         collaborationIsHost = true;
         collaborationCanEdit = true;
         collaborationJoined = false;
         collaborationAudioEnabled = false;
         collaborationVideoEnabled = false;
+        syncCollaborationHostUrl(true);
         joinCollaborationRoom(true);
         updateCollaborationUi();
       }
@@ -6828,10 +6876,12 @@
       async function activateCollaborationFromUrl() {
         const roomId = getCollaborationRoomParam();
         if (!roomId) return false;
+        const hostToken = getCollaborationHostTokenParam();
         collaborationRoomId = roomId;
+        collaborationHostToken = hostToken;
         collaborationShareLink = buildCollaborationShareLink(roomId);
-        collaborationIsHost = false;
-        collaborationCanEdit = false;
+        collaborationIsHost = Boolean(hostToken);
+        collaborationCanEdit = Boolean(hostToken);
         collaborationAutoReconnectEnabled = false;
         collaborationAudioEnabled = false;
         collaborationVideoEnabled = false;
@@ -6847,7 +6897,7 @@
           } catch {}
           showCollaborationJoinProgress("Connecting to shared room...", 66);
           collaborationAutoReconnectEnabled = true;
-          joinCollaborationRoom(false);
+          joinCollaborationRoom(Boolean(hostToken));
           updateCollaborationUi();
         }, 120);
         return true;
@@ -6882,6 +6932,12 @@
         collaborationMediaPromptShownForRoom = "";
         collaborationCanEdit = Boolean(payload.user?.canEdit);
         collaborationIsHost = Boolean(payload.user?.isHost);
+        collaborationHostToken = collaborationIsHost
+          ? String(payload.hostToken || collaborationHostToken || "").trim()
+          : "";
+        if (collaborationIsHost && collaborationHostToken) {
+          syncCollaborationHostUrl(true);
+        }
         if (payload.latestSnapshot?.html) {
           applyRemoteCollaborationSnapshot(payload.latestSnapshot);
         }
