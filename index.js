@@ -35,6 +35,7 @@ import MarketplaceItem from "./models/MarketplaceItem.js";
 import BuilderTemplate from "./models/BuilderTemplate.js";
 import Notification from "./models/Notification.js";
 import ReferralLedger from "./models/ReferralLedger.js";
+import CollaborationMeeting from "./models/CollaborationMeeting.js";
 import {
   createRenderBlueprintInstance,
   extractRenderDeploySuccessPayload,
@@ -276,20 +277,95 @@ function scheduleCollaborationHostGrace(roomId = "", delayMs = 15000) {
   collaborationHostGraceTimers.set(normalizedRoomId, timer);
 }
 
-function ensureCollaborationRoom(roomId = "") {
+function ensureCollaborationRoom(roomId = "", options = {}) {
   const normalizedRoomId = normalizeCollaborationRoomId(roomId);
   if (!normalizedRoomId) return null;
   if (!collaborationRooms.has(normalizedRoomId)) {
     collaborationRooms.set(normalizedRoomId, {
       id: normalizedRoomId,
       hostSocketId: "",
-      hostToken: crypto.randomUUID(),
+      hostToken:
+        normalizeCollaborationHostToken(options.hostToken) || crypto.randomUUID(),
       users: new Map(),
       latestSnapshot: null,
       createdAt: new Date(),
     });
   }
-  return collaborationRooms.get(normalizedRoomId);
+  const room = collaborationRooms.get(normalizedRoomId);
+  const nextHostToken = normalizeCollaborationHostToken(options.hostToken);
+  if (room && nextHostToken) {
+    room.hostToken = nextHostToken;
+  }
+  return room;
+}
+
+async function getCollaborationMeetingRecord(roomId = "") {
+  const normalizedRoomId = normalizeCollaborationRoomId(roomId);
+  if (!normalizedRoomId) return null;
+  try {
+    return await CollaborationMeeting.findOne({ roomId: normalizedRoomId }).lean();
+  } catch (error) {
+    console.warn("Collaboration meeting lookup failed:", error.message);
+    return null;
+  }
+}
+
+async function ensureCollaborationMeetingRecord(
+  roomId = "",
+  { hostToken = "", hostUserId = "", hostDisplayName = "" } = {},
+) {
+  const normalizedRoomId = normalizeCollaborationRoomId(roomId);
+  const normalizedHostToken =
+    normalizeCollaborationHostToken(hostToken) || crypto.randomUUID();
+  if (!normalizedRoomId) return null;
+  try {
+    const existing = await CollaborationMeeting.findOne({ roomId: normalizedRoomId });
+    if (existing) {
+      let mutated = false;
+      if (!existing.hostToken) {
+        existing.hostToken = normalizedHostToken;
+        mutated = true;
+      }
+      if (hostUserId && existing.hostUserId !== String(hostUserId).trim()) {
+        existing.hostUserId = String(hostUserId).trim();
+        mutated = true;
+      }
+      if (
+        hostDisplayName &&
+        existing.hostDisplayName !== String(hostDisplayName).trim().slice(0, 120)
+      ) {
+        existing.hostDisplayName = String(hostDisplayName).trim().slice(0, 120);
+        mutated = true;
+      }
+      if (mutated) {
+        await existing.save();
+      }
+      return existing.toObject();
+    }
+    const created = await CollaborationMeeting.create({
+      roomId: normalizedRoomId,
+      hostToken: normalizedHostToken,
+      hostUserId: String(hostUserId || "").trim(),
+      hostDisplayName: String(hostDisplayName || "").trim().slice(0, 120),
+    });
+    return created.toObject();
+  } catch (error) {
+    console.warn("Collaboration meeting persist failed:", error.message);
+    return {
+      roomId: normalizedRoomId,
+      hostToken: normalizedHostToken,
+      hostUserId: String(hostUserId || "").trim(),
+      hostDisplayName: String(hostDisplayName || "").trim().slice(0, 120),
+    };
+  }
+}
+
+function deleteCollaborationMeetingRecord(roomId = "") {
+  const normalizedRoomId = normalizeCollaborationRoomId(roomId);
+  if (!normalizedRoomId) return;
+  CollaborationMeeting.deleteOne({ roomId: normalizedRoomId }).catch((error) => {
+    console.warn("Collaboration meeting delete failed:", error.message);
+  });
 }
 
 function markCollaborationRoomEnded(roomId = "", reason = "ended") {
@@ -400,6 +476,7 @@ function endCollaborationRoom(roomId = "", reason = "host-ended") {
     });
     collaborationRooms.delete(normalizedRoomId);
   }
+  deleteCollaborationMeetingRecord(normalizedRoomId);
   markCollaborationRoomEnded(normalizedRoomId, reason);
 }
 
@@ -8267,7 +8344,7 @@ io.on("connection", (socket) => {
     if (!normalizedUserId) return;
     socket.join(`${USER_NOTIFICATION_ROOM_PREFIX}${normalizedUserId}`);
   });
-  socket.on("collaboration:join-room", (payload = {}) => {
+  socket.on("collaboration:join-room", async (payload = {}) => {
     try {
       const roomId = normalizeCollaborationRoomId(payload.roomId);
       if (!roomId) return;
@@ -8281,28 +8358,42 @@ io.on("connection", (socket) => {
         });
         return;
       }
+      let meetingRecord = await getCollaborationMeetingRecord(roomId);
       const existingRoom = collaborationRooms.get(roomId);
-      if (!requestedHost && !existingRoom) {
+      if (!requestedHost && !existingRoom && !meetingRecord) {
         socket.emit("collaboration:join-invalid", {
           roomId,
           reason: "expired",
         });
         return;
       }
-      const room = requestedHost ? ensureCollaborationRoom(roomId) : existingRoom;
-      if (!room) return;
       if (requestedHost) {
+        meetingRecord = await ensureCollaborationMeetingRecord(roomId, {
+          hostToken: providedHostToken,
+          hostUserId: String(payload.userId || "").trim(),
+          hostDisplayName: String(payload.displayName || "").trim(),
+        });
         endedCollaborationRooms.delete(roomId);
       }
-      if (!room.hostToken) {
-        room.hostToken = providedHostToken || crypto.randomUUID();
+      if (!meetingRecord && existingRoom?.hostToken) {
+        meetingRecord = {
+          roomId,
+          hostToken: existingRoom.hostToken,
+          hostUserId: "",
+          hostDisplayName: "",
+        };
       }
+      const room = ensureCollaborationRoom(roomId, {
+        hostToken: meetingRecord?.hostToken || providedHostToken,
+      });
+      if (!room) return;
       removeSocketFromCollaborationRoom(socket.id);
       socket.join(`${COLLAB_ROOM_PREFIX}${roomId}`);
       const hasHost = Boolean(room.hostSocketId && room.users.has(room.hostSocketId));
       const hostTokenMatches =
-        Boolean(providedHostToken) && providedHostToken === String(room.hostToken || "");
-      const isHost = requestedHost && (!hasHost ? hostTokenMatches : hostTokenMatches);
+        Boolean(providedHostToken) &&
+        providedHostToken === String(meetingRecord?.hostToken || room.hostToken || "");
+      const isHost = requestedHost && hostTokenMatches;
       const entry = {
         socketId: socket.id,
         userId: String(payload.userId || "").trim(),
@@ -8327,7 +8418,9 @@ io.on("connection", (socket) => {
         roomId,
         user: serializeCollaborationUser(entry),
         latestSnapshot: room.latestSnapshot || null,
-        hostToken: isHost ? String(room.hostToken || "") : "",
+        hostToken: isHost
+          ? String(meetingRecord?.hostToken || room.hostToken || "")
+          : "",
       });
       emitCollaborationRoomState(roomId);
       if (room.latestSnapshot) {

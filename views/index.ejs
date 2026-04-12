@@ -5753,11 +5753,17 @@
           videoEnabled: collaborationVideoEnabled,
         });
       }
-      function getRequestedCollaborationMediaMode() {
-        if (collaborationAudioEnabled && collaborationVideoEnabled) return "both";
-        if (collaborationVideoEnabled) return "video";
-        if (collaborationAudioEnabled) return "audio";
+      function getRequestedCollaborationMediaModeForState(audioEnabled = false, videoEnabled = false) {
+        if (audioEnabled && videoEnabled) return "both";
+        if (videoEnabled) return "video";
+        if (audioEnabled) return "audio";
         return "none";
+      }
+      function getRequestedCollaborationMediaMode() {
+        return getRequestedCollaborationMediaModeForState(
+          collaborationAudioEnabled,
+          collaborationVideoEnabled,
+        );
       }
       function openCollaborationMediaPrompt() {
         const prompt = document.getElementById("builder-collab-media-prompt");
@@ -6504,7 +6510,10 @@
         const self = getCollaborationSelfUser();
         if (self && (collaborationAudioEnabled || collaborationVideoEnabled || collaborationUserHasLiveMedia(self))) {
           await ensureCollaborationLocalMedia(
-            collaborationVideoEnabled || Boolean(self.canVideo) ? "video" : "audio",
+            getRequestedCollaborationMediaModeForState(
+              collaborationAudioEnabled || Boolean(self.canAudio),
+              collaborationVideoEnabled || Boolean(self.canVideo),
+            ),
           );
         }
         const pc = createCollaborationPeerConnection(sourceSocketId);
