@@ -36,6 +36,7 @@ import BuilderTemplate from "./models/BuilderTemplate.js";
 import Notification from "./models/Notification.js";
 import ReferralLedger from "./models/ReferralLedger.js";
 import CollaborationMeeting from "./models/CollaborationMeeting.js";
+import VirtualDbModelSchema from "./models/VirtualDbModel.js";
 import {
   createRenderBlueprintInstance,
   extractRenderDeploySuccessPayload,
@@ -79,6 +80,64 @@ const endedCollaborationRooms = new Map();
 const collaborationHostGraceTimers = new Map();
 const dataExplorerConnections = new Map();
 const dataExplorerWatchers = new Map();
+let virtualDbConnectionState = null;
+
+function getVirtualDbUri() {
+  return (
+    process.env.VIRTUALDB_MONGO_URI ||
+    process.env.TEMP_MEDIALAB_MONGO_URI ||
+    process.env.TEMP_MONGODB_URI ||
+    ""
+  );
+}
+
+async function getOrCreateVirtualDbConnection() {
+  const uri = String(getVirtualDbUri() || "").trim();
+  if (!uri) {
+    throw new Error(
+      "VirtualDB is not configured. Set VIRTUALDB_MONGO_URI in your environment.",
+    );
+  }
+  if (virtualDbConnectionState?.connection?.readyState === 1) {
+    return virtualDbConnectionState;
+  }
+  const connection = mongoose.createConnection(uri, {
+    serverSelectionTimeoutMS: 8000,
+    socketTimeoutMS: 15000,
+    maxPoolSize: 8,
+    minPoolSize: 0,
+  });
+  await connection.asPromise();
+  const VirtualDbModel =
+    connection.models.VirtualDbModel ||
+    connection.model("VirtualDbModel", VirtualDbModelSchema, "virtual_models");
+  virtualDbConnectionState = {
+    uri,
+    uriLabel: "virtual-medialabdb",
+    dbName: connection.name,
+    connection,
+    VirtualDbModel,
+    createdAt: new Date(),
+  };
+  return virtualDbConnectionState;
+}
+
+function requireAuth(req, res) {
+  if (!req.isAuthenticated?.() || !req.user) {
+    res.status(401).json({ success: false, message: "Login required." });
+    return false;
+  }
+  return true;
+}
+
+function normalizeVirtualModelName(value = "") {
+  return String(value || "")
+    .trim()
+    .replace(/[^\w.-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
 
 function normalizeDataExplorerCollectionName(value = "") {
   return String(value || "")
@@ -3447,6 +3506,7 @@ app.get("/api/data-explorer/status", async (req, res) => {
     res.json({
       success: true,
       connected: Boolean(state?.uri),
+      engine: state?.engine || "",
       channelId: getDataExplorerChannelId(req),
       dbName: state?.dbName || "",
       uriLabel: state?.uriLabel || "",
@@ -3454,6 +3514,17 @@ app.get("/api/data-explorer/status", async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message || "Could not read explorer state." });
+  }
+});
+
+app.post("/api/data-explorer/disconnect", async (req, res) => {
+  try {
+    if (req.session) {
+      delete req.session.dataExplorer;
+    }
+    res.json({ success: true, disconnected: true });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message || "Could not disconnect." });
   }
 });
 
@@ -3480,6 +3551,7 @@ app.post("/api/data-explorer/connect", async (req, res) => {
       }
     })();
     req.session.dataExplorer = {
+      engine: "mongodb",
       uri,
       uriLabel,
       dbName: connectionState.dbName,
@@ -3501,11 +3573,124 @@ app.post("/api/data-explorer/connect", async (req, res) => {
   }
 });
 
+app.post("/api/virtualdb/connect", async (req, res) => {
+  try {
+    if (!requireAuth(req, res)) return;
+    const state = await getOrCreateVirtualDbConnection();
+    req.session.dataExplorer = {
+      engine: "virtual-medialabdb",
+      uri: state.uri,
+      uriLabel: state.uriLabel,
+      dbName: state.dbName,
+      collections: ["virtual_models"],
+      connectedAt: Date.now(),
+    };
+    res.json({
+      success: true,
+      dbName: state.dbName,
+      uriLabel: state.uriLabel,
+      channelId: getDataExplorerChannelId(req),
+      collections: ["virtual_models"],
+    });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message || "Could not connect VirtualDB." });
+  }
+});
+
+app.get("/api/virtualdb/models", async (req, res) => {
+  try {
+    if (!requireAuth(req, res)) return;
+    const state = await getOrCreateVirtualDbConnection();
+    const now = new Date();
+    const models = await state.VirtualDbModel.find({
+      userId: req.user._id,
+      $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }],
+    })
+      .sort({ createdAt: -1 })
+      .limit(200)
+      .lean();
+    const serialized = models.map((doc) => serializeExplorerValue(doc));
+    const fieldSet = new Set();
+    serialized.forEach((doc) => collectExplorerFieldPaths(doc, "", fieldSet));
+    const fields = Array.from(fieldSet).sort((a, b) => a.localeCompare(b));
+    res.json({
+      success: true,
+      collection: "virtual_models",
+      documents: serialized,
+      fields,
+      limit: 200,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message || "Could not load virtual models." });
+  }
+});
+
+app.post("/api/virtualdb/model", async (req, res) => {
+  try {
+    if (!requireAuth(req, res)) return;
+    const state = await getOrCreateVirtualDbConnection();
+    const name = normalizeVirtualModelName(req.body?.name || "");
+    if (!name) {
+      return res.status(400).json({ success: false, message: "Model name is required." });
+    }
+    const rawSchema = req.body?.schema;
+    const schema =
+      rawSchema && typeof rawSchema === "object"
+        ? rawSchema
+        : typeof rawSchema === "string"
+          ? (() => {
+              try {
+                return JSON.parse(rawSchema);
+              } catch {
+                return {};
+              }
+            })()
+          : {};
+    const created = await state.VirtualDbModel.create({
+      userId: req.user._id,
+      name,
+      schema,
+      expiresAt: null,
+    });
+    res.json({ success: true, model: serializeExplorerValue(created.toObject()) });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message || "Could not create model." });
+  }
+});
+
+app.post("/api/virtualdb/disconnect", async (req, res) => {
+  try {
+    if (!requireAuth(req, res)) return;
+    const state = await getOrCreateVirtualDbConnection();
+    const retentionHoursRaw = Number(req.body?.retentionHours ?? 0);
+    const allowed = new Set([0, 4, 8, 12, 20, 24]);
+    const retentionHours = allowed.has(retentionHoursRaw) ? retentionHoursRaw : 0;
+    const filter = { userId: req.user._id };
+    let action = "cleared";
+    if (retentionHours <= 0) {
+      await state.VirtualDbModel.deleteMany(filter);
+    } else {
+      const expiresAt = new Date(Date.now() + retentionHours * 60 * 60 * 1000);
+      await state.VirtualDbModel.updateMany(filter, { $set: { expiresAt } });
+      action = "scheduled";
+    }
+    if (req.session) {
+      delete req.session.dataExplorer;
+    }
+    res.json({ success: true, action, retentionHours });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message || "Could not disconnect VirtualDB." });
+  }
+});
+
 app.get("/api/data-explorer/collections", async (req, res) => {
   try {
     const state = getDataExplorerSessionState(req);
     if (!state?.uri) {
       return res.status(400).json({ success: false, message: "Connect a MongoDB database first." });
+    }
+    if (state?.engine === "virtual-medialabdb") {
+      return res.json({ success: true, collections: ["virtual_models"], dbName: state?.dbName || "virtualdb" });
     }
     const connectionState = await getOrCreateDataExplorerConnection(state.uri);
     const collections = await connectionState.connection.db
@@ -3537,6 +3722,32 @@ app.get("/api/data-explorer/collection/:name", async (req, res) => {
       return res.status(400).json({ success: false, message: "Collection name is required." });
     }
     const limit = Math.max(1, Math.min(200, Number(req.query?.limit || 50) || 50));
+    if (state?.engine === "virtual-medialabdb") {
+      if (!requireAuth(req, res)) return;
+      if (collectionName !== "virtual_models") {
+        return res.status(400).json({ success: false, message: "Only virtual_models is available in VirtualDB." });
+      }
+      const vstate = await getOrCreateVirtualDbConnection();
+      const now = new Date();
+      const docs = await vstate.VirtualDbModel.find({
+        userId: req.user._id,
+        $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }],
+      })
+        .sort({ createdAt: -1 })
+        .limit(limit)
+        .lean();
+      const serializedDocuments = docs.map((doc) => serializeExplorerValue(doc));
+      const fieldSet = new Set();
+      serializedDocuments.forEach((doc) => collectExplorerFieldPaths(doc, "", fieldSet));
+      const fields = Array.from(fieldSet).sort((a, b) => a.localeCompare(b));
+      return res.json({
+        success: true,
+        collection: collectionName,
+        documents: serializedDocuments,
+        fields,
+        limit,
+      });
+    }
     const connectionState = await getOrCreateDataExplorerConnection(state.uri);
     await ensureDataExplorerWatcher({
       ioInstance: io,
@@ -3575,6 +3786,19 @@ app.patch("/api/data-explorer/document", async (req, res) => {
     const fieldPath = String(req.body?.fieldPath || "").trim();
     if (!collectionName || !documentId || !fieldPath) {
       return res.status(400).json({ success: false, message: "Collection, document, and field are required." });
+    }
+    if (state?.engine === "virtual-medialabdb") {
+      if (!requireAuth(req, res)) return;
+      if (collectionName !== "virtual_models") {
+        return res.status(400).json({ success: false, message: "Only virtual_models is editable in VirtualDB." });
+      }
+      const vstate = await getOrCreateVirtualDbConnection();
+      const filter = { _id: new mongoose.Types.ObjectId(documentId), userId: req.user._id };
+      const value = parseExplorerInputValue(req.body?.value);
+      await vstate.VirtualDbModel.updateOne(filter, { $set: { [fieldPath]: value } });
+      const updated = await vstate.VirtualDbModel.findOne(filter).lean();
+      const serialized = serializeExplorerValue(updated || null);
+      return res.json({ success: true, document: serialized });
     }
     const connectionState = await getOrCreateDataExplorerConnection(state.uri);
     const filter = { _id: new mongoose.Types.ObjectId(documentId) };
