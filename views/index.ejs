@@ -2617,7 +2617,7 @@
               onclick="toggleMore(event)"
               class="flex items-center gap-x-2 text-gray-400 hover:text-white text-sm sm:text-base"
             >
-              Creator Earnings<i class="fas fa-chevron-down text-xs"></i>
+              <span id="xp-earned-label" class="font-semibold text-slate-200"><span class="text-emerald-300">+10</span> XP Earned</span><i class="fas fa-chevron-down text-xs"></i>
             </button>
             <div
               id="more-dropdown"
@@ -5113,6 +5113,7 @@
       let unreadNotificationCount = 0;
       let notificationsLoading = false;
       let notificationDropdownTimer = null;
+      let xpEarnTickerTimer = null;
       let authBootstrapReady = false;
       let builderCommunityTemplates = [];
       function createEmptyMarketplaceDraftListing() {
@@ -9755,16 +9756,25 @@
           const tone = templateIconTonePool[Math.abs(hash * 7) % templateIconTonePool.length];
           return { icon, tone };
         };
-        const templates = Array.isArray(builderCommunityTemplates) ? builderCommunityTemplates : [];
+        const allTemplates = Array.isArray(builderCommunityTemplates) ? builderCommunityTemplates : [];
+        const officialTemplates = allTemplates.filter(
+          (item) => !Boolean(item?.isPurchased) && String(item?.origin || "").toLowerCase() !== "purchased",
+        );
+        const purchasedTemplates = allTemplates.filter(
+          (item) => Boolean(item?.isPurchased) || String(item?.origin || "").toLowerCase() === "purchased",
+        );
+        const templates = [...officialTemplates, ...purchasedTemplates];
         const controls = `<div class="col-span-full mb-1 flex items-center justify-between gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2">
           <p class="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Community Templates</p>
-          <button type="button" onclick="toggleBuilderTemplateGridExpanded()" class="rounded-xl border ${builderTemplateGridExpanded ? "border-fuchsia-400/30 bg-fuchsia-500/10 text-fuchsia-200" : "border-cyan-400/20 bg-cyan-500/10 text-cyan-200"} px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em]">${builderTemplateGridExpanded ? "&lt;&gt; Minimize" : "&lt;&gt; Expand"}</button>
+          <button type="button" title="${builderTemplateGridExpanded ? "Minimize" : "Expand"}" onclick="toggleBuilderTemplateGridExpanded()" class="rounded-xl border ${builderTemplateGridExpanded ? "border-fuchsia-400/30 bg-fuchsia-500/10 text-fuchsia-200" : "border-cyan-400/20 bg-cyan-500/10 text-cyan-200"} px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em]">${builderTemplateGridExpanded ? "&gt;&lt;" : "&lt;&gt;"}</button>
         </div>`;
         if (builderTemplateGridExpanded) {
           wrap.innerHTML =
             controls +
-            `<div class="col-span-full grid grid-cols-1 sm:grid-cols-2 gap-3">
-              ${templates
+            `${templates.length ? `
+            ${officialTemplates.length ? `<p class="col-span-full mt-1 text-[10px] font-black uppercase tracking-[0.16em] text-cyan-300">Default templates</p>` : ""}
+            <div class="col-span-full grid grid-cols-1 sm:grid-cols-2 gap-3">
+              ${officialTemplates
                 .map((item) => {
                   const iconMeta = getTemplateIconMeta(item.slug || item.title || item.marketplaceItemId || "");
                   const preview = String(item.previewImage || "").trim();
@@ -9783,12 +9793,37 @@
                   </button>`;
                 })
                 .join("")}
-            </div>`;
+            </div>
+            ${purchasedTemplates.length ? `<p class="col-span-full mt-3 text-[10px] font-black uppercase tracking-[0.16em] text-fuchsia-300">Purchased templates</p>` : ""}
+            ${purchasedTemplates.length ? `<div class="col-span-full grid grid-cols-1 sm:grid-cols-2 gap-3">
+              ${purchasedTemplates
+                .map((item) => {
+                  const iconMeta = getTemplateIconMeta(item.slug || item.title || item.marketplaceItemId || "");
+                  const preview = String(item.previewImage || "").trim();
+                  return `<button onclick="loadBuilderSiteTemplate('${escapeInlineJsString(item.slug || "")}'); hideBuilderPanels();" class="group overflow-hidden rounded-2xl border border-fuchsia-400/15 bg-slate-950/80 text-left hover:border-fuchsia-400/35">
+                    <div class="relative h-28 w-full bg-slate-900">
+                      ${
+                        preview
+                          ? `<img src="${escapeHtmlText(preview)}" alt="${escapeHtmlText(item.title || "Template preview")}" class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]" />`
+                          : `<div class="flex h-full w-full items-center justify-center text-sm ${iconMeta.tone}"><i class="fas ${iconMeta.icon} mr-2"></i>Template Preview</div>`
+                      }
+                    </div>
+                    <div class="p-3">
+                      <p class="truncate text-sm font-semibold text-white">${escapeHtmlText(item.title || "Purchased Template")}</p>
+                      <p class="mt-1 line-clamp-2 text-xs text-slate-400">${escapeHtmlText(item.description || "Purchased template")}</p>
+                    </div>
+                  </button>`;
+                })
+                .join("")}
+            </div>` : ""}
+            `
+            : `<div class="col-span-full rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-6 text-center text-xs text-slate-400">No templates available yet.</div>`}`;
           return;
         }
         wrap.innerHTML =
           controls +
-          templates
+          (officialTemplates.length
+            ? officialTemplates
             .map((item) => {
               const iconMeta = getTemplateIconMeta(item.slug || item.title || item.marketplaceItemId || "");
               return `
@@ -9797,7 +9832,23 @@
                 <span>${escapeHtmlText(item.title || "Official Template")}<small>${escapeHtmlText(item.category || "General")} • ${escapeHtmlText(item.description || "Official MediaLab builder template")}</small></span>
               </button>`;
             })
-            .join("");
+            .join("")
+            : `<div class="col-span-full rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-6 text-center text-xs text-slate-400">No default templates available.</div>`) +
+          (purchasedTemplates.length
+            ? `<div class="col-span-full mt-3 border-t border-white/10 pt-3">
+                <p class="mb-2 text-[10px] font-black uppercase tracking-[0.16em] text-fuchsia-300">Purchased Templates</p>
+                ${purchasedTemplates
+                  .map((item) => {
+                    const iconMeta = getTemplateIconMeta(item.slug || item.title || item.marketplaceItemId || "");
+                    return `
+                    <button onclick="loadBuilderSiteTemplate('${escapeInlineJsString(item.slug || "")}'); hideBuilderPanels();" class="builder-cmd">
+                      <i class="fas ${iconMeta.icon} ${iconMeta.tone}"></i>
+                      <span>${escapeHtmlText(item.title || "Purchased Template")}<small>${escapeHtmlText(item.category || "General")} • ${escapeHtmlText(item.description || "Purchased template")}</small></span>
+                    </button>`;
+                  })
+                  .join("")}
+              </div>`
+            : "");
       }
       function toggleBuilderTemplateGridExpanded() {
         builderTemplateGridExpanded = !builderTemplateGridExpanded;
@@ -16428,12 +16479,12 @@
                             <button onclick="loadBuilderSiteTemplate('portfolio'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-user-astronaut text-cyan-400"></i><span>Portfolio Site<small>Personal brand website</small></span></button>
                             <button onclick="loadBuilderSiteTemplate('arcade'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-gamepad text-cyan-400"></i><span>Game Launch<small>Arcade landing page</small></span></button>
                             <button onclick="loadBuilderSiteTemplate('studio'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-bezier-curve text-cyan-400"></i><span>Creative Studio<small>Agency homepage starter</small></span></button>
-                            <div id="builder-community-template-list" class="contents"></div>
                             <button onclick="insertStarterBlock('hero'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-panorama text-cyan-400"></i><span>Landing Hero<small>Marketing homepage</small></span></button>
                             <button onclick="insertStarterBlock('feature'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-th-large text-cyan-400"></i><span>Features Section<small>Service showcase</small></span></button>
                             <button onclick="insertStarterBlock('contact'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-envelope text-cyan-400"></i><span>Contact Form<small>Lead capture layout</small></span></button>
                             <button onclick="insertStarterBlock('pricing'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-tags text-cyan-400"></i><span>Pricing Cards<small>Product pricing section</small></span></button>
                             <button onclick="insertStarterBlock('dashboard'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-chart-line text-cyan-400"></i><span>Dashboard Hero<small>SaaS product starter</small></span></button>
+                            <div id="builder-community-template-list" class="contents"></div>
                         </div>
                     </div>
                     <div id="builder-panel-community" class="builder-popover hidden">
@@ -18046,6 +18097,14 @@
           hideMoreDropdown();
         }, 15000);
       }
+      function updateXpEarnedBadge(value = null) {
+        const badge = document.getElementById("xp-earned-label");
+        if (!badge) return;
+        const xpValue = Number.isFinite(Number(value))
+          ? Math.max(1, Math.min(20, Math.round(Number(value))))
+          : Math.floor(Math.random() * 20) + 1;
+        badge.innerHTML = `<span class="text-emerald-300">+${xpValue}</span> XP Earned`;
+      }
       function hideMoreDropdown() {
         const dd = document.getElementById("more-dropdown");
         if (!dd) return;
@@ -18054,6 +18113,7 @@
       }
       function toggleMore(event) {
         event?.stopPropagation();
+        updateXpEarnedBadge();
         const dd = document.getElementById("more-dropdown");
         if (!dd) return;
         const shouldOpen =
@@ -18256,6 +18316,11 @@
       });
       // ====================== INIT ======================
       window.onload = async () => {
+        updateXpEarnedBadge(10);
+        if (xpEarnTickerTimer) clearInterval(xpEarnTickerTimer);
+        xpEarnTickerTimer = setInterval(() => {
+          updateXpEarnedBadge();
+        }, 12000);
         const initialCollaborationRoom = getCollaborationRoomParam();
         if (initialCollaborationRoom) {
           collaborationRoomId = initialCollaborationRoom;

@@ -2087,6 +2087,8 @@ function buildPurchasedTemplateSnapshotFromMarketplaceItem(item = {}) {
     category: sanitizeMarketplaceText(item?.category || "General", 120) || "General",
     sourceHtml: normalizeMarketplaceTemplateHtml(item?.sourceHtml || "", safeTitle),
     previewImage: getMarketplacePreviewImage(item),
+    screenshots: Array.isArray(item?.screenshots) ? item.screenshots.slice(0, 4) : [],
+    screenshotAssets: Array.isArray(item?.screenshotAssets) ? item.screenshotAssets.slice(0, 4) : [],
     sellerId: item?.authorId || null,
     sellerName: sanitizeMarketplaceText(item?.authorName || "", 120),
     purchasedAt: new Date(),
@@ -3662,7 +3664,38 @@ app.get("/api/builder/templates", async (req, res) => {
             .lean()
         )?.purchasedTemplates || []
       : [];
-    const purchasedItems = (Array.isArray(purchasedTemplates) ? purchasedTemplates : []).map((item) => ({
+    const purchasedTemplateList = Array.isArray(purchasedTemplates) ? purchasedTemplates : [];
+    const purchasedMarketplaceIds = purchasedTemplateList
+      .map((entry) => String(entry?.marketplaceItemId || "").trim())
+      .filter(Boolean);
+    const purchasedSourceItems = purchasedMarketplaceIds.length
+      ? await MarketplaceItem.find({ _id: { $in: purchasedMarketplaceIds } })
+          .select("_id screenshots screenshotAssets")
+          .lean()
+      : [];
+    const purchasedSourceById = new Map(
+      (Array.isArray(purchasedSourceItems) ? purchasedSourceItems : []).map((entry) => [
+        String(entry?._id || ""),
+        entry,
+      ]),
+    );
+    const purchasedItems = purchasedTemplateList.map((item) => {
+      const sourceItem = purchasedSourceById.get(String(item?.marketplaceItemId || "").trim());
+      const fallbackPreviewFromAssets = (Array.isArray(item?.screenshotAssets) ? item.screenshotAssets : [])
+        .map((asset) => String(asset?.thumbnailUrl || asset?.url || "").trim())
+        .find(Boolean);
+      const fallbackPreviewFromShots = (Array.isArray(item?.screenshots) ? item.screenshots : [])
+        .map((url) => String(url || "").trim())
+        .find(Boolean);
+      const fallbackSourcePreview =
+        (Array.isArray(sourceItem?.screenshotAssets) ? sourceItem.screenshotAssets : [])
+          .map((asset) => String(asset?.thumbnailUrl || asset?.url || "").trim())
+          .find(Boolean) ||
+        (Array.isArray(sourceItem?.screenshots) ? sourceItem.screenshots : [])
+          .map((url) => String(url || "").trim())
+          .find(Boolean) ||
+        "";
+      return ({
       slug:
         String(item?.slug || "").trim() ||
         `marketplace-template-${String(item?.marketplaceItemId || "").trim()}`,
@@ -3676,8 +3709,9 @@ app.get("/api/builder/templates", async (req, res) => {
       isPurchased: true,
       marketplaceItemId: String(item?.marketplaceItemId || ""),
       sourceHtml: String(item?.sourceHtml || ""),
-      previewImage: String(item?.previewImage || ""),
-    }));
+      previewImage: String(item?.previewImage || fallbackPreviewFromAssets || fallbackPreviewFromShots || fallbackSourcePreview || ""),
+    });
+    });
     return res.json({
       success: true,
       items: [...officialItems, ...purchasedItems],
