@@ -8098,6 +8098,16 @@
         }
         return `<div class="absolute right-4 top-4 rotate-[6deg] rounded-md border border-white/20 bg-[#fff4d6] px-3 py-2 text-[10px] font-black uppercase tracking-[0.22em] text-slate-900 shadow-[0_18px_40px_rgba(15,23,42,0.22)]">$${amount.toFixed(2)}</div>`;
       }
+      function renderMarketplaceTemplateHeatBadge(item = {}) {
+        const percent = Math.max(0, Math.min(100, Number(item?.ratingPercent || 0)));
+        if (percent >= 100) {
+          return `<div class="absolute right-4 top-4 -rotate-[6deg] rounded-md border border-rose-300/30 bg-rose-500 px-3 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-white shadow-[0_18px_40px_rgba(244,63,94,0.35)]">🔥Hot</div>`;
+        }
+        if (percent >= 90) {
+          return `<div class="absolute right-4 top-4 -rotate-[6deg] rounded-md border border-amber-300/35 bg-amber-400 px-3 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-950 shadow-[0_18px_40px_rgba(245,158,11,0.35)]">💥Trending</div>`;
+        }
+        return "";
+      }
       function escapeHtmlText(value = "") {
         return String(value || "")
           .replace(/&/g, "&amp;")
@@ -8347,8 +8357,8 @@
         if (Number(marketplaceDraftListing.price) < 0 || Number.isNaN(Number(marketplaceDraftListing.price))) {
           issues.push("Price must be 0 or more.");
         }
-        if (listingKind === "template" ? screenshots.length < 1 : screenshots.length < 4) {
-          issues.push(listingKind === "template" ? "Capture or upload at least 1 preview image." : "Upload 4 preview images.");
+        if (listingKind !== "template" && screenshots.length < 4) {
+          issues.push("Upload 4 preview images.");
         }
         return issues;
       }
@@ -8426,9 +8436,7 @@
           }
           return screenshots.length < 4 ? ["Upload 4 preview images."] : [];
         }
-        if (Number(step) === 4) {
-          return listingKind === "template" && screenshots.length < 1 ? ["Capture or upload at least 1 preview image."] : [];
-        }
+        if (Number(step) === 4) return [];
         return [];
       }
       function hasMarketplaceIssues(messages = []) {
@@ -8485,162 +8493,7 @@
           mountMarketplaceTool("all");
         }
       }
-      async function ensureMarketplaceTemplateCaptureLibrary() {
-        if (window.html2canvas) return window.html2canvas;
-        if (marketplaceTemplateCaptureLibPromise) return marketplaceTemplateCaptureLibPromise;
-        marketplaceTemplateCaptureLibPromise = new Promise((resolve, reject) => {
-          const existing = document.querySelector('script[data-marketplace-template-capture="html2canvas"]');
-          if (existing) {
-            existing.addEventListener("load", () => resolve(window.html2canvas));
-            existing.addEventListener("error", () => reject(new Error("Could not load screenshot helper.")));
-            return;
-          }
-          const script = document.createElement("script");
-          script.src = "https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js";
-          script.async = true;
-          script.setAttribute("data-marketplace-template-capture", "html2canvas");
-          script.onload = () => resolve(window.html2canvas);
-          script.onerror = () => reject(new Error("Could not load screenshot helper."));
-          document.head.appendChild(script);
-        });
-        return marketplaceTemplateCaptureLibPromise;
-      }
-      async function captureMarketplaceTemplateScreenshot() {
-        try {
-          if (!isMarketplaceTemplateMode()) return;
-          const validation = validateMarketplaceTemplateCode(marketplaceDraftListing.sourceHtml || "");
-          if (!validation.valid || !validation.rootHtml) {
-            showBuilderSnackbar(validation.reason || "Paste a valid template first.", "error");
-            return;
-          }
-          beginUniversalProgress("Capturing template screenshot...", 18, 82);
-          const html2canvas = await ensureMarketplaceTemplateCaptureLibrary();
-          if (typeof html2canvas !== "function") throw new Error("Screenshot helper is unavailable.");
-          const wrapper = document.createElement("div");
-          wrapper.style.position = "fixed";
-          wrapper.style.left = "-100000px";
-          wrapper.style.top = "0";
-          wrapper.style.width = "1200px";
-          wrapper.style.height = "700px";
-          wrapper.style.background = "#0f172a";
-          wrapper.style.zIndex = "-1";
-          wrapper.innerHTML = `<div data-marketplace-capture-stage style="position:relative;width:1200px;height:700px;overflow:hidden;background:#0f172a;padding:24px;">${validation.rootHtml}</div>`;
-          document.body.appendChild(wrapper);
-          const stage = wrapper.querySelector('[data-marketplace-capture-stage]');
-          if (!stage) throw new Error("Capture stage is unavailable.");
-          await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-          const fullCanvas = await html2canvas(stage, {
-            backgroundColor: "#0f172a",
-            useCORS: true,
-            scale: 1.4,
-            logging: false,
-            width: 1200,
-            height: 700,
-            windowWidth: 1200,
-            windowHeight: 700,
-          });
-          const stageRect = stage.getBoundingClientRect();
-          const rootElement = stage.firstElementChild;
-          const safeRect = rootElement ? rootElement.getBoundingClientRect() : stageRect;
-          const contentLeft = Math.max(0, Math.min(stageRect.width, safeRect.left - stageRect.left));
-          const contentTop = Math.max(0, Math.min(stageRect.height, safeRect.top - stageRect.top));
-          const contentRight = Math.max(contentLeft + 1, Math.min(stageRect.width, safeRect.right - stageRect.left));
-          const contentBottom = Math.max(contentTop + 1, Math.min(stageRect.height, safeRect.bottom - stageRect.top));
-          const contentWidth = Math.max(1, contentRight - contentLeft);
-          const contentHeight = Math.max(1, contentBottom - contentTop);
-          const targetWidth = fullCanvas.width;
-          const targetHeight = fullCanvas.height;
-          const targetRatio = targetWidth / targetHeight;
-          const paddingX = Math.max(18, contentWidth * 0.08);
-          const paddingY = Math.max(18, contentHeight * 0.08);
-          let cropWidth = contentWidth + paddingX * 2;
-          let cropHeight = contentHeight + paddingY * 2;
-          if (cropWidth / cropHeight > targetRatio) {
-            cropHeight = cropWidth / targetRatio;
-          } else {
-            cropWidth = cropHeight * targetRatio;
-          }
-          let cropLeft = contentLeft + contentWidth / 2 - cropWidth / 2;
-          let cropTop = contentTop + contentHeight / 2 - cropHeight / 2;
-          cropLeft = Math.max(0, Math.min(stageRect.width - cropWidth, cropLeft));
-          cropTop = Math.max(0, Math.min(stageRect.height - cropHeight, cropTop));
-          if (!Number.isFinite(cropLeft) || !Number.isFinite(cropTop)) {
-            cropLeft = 0;
-            cropTop = 0;
-            cropWidth = stageRect.width;
-            cropHeight = stageRect.height;
-          }
-          const scaleX = fullCanvas.width / stageRect.width;
-          const scaleY = fullCanvas.height / stageRect.height;
-          const sourceX = Math.max(0, cropLeft * scaleX);
-          const sourceY = Math.max(0, cropTop * scaleY);
-          const sourceWidth = Math.max(1, Math.min(fullCanvas.width - sourceX, cropWidth * scaleX));
-          const sourceHeight = Math.max(1, Math.min(fullCanvas.height - sourceY, cropHeight * scaleY));
-          const canvas = document.createElement("canvas");
-          canvas.width = fullCanvas.width;
-          canvas.height = fullCanvas.height;
-          const ctx = canvas.getContext("2d");
-          if (!ctx) throw new Error("Could not prepare screenshot canvas.");
-          ctx.drawImage(
-            fullCanvas,
-            sourceX,
-            sourceY,
-            sourceWidth,
-            sourceHeight,
-            0,
-            0,
-            canvas.width,
-            canvas.height,
-          );
-          wrapper.remove();
-          const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png", 0.92));
-          if (!blob) throw new Error("Could not create screenshot file.");
-          const file = new File([blob], `template-preview-${Date.now()}.png`, { type: "image/png" });
-          const formData = new FormData();
-          formData.append("screenshot", file);
-          const res = await fetch("/api/marketplace/upload-screenshot", {
-            method: "POST",
-            credentials: "include",
-            body: formData,
-          });
-          const data = await res.json();
-          if (!res.ok || !data.success || !data.url) {
-            throw new Error(data.message || "Could not upload captured screenshot.");
-          }
-          const newAsset = {
-            url: String(data.url || "").trim(),
-            thumbnailUrl: String(data.thumbnailUrl || data.url || "").trim(),
-            fileId: String(data.fileId || "").trim(),
-            name: String(data.name || file.name || "").trim(),
-          };
-          marketplaceDraftListing = {
-            ...marketplaceDraftListing,
-            screenshots: [newAsset.url],
-            screenshotAssets: [newAsset],
-          };
-          completeUniversalProgress("Template screenshot captured.");
-          if (currentStudioToolId === "marketplace") mountMarketplaceTool("all");
-        } catch (error) {
-          failUniversalProgress("Could not capture screenshot.");
-          showBuilderSnackbar(error.message || "Could not capture template screenshot.", "error");
-        }
-      }
-      function maybeAutoCaptureMarketplaceTemplateScreenshot() {
-        if (!isMarketplaceTemplateMode()) return;
-        if (Number(marketplaceCreateStep) !== 4) return;
-        if (marketplaceTemplateScreenshotAutoCapturing) return;
-        if ((marketplaceDraftListing.screenshots || []).length > 0) return;
-        const validation = validateMarketplaceTemplateCode(marketplaceDraftListing.sourceHtml || "");
-        if (!validation.valid) return;
-        marketplaceTemplateScreenshotAutoCapturing = true;
-        captureMarketplaceTemplateScreenshot().finally(() => {
-          marketplaceTemplateScreenshotAutoCapturing = false;
-        });
-      }
-      function retakeMarketplaceTemplateScreenshot() {
-        if (!isMarketplaceTemplateMode()) return;
-        captureMarketplaceTemplateScreenshot();
-      }
+      
       function bindMarketplaceCreateDelegates() {
         if (marketplaceCreateDelegatesBound) return;
         marketplaceCreateDelegatesBound = true;
@@ -8764,7 +8617,11 @@
                     ? renderMarketplaceTemplateAnimatedPreview(item, "h-full w-full")
                     : `<img src="${escapeHtmlText(getMarketplacePreviewImageAt(item) || item.previewImage || "")}" data-marketplace-preview-id="${escapeHtmlText(String(item._id || ""))}" alt="${escapeHtmlText(item.title || "Marketplace project")}" class="h-full w-full object-cover transition-all duration-[1400ms] ease-out group-hover:scale-[1.03]" />`
                 }
-                ${renderMarketplacePriceStamp(item.price)}
+                ${
+                  isTemplateItem
+                    ? renderMarketplaceTemplateHeatBadge(item)
+                    : renderMarketplacePriceStamp(item.price)
+                }
               </div>
               <div class="flex items-center justify-between gap-4 px-5 py-4">
                 <div class="min-w-0">
@@ -9306,24 +9163,28 @@
                         <input type="file" accept="image/*" multiple onchange="handleMarketplaceScreenshotInput(this)" class="mt-3 block w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300" />
                       </label>`
                     : `<div class="rounded-[1.6rem] border border-fuchsia-400/15 bg-fuchsia-500/[0.06] p-4 text-sm text-slate-300">
-                        <div class="flex items-center justify-between gap-3">
-                          <p class="font-semibold text-white">Template preview screenshot</p>
-                          <button onclick="retakeMarketplaceTemplateScreenshot()" class="inline-flex items-center gap-2 rounded-xl border border-fuchsia-400/25 bg-fuchsia-500/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-fuchsia-200 hover:bg-fuchsia-500/20">
-                            <i class="fas fa-camera"></i>Retake Screenshot
-                          </button>
-                        </div>
-                        <p class="mt-2 text-xs text-slate-300">Retake auto-centers your template content to reduce empty space. Upload is disabled in template mode.</p>
+                        <p class="font-semibold text-white">Live template preview</p>
+                        <p class="mt-2 text-xs text-slate-300">Publishing uses the real template element preview (with animations) instead of screenshots.</p>
                       </div>`
                 }
-                <div class="grid grid-cols-1 ${isTemplateMode ? "" : "sm:grid-cols-2 xl:grid-cols-4"} gap-3">
-                  ${Array.from({ length: isTemplateMode ? 1 : 4 }, (_, index) => {
+                ${
+                  isTemplateMode
+                    ? `<div class="overflow-hidden rounded-[1.55rem] border border-fuchsia-400/20 bg-slate-950/80">
+                        ${
+                          templateValidation.valid
+                            ? `<iframe sandbox="allow-same-origin allow-scripts" class="h-52 w-full bg-slate-900" srcdoc="${escapeHtmlText(templatePreviewDoc)}"></iframe>`
+                            : `<div class="flex h-52 w-full items-center justify-center px-6 text-center text-xs text-slate-400">Paste a valid template to preview live animations before publishing.</div>`
+                        }
+                      </div>`
+                    : `<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+                  ${Array.from({ length: 4 }, (_, index) => {
                     const shot = (marketplaceDraftListing.screenshots || [])[index];
                     if (!shot) {
                       return `<div class="relative overflow-hidden rounded-[1.55rem] border border-dashed border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(15,23,42,0.88))] p-4">
                         <div class="flex h-36 flex-col items-center justify-center rounded-[1.2rem] border border-white/6 bg-slate-950/55 text-center">
                           <div class="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-400"><i class="fas fa-image"></i></div>
                           <p class="mt-3 text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">${index === 0 ? "Thumbnail slot" : `Preview ${index + 1}`}</p>
-                          <p class="mt-2 px-4 text-xs leading-5 text-slate-500">${isTemplateMode ? "Capture from template preview or upload manually." : "Add a clean project screenshot for a stronger marketplace card."}</p>
+                          <p class="mt-2 px-4 text-xs leading-5 text-slate-500">Add a clean project screenshot for a stronger marketplace card.</p>
                         </div>
                       </div>`;
                     }
@@ -9333,16 +9194,17 @@
                         <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/90 via-slate-950/20 to-transparent p-3">
                           <div class="inline-flex items-center rounded-full border ${index === 0 ? "border-cyan-400/25 bg-cyan-500/10 text-cyan-200" : "border-white/10 bg-slate-950/60 text-white"} px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em]">${index === 0 ? "Marketplace thumbnail" : `Preview ${index + 1}`}</div>
                         </div>
-                        ${isTemplateMode ? "" : `<button onclick="removeMarketplaceScreenshot(${index})" class="absolute right-2 top-2 h-8 w-8 rounded-xl border border-white/10 bg-slate-950/80 text-white transition-all hover:bg-rose-500"><i class="fas fa-times"></i></button>`}
+                        <button onclick="removeMarketplaceScreenshot(${index})" class="absolute right-2 top-2 h-8 w-8 rounded-xl border border-white/10 bg-slate-950/80 text-white transition-all hover:bg-rose-500"><i class="fas fa-times"></i></button>
                       </div>
                     </div>`;
                   }).join("")}
-                </div>
+                </div>`
+                }
                 <div class="rounded-[1.6rem] border border-cyan-400/15 bg-cyan-500/5 p-4 text-sm text-slate-300">
                   <p class="font-semibold text-white">Review summary</p>
                   <p class="mt-2">Project: ${escapeHtmlText(marketplaceDraftListing.title || "Untitled Sale")}</p>
                   <p class="mt-1">Price: ${renderMarketplacePriceValue(marketplaceDraftListing.price, "font-semibold")}</p>
-                  <p class="mt-1">Screenshots: ${(marketplaceDraftListing.screenshots || []).length}/${isTemplateMode ? "1" : "4"}</p>
+                  <p class="mt-1">${isTemplateMode ? "Preview mode: Live animated element" : `Screenshots: ${(marketplaceDraftListing.screenshots || []).length}/4`}</p>
                 </div>
                 <label class="flex items-start gap-3 rounded-[1.6rem] border border-emerald-400/15 bg-emerald-500/[0.06] p-4">
                   <input type="checkbox" ${marketplaceDraftListing.allowTest ? "checked" : ""} onchange="toggleMarketplaceAllowTest(this.checked, this)" class="mt-1 h-4 w-4 rounded border-white/20 bg-slate-950 text-emerald-400 accent-emerald-400" />
@@ -9682,7 +9544,6 @@
           marketplaceTemplatePreviewExpanded = false;
         }
         if (currentStudioToolId === "marketplace") mountMarketplaceTool("all");
-        maybeAutoCaptureMarketplaceTemplateScreenshot();
       }
       function syncMarketplaceCreateActions() {
         const backButton = document.getElementById("marketplace-step-back-btn");

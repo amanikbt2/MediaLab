@@ -5084,13 +5084,10 @@ app.post("/api/marketplace", publishRateLimit, express.json({ limit: "15mb" }), 
         message: "Choose a project category before submitting this sale.",
       });
     }
-    if (listingKind === "template" ? screenshots.length < 1 : screenshots.length < 4) {
+    if (listingKind !== "template" && screenshots.length < 4) {
       return res.status(400).json({
         success: false,
-        message:
-          listingKind === "template"
-            ? "Capture at least one template preview image before submitting."
-            : "Upload 4 preview images so buyers get a proper marketplace preview.",
+        message: "Upload 4 preview images so buyers get a proper marketplace preview.",
       });
     }
     let sourceProject = null;
@@ -5346,13 +5343,10 @@ app.patch("/api/marketplace/:id", publishRateLimit, express.json({ limit: "15mb"
         message: "Choose a project category before updating this sale.",
       });
     }
-    if (listingKind === "template" ? screenshots.length < 1 : screenshots.length < 4) {
+    if (listingKind !== "template" && screenshots.length < 4) {
       return res.status(400).json({
         success: false,
-        message:
-          listingKind === "template"
-            ? "Capture at least one template preview image before updating."
-            : "Upload 4 preview images so buyers get a proper marketplace preview.",
+        message: "Upload 4 preview images so buyers get a proper marketplace preview.",
       });
     }
     let sourceProject = null;
