@@ -5661,7 +5661,7 @@ app.post("/api/marketplace/:id/purchase", publishRateLimit, express.json(), asyn
     let transfer = null;
     let grantedTemplate = null;
     let responseMessage = "Your purchase will be processed within 24 hours.";
-    if (Number(item.price || 0) <= 0) {
+    if (Number(item.price || 0) <= 0 || String(item.listingKind || "sale") === "template") {
       const buyer = await User.findById(req.user._id);
       if (!buyer) {
         return res.status(404).json({ success: false, message: "Buyer account not found." });
@@ -5680,7 +5680,7 @@ app.post("/api/marketplace/:id/purchase", publishRateLimit, express.json(), asyn
       item.status = "approved";
       responseMessage =
         String(item.listingKind || "sale") === "template"
-          ? "Purchase approved. You now own the template."
+          ? "Purchase approved. Template added to your Web Builder templates."
           : "Purchase approved. You now own the project.";
     }
 

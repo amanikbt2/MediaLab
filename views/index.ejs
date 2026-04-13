@@ -9726,13 +9726,44 @@
       function renderBuilderCommunityTemplates() {
         const wrap = document.getElementById("builder-community-template-list");
         if (!wrap) return;
+        const templateIconPool = [
+          "fa-rocket",
+          "fa-wand-magic-sparkles",
+          "fa-layer-group",
+          "fa-palette",
+          "fa-cube",
+          "fa-star",
+          "fa-bolt",
+          "fa-gem",
+        ];
+        const templateIconTonePool = [
+          "text-fuchsia-300",
+          "text-cyan-300",
+          "text-emerald-300",
+          "text-amber-300",
+          "text-violet-300",
+          "text-pink-300",
+        ];
+        const getTemplateIconMeta = (seed = "") => {
+          const value = String(seed || "template").trim();
+          let hash = 0;
+          for (let index = 0; index < value.length; index += 1) {
+            hash = (hash * 31 + value.charCodeAt(index)) | 0;
+          }
+          const icon = templateIconPool[Math.abs(hash) % templateIconPool.length];
+          const tone = templateIconTonePool[Math.abs(hash * 7) % templateIconTonePool.length];
+          return { icon, tone };
+        };
         wrap.innerHTML = (Array.isArray(builderCommunityTemplates) ? builderCommunityTemplates : [])
           .map(
-            (item) => `
+            (item) => {
+              const iconMeta = getTemplateIconMeta(item.slug || item.title || item.marketplaceItemId || "");
+              return `
               <button onclick="loadBuilderSiteTemplate('${escapeInlineJsString(item.slug || "")}'); hideBuilderPanels();" class="builder-cmd">
-                <i class="fas fa-layer-group text-fuchsia-300"></i>
+                <i class="fas ${iconMeta.icon} ${iconMeta.tone}"></i>
                 <span>${escapeHtmlText(item.title || "Official Template")}<small>${escapeHtmlText(item.category || "General")} • ${escapeHtmlText(item.description || "Official MediaLab builder template")}</small></span>
-              </button>`,
+              </button>`;
+            },
           )
           .join("");
       }
@@ -10717,6 +10748,7 @@
           marketplacePurchasedItems.find((item) => item._id === id) ||
           null;
         const access = canInteractWithMarketplaceItem(sourceItem);
+        const isTemplatePurchase = String(sourceItem?.listingKind || "sale").toLowerCase() === "template";
         if (!access.approved) {
           showBuilderSnackbar("This listing is pending approval. Purchase unlocks after approval.", "error");
           return;
@@ -10738,8 +10770,8 @@
           chip: "Marketplace Purchase",
           title: "Start purchase request?",
           message:
-            listingKind === "template"
-              ? "MediaLab will create a pending purchase for admin review before this template is added to your Web Builder inventory."
+            isTemplatePurchase
+              ? "This template purchase is approved instantly and added to your Web Builder templates."
               : "MediaLab will create a pending purchase for admin review before the project is transferred to your builder dashboard.",
           confirmLabel: "Continue",
           cancelLabel: "Cancel",
