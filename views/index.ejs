@@ -2789,18 +2789,6 @@
       <div class="studio-tool-ribbon lg:hidden px-4 py-3 shrink-0">
         <div class="studio-tool-ribbon-track no-scrollbar">
           <div
-            data-tool-switch="console"
-            onclick="switchTool('console')"
-            class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 px-5 py-2.5 rounded-3xl cursor-pointer"
-          >
-            <i class="fas fa-gauge-high text-cyan-400"></i>
-            <span class="font-medium text-sm text-gray-200">Console</span>
-            <span
-              class="text-[7px] font-black bg-cyan-500 text-gray-950 px-1.5 py-0.5 rounded ml-1 uppercase"
-              >New</span
-            >
-          </div>
-          <div
             data-tool-switch="web-builder"
             onclick="switchTool('web-builder')"
             class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-cyan-500/10 border border-cyan-500/20 px-5 py-2.5 rounded-3xl cursor-pointer"
@@ -2819,6 +2807,18 @@
           >
             <i class="fas fa-store text-cyan-400"></i>
             <span class="font-medium text-sm text-gray-200">Marketplace</span>
+            <span
+              class="text-[7px] font-black bg-cyan-500 text-gray-950 px-1.5 py-0.5 rounded ml-1 uppercase"
+              >New</span
+            >
+          </div>
+          <div
+            data-tool-switch="console"
+            onclick="switchTool('console')"
+            class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 px-5 py-2.5 rounded-3xl cursor-pointer"
+          >
+            <i class="fas fa-gauge-high text-cyan-400"></i>
+            <span class="font-medium text-sm text-gray-200">Console</span>
             <span
               class="text-[7px] font-black bg-cyan-500 text-gray-950 px-1.5 py-0.5 rounded ml-1 uppercase"
               >New</span
@@ -2922,18 +2922,6 @@
               Creation Suite
             </p>
             <div
-              onclick="switchTool('console')"
-              class="flex items-center gap-x-4 px-5 py-3.5 hover:bg-gray-800 rounded-2xl cursor-pointer group transition-all border border-transparent hover:border-cyan-500/30"
-            >
-              <i
-                class="fas fa-gauge-high text-lg text-gray-500 group-hover:text-cyan-400"
-              ></i>
-              <span
-                class="font-bold text-sm text-gray-400 group-hover:text-white"
-                >Console</span
-              >
-            </div>
-            <div
               onclick="switchTool('web-builder')"
               class="flex items-center gap-x-4 px-5 py-3.5 hover:bg-gray-800 rounded-2xl cursor-pointer group transition-all border border-transparent hover:border-cyan-500/30"
             >
@@ -2959,6 +2947,18 @@
               <span
                 class="font-bold text-sm text-gray-400 group-hover:text-white"
                 >Marketplace</span
+              >
+            </div>
+            <div
+              onclick="switchTool('console')"
+              class="flex items-center gap-x-4 px-5 py-3.5 hover:bg-gray-800 rounded-2xl cursor-pointer group transition-all border border-transparent hover:border-cyan-500/30"
+            >
+              <i
+                class="fas fa-gauge-high text-lg text-gray-500 group-hover:text-cyan-400"
+              ></i>
+              <span
+                class="font-bold text-sm text-gray-400 group-hover:text-white"
+                >Console</span
               >
             </div>
             <p
@@ -3081,18 +3081,6 @@
           <div class="studio-tool-ribbon hidden lg:block px-4 sm:px-8 py-3">
             <div class="studio-tool-ribbon-track no-scrollbar">
               <button
-                data-tool-switch="console"
-                onclick="switchTool('console')"
-                class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 border border-white/5 px-5 py-2.5 rounded-3xl cursor-pointer"
-              >
-                <i class="fas fa-gauge-high text-cyan-400"></i
-                ><span class="font-medium text-sm text-gray-200">Console</span>
-                <span
-                  class="text-[7px] font-black bg-cyan-500 text-gray-950 px-1.5 py-0.5 rounded ml-1 uppercase"
-                  >New</span
-                >
-              </button>
-              <button
                 data-tool-switch="web-builder"
                 onclick="switchTool('web-builder')"
                 class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 border border-white/5 px-5 py-2.5 rounded-3xl cursor-pointer"
@@ -3101,6 +3089,18 @@
                 ><span class="font-medium text-sm text-gray-200"
                   >Web Builder</span
                 >
+                <span
+                  class="text-[7px] font-black bg-cyan-500 text-gray-950 px-1.5 py-0.5 rounded ml-1 uppercase"
+                  >New</span
+                >
+              </button>
+              <button
+                data-tool-switch="console"
+                onclick="switchTool('console')"
+                class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 border border-white/5 px-5 py-2.5 rounded-3xl cursor-pointer"
+              >
+                <i class="fas fa-gauge-high text-cyan-400"></i
+                ><span class="font-medium text-sm text-gray-200">Console</span>
                 <span
                   class="text-[7px] font-black bg-cyan-500 text-gray-950 px-1.5 py-0.5 rounded ml-1 uppercase"
                   >New</span
@@ -5050,6 +5050,8 @@
       let dataExplorerViewMode = "table";
       let dataExplorerLoading = false;
       let dataExplorerUriDraft = "";
+      let dataExplorerEngine = "";
+      let dataExplorerEngineConfirmed = false;
       let dataExplorerBindTarget = null;
       let currentRenderHostingProject = null;
       let currentRenderLiveProject = null;
@@ -5229,13 +5231,6 @@
           isNew: true,
         },
         {
-          id: "console",
-          title: "Studio Console",
-          icon: "fa-gauge-high",
-          desc: "Wallet, hosting, and live project command center",
-          isNew: true,
-        },
-        {
           id: "marketplace",
           title: "Marketplace",
           icon: "fa-store",
@@ -5243,14 +5238,15 @@
           isNew: true,
         },
         {
-          id: "image-pdf",
-          title: "Database",
-          icon: "fa-database",
-          desc: "Connect MongoDB and inspect live collections",
+          id: "console",
+          title: "Studio Console",
+          icon: "fa-gauge-high",
+          desc: "Wallet, hosting, and live project command center",
+          isNew: true,
         },
         {
-          id: "data-explorer",
-          title: "Data Explorer",
+          id: "image-pdf",
+          title: "Database",
           icon: "fa-database",
           desc: "Connect MongoDB and inspect live collections",
         },
@@ -6927,6 +6923,7 @@
         if (linkWrap) linkWrap.classList.toggle("hidden", !collaborationShareLink);
         if (linkInput) linkInput.value = collaborationShareLink || "";
         if (audioToggle) {
+          audioToggle.classList.toggle("hidden", !isCollaborationActive());
           audioToggle.classList.toggle("opacity-40", !isCollaborationActive() || collaborationMediaUpdating);
           audioToggle.classList.toggle("pointer-events-none", !isCollaborationActive() || collaborationMediaUpdating);
           audioToggle.classList.toggle("terminal-toggle-active", collaborationAudioEnabled);
@@ -6939,6 +6936,7 @@
               : "Turn audio on";
         }
         if (videoToggle) {
+          videoToggle.classList.toggle("hidden", !isCollaborationActive());
           videoToggle.classList.toggle("opacity-40", !isCollaborationActive() || collaborationMediaUpdating);
           videoToggle.classList.toggle("pointer-events-none", !isCollaborationActive() || collaborationMediaUpdating);
           videoToggle.classList.toggle("terminal-toggle-active", collaborationVideoEnabled);
@@ -7818,6 +7816,14 @@
         } catch {}
       }
       async function connectDataExplorer() {
+        if (!dataExplorerEngineConfirmed) {
+          showBuilderSnackbar("Select a database type and continue first.", "error");
+          return;
+        }
+        if (dataExplorerEngine === "sql") {
+          showBuilderSnackbar("SQL mode will be added in a later update.", "error");
+          return;
+        }
         const input = document.getElementById("data-explorer-uri-input");
         const uri = String(input?.value || dataExplorerUriDraft || "").trim();
         if (!uri) {
@@ -7913,6 +7919,32 @@
       function setDataExplorerUriDraft(value = "") {
         dataExplorerUriDraft = String(value || "");
       }
+      function setDataExplorerEngine(value = "") {
+        const normalized = String(value || "").trim().toLowerCase();
+        if (!["virtual-medialabdb", "mongodb", "sql"].includes(normalized)) {
+          dataExplorerEngine = "";
+          return;
+        }
+        dataExplorerEngine = normalized;
+      }
+      function continueDataExplorerEngineSelection() {
+        if (!dataExplorerEngine) {
+          showBuilderSnackbar("Select a database type before continuing.", "error");
+          return;
+        }
+        dataExplorerEngineConfirmed = true;
+        renderDataExplorerTool();
+      }
+      function resetDataExplorerEngineSelection() {
+        dataExplorerEngineConfirmed = false;
+        dataExplorerConnected = false;
+        dataExplorerUriDraft = "";
+        dataExplorerCollections = [];
+        dataExplorerSelectedCollection = "";
+        dataExplorerDocuments = [];
+        dataExplorerFields = [];
+        renderDataExplorerTool();
+      }
       function beginDataExplorerInlineEdit(documentId = "", fieldPath = "", triggerButton = null) {
         const cell = triggerButton?.closest?.("[data-data-explorer-cell]");
         if (!cell) return;
@@ -7987,9 +8019,17 @@
         const actions = document.getElementById("data-explorer-view-actions");
         const content = document.getElementById("data-explorer-content");
         if (!root || !summary || !actions || !content) return;
+        const engineLabel =
+          dataExplorerEngine === "virtual-medialabdb"
+            ? "virtual-MedialabDB"
+            : dataExplorerEngine === "sql"
+              ? "SQL"
+              : "MongoDB";
         summary.textContent = dataExplorerConnected
           ? `Connected to ${dataExplorerDbName || "database"} • ${dataExplorerUriLabel}`
-          : "Connect a MongoDB URI and inspect live collections in a spreadsheet-style grid.";
+          : dataExplorerEngineConfirmed
+            ? `${engineLabel} mode selected. Continue with connection setup.`
+            : "Select a database type to continue.";
         actions.innerHTML = `<button onclick="setDataExplorerViewMode('table')" class="rounded-2xl border px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] ${dataExplorerViewMode === "table" ? "border-cyan-400/30 bg-cyan-500/10 text-cyan-100" : "border-white/10 bg-white/5 text-slate-300"}">Table</button>
                 <button onclick="setDataExplorerViewMode('json')" class="rounded-2xl border px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] ${dataExplorerViewMode === "json" ? "border-cyan-400/30 bg-cyan-500/10 text-cyan-100" : "border-white/10 bg-white/5 text-slate-300"}">JSON</button>`;
         const collectionMarkup = dataExplorerCollections.length
@@ -8003,7 +8043,11 @@
             }).join("")
           : `<tr><td colspan="${gridFields.length}" class="px-4 py-8 text-center text-sm text-slate-500">No documents loaded.</td></tr>`;
         content.innerHTML = !dataExplorerConnected
-          ? `<div class="data-explorer-panel p-6 sm:p-8"><div class="mx-auto max-w-3xl"><p class="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-300">Connect To Database</p><div class="mt-4 flex flex-col gap-3 lg:flex-row"><input id="data-explorer-uri-input" oninput="setDataExplorerUriDraft(this.value)" class="data-explorer-mono min-w-0 flex-1 rounded-[1.4rem] border border-cyan-400/20 bg-[#020617] px-5 py-4 text-sm text-cyan-100 outline-none focus:border-cyan-400" placeholder="mongodb+srv://..." value="${escapeAttr(dataExplorerUriDraft)}" /><button onclick="connectDataExplorer()" class="rounded-[1.4rem] bg-cyan-500 px-6 py-4 text-sm font-black text-slate-950 hover:bg-cyan-400">${dataExplorerLoading ? "Connecting..." : "Verify & Connect"}</button></div></div></div>`
+          ? !dataExplorerEngineConfirmed
+            ? `<div class="data-explorer-panel p-6 sm:p-8"><div class="mx-auto max-w-3xl"><p class="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-300">Database Type</p><h3 class="mt-2 text-2xl font-semibold text-white">Choose your database mode first.</h3><div class="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3"><button onclick="setDataExplorerEngine('virtual-medialabdb'); renderDataExplorerTool();" class="rounded-2xl border px-4 py-4 text-left ${dataExplorerEngine === "virtual-medialabdb" ? "border-fuchsia-400/40 bg-fuchsia-500/10 text-fuchsia-100" : "border-white/10 bg-white/[0.03] text-slate-200 hover:border-fuchsia-400/20"}"><p class="text-[11px] font-black uppercase tracking-[0.16em]">virtual-MedialabDB</p><p class="mt-2 text-xs text-slate-400">Temporary virtual models mapped to your real Mongo structure.</p></button><button onclick="setDataExplorerEngine('mongodb'); renderDataExplorerTool();" class="rounded-2xl border px-4 py-4 text-left ${dataExplorerEngine === "mongodb" ? "border-cyan-400/40 bg-cyan-500/10 text-cyan-100" : "border-white/10 bg-white/[0.03] text-slate-200 hover:border-cyan-400/20"}"><p class="text-[11px] font-black uppercase tracking-[0.16em]">MongoDB</p><p class="mt-2 text-xs text-slate-400">Connect directly to MongoDB collections.</p></button><button onclick="setDataExplorerEngine('sql'); renderDataExplorerTool();" class="rounded-2xl border px-4 py-4 text-left ${dataExplorerEngine === "sql" ? "border-amber-400/40 bg-amber-500/10 text-amber-100" : "border-white/10 bg-white/[0.03] text-slate-200 hover:border-amber-400/20"}"><p class="text-[11px] font-black uppercase tracking-[0.16em]">SQL</p><p class="mt-2 text-xs text-slate-400">Planned for a later release.</p></button></div><div class="mt-5 flex justify-end"><button onclick="continueDataExplorerEngineSelection()" class="rounded-[1.2rem] bg-cyan-500 px-5 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-slate-950 hover:bg-cyan-400">Continue</button></div></div></div>`
+            : dataExplorerEngine === "sql"
+              ? `<div class="data-explorer-panel p-6 sm:p-8"><div class="mx-auto max-w-3xl"><p class="text-[10px] font-black uppercase tracking-[0.24em] text-amber-300">SQL (Coming Later)</p><h3 class="mt-2 text-2xl font-semibold text-white">SQL connector is planned next.</h3><p class="mt-3 text-sm text-slate-400">Keep MongoDB mode for now. SQL functionality will be added in a later update.</p><div class="mt-5 flex flex-wrap gap-3"><button onclick="resetDataExplorerEngineSelection()" class="rounded-[1.2rem] border border-white/10 bg-white/5 px-5 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-slate-200 hover:bg-white/10">Back</button><button onclick="setDataExplorerEngine('mongodb'); continueDataExplorerEngineSelection();" class="rounded-[1.2rem] bg-cyan-500 px-5 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-slate-950 hover:bg-cyan-400">Use MongoDB</button></div></div></div>`
+              : `<div class="data-explorer-panel p-6 sm:p-8"><div class="mx-auto max-w-3xl"><p class="text-[10px] font-black uppercase tracking-[0.24em] ${dataExplorerEngine === "virtual-medialabdb" ? "text-fuchsia-300" : "text-cyan-300"}">${dataExplorerEngine === "virtual-medialabdb" ? "virtual-MedialabDB" : "Connect To Database"}</p>${dataExplorerEngine === "virtual-medialabdb" ? `<p class="mt-2 text-sm text-slate-400">Use your real MongoDB URI as the base; MediaLab will layer temporary virtual models over that structure.</p>` : ``}<div class="mt-4 flex flex-col gap-3 lg:flex-row"><input id="data-explorer-uri-input" oninput="setDataExplorerUriDraft(this.value)" class="data-explorer-mono min-w-0 flex-1 rounded-[1.4rem] border border-cyan-400/20 bg-[#020617] px-5 py-4 text-sm text-cyan-100 outline-none focus:border-cyan-400" placeholder="mongodb+srv://..." value="${escapeAttr(dataExplorerUriDraft)}" /><button onclick="connectDataExplorer()" class="rounded-[1.4rem] bg-cyan-500 px-6 py-4 text-sm font-black text-slate-950 hover:bg-cyan-400">${dataExplorerLoading ? "Connecting..." : "Verify & Connect"}</button></div><div class="mt-4"><button onclick="resetDataExplorerEngineSelection()" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-300 hover:bg-white/10">Back</button></div></div></div>`
           : `<div class="data-explorer-grid"><aside class="data-explorer-panel p-4 sm:p-5"><div class="flex items-center justify-between gap-3"><p class="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-300">Collections</p><button onclick="refreshDataExplorerCollections()" class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-200 hover:bg-white/10">Refresh</button></div><div class="mt-4 space-y-2 max-h-[62vh] overflow-y-auto custom-scrollbar">${collectionMarkup}</div></aside><section class="data-explorer-panel p-4 sm:p-5 overflow-hidden"><div><p class="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-300">${escapeHtmlText(dataExplorerSelectedCollection || "Collection")}</p><p class="mt-1 text-sm text-slate-400">${dataExplorerDocuments.length} documents loaded • Double-click a cell to edit</p></div><div class="mt-4 overflow-auto custom-scrollbar rounded-[1.4rem] border border-white/10">${dataExplorerViewMode === "json" ? `<pre class="data-explorer-mono min-h-[420px] whitespace-pre-wrap px-4 py-4 text-xs leading-6 text-slate-200">${escapeHtmlText(JSON.stringify(dataExplorerDocuments, null, 2))}</pre>` : `<table class="min-w-full table-fixed border-collapse"><thead class="bg-white/[0.03]"><tr>${gridFields.map((field) => `<th class="px-3 py-3 text-left text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">${escapeHtmlText(field)}</th>`).join("")}</tr></thead><tbody>${tableRows}</tbody></table>`}</div></section></div>`;
       }
       function openBuilderDataBindingModal() {
@@ -16770,10 +16814,10 @@
                             <button id="builder-collaboration-toggle" type="button" onclick="toggleCollaborationPanel(event)" class="toolbar-item inline-flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-[10px] font-black uppercase tracking-[0.18em] text-slate-300 hover:text-cyan-100">
                                 <i class="fas fa-globe-americas text-[11px]"></i>
                             </button>
-                            <button id="builder-collab-audio-toggle" type="button" onclick="toggleCollaborationAudio()" class="toolbar-item inline-flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-slate-300 hover:text-emerald-200 opacity-40 pointer-events-none">
+                            <button id="builder-collab-audio-toggle" type="button" onclick="toggleCollaborationAudio()" class="toolbar-item hidden inline-flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-slate-300 hover:text-emerald-200 opacity-40 pointer-events-none">
                                 <i class="fas fa-microphone text-[11px] animate-pulse"></i>
                             </button>
-                            <button id="builder-collab-video-toggle" type="button" onclick="toggleCollaborationVideo()" class="toolbar-item inline-flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-slate-300 hover:text-cyan-100 opacity-40 pointer-events-none">
+                            <button id="builder-collab-video-toggle" type="button" onclick="toggleCollaborationVideo()" class="toolbar-item hidden inline-flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-slate-300 hover:text-cyan-100 opacity-40 pointer-events-none">
                                 <i class="fas fa-video text-[11px] animate-pulse"></i>
                             </button>
                         </div>
