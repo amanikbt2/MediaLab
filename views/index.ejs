@@ -8118,6 +8118,12 @@
             `<i class="fas fa-star ${index < Math.round(safe) ? "text-amber-300" : "text-slate-700"}"></i>`,
         ).join("");
       }
+      function renderMarketplaceTemplateAnimatedPreview(item = {}, className = "h-full w-full") {
+        const validation = validateMarketplaceTemplateCode(String(item?.sourceHtml || ""));
+        if (!validation.valid || !validation.rootHtml) return "";
+        const previewDoc = `<!doctype html><html><head><meta charset="utf-8" /><style>html,body{margin:0;padding:0;background:#020617;overflow:hidden;}*{box-sizing:border-box;max-width:none;}body{min-height:100vh;}</style></head><body>${validation.rootHtml}</body></html>`;
+        return `<iframe sandbox="allow-same-origin allow-scripts" srcdoc="${escapeHtmlText(previewDoc)}" class="${className} border-0 bg-slate-950 pointer-events-none"></iframe>`;
+      }
       function getMarketplaceStatusBadge(status = "") {
         const normalized = String(status || "").toLowerCase();
         if (normalized === "approved") {
@@ -8668,8 +8674,10 @@
           .map((item) => {
             const isApproved = String(item?.status || "").toLowerCase() === "approved";
             const isOwner = Boolean(item?.viewerIsOwner) || String(item?.authorId || "") === String(currentUser?._id || "");
-            const ratingDisabled = !isApproved || isOwner || Boolean(item?.viewerHasRated);
+            const ratingDisabled = !isApproved || isOwner;
             const isTemplateItem = String(item?.listingKind || "sale").toLowerCase() === "template";
+            const viewerRatingValue = Math.max(0, Math.min(5, Number(item?.viewerRatingValue || 0)));
+            const nextRatingValue = viewerRatingValue >= 5 ? 0 : viewerRatingValue + 1;
             return `
             <article onclick="${isTemplateItem ? "void(0)" : `openMarketplaceDetail('${item._id}')`}" class="group ${isTemplateItem ? "" : "cursor-pointer"} overflow-hidden rounded-[2rem] border ${isApproved ? "border-white/10" : "border-white/6 opacity-75"} bg-slate-950/95 shadow-[0_24px_80px_rgba(2,6,23,0.34)] transition-all ${isApproved && !isTemplateItem ? "hover:-translate-y-1 hover:border-cyan-400/30" : ""}">
               <div class="flex items-center gap-3 border-b border-white/8 px-5 py-4">
@@ -8686,7 +8694,11 @@
                 <p class="mt-2 text-sm leading-6 text-slate-400">${escapeHtmlText(truncateMarketplaceText(item.description || item.purpose || "", 90))}</p>
               </div>
               <div class="relative mt-4 h-56 overflow-hidden bg-slate-900">
-                <img src="${escapeHtmlText(getMarketplacePreviewImageAt(item) || item.previewImage || "")}" data-marketplace-preview-id="${escapeHtmlText(String(item._id || ""))}" alt="${escapeHtmlText(item.title || "Marketplace project")}" class="h-full w-full object-cover transition-all duration-[1400ms] ease-out group-hover:scale-[1.03]" />
+                ${
+                  isTemplateItem && String(item?.sourceHtml || "").trim()
+                    ? renderMarketplaceTemplateAnimatedPreview(item, "h-full w-full")
+                    : `<img src="${escapeHtmlText(getMarketplacePreviewImageAt(item) || item.previewImage || "")}" data-marketplace-preview-id="${escapeHtmlText(String(item._id || ""))}" alt="${escapeHtmlText(item.title || "Marketplace project")}" class="h-full w-full object-cover transition-all duration-[1400ms] ease-out group-hover:scale-[1.03]" />`
+                }
                 ${renderMarketplacePriceStamp(item.price)}
               </div>
               <div class="flex items-center justify-between gap-4 px-5 py-4">
@@ -8696,13 +8708,10 @@
                   ${!isApproved ? `<p class="mt-2 text-[11px] font-semibold text-amber-300">Pending approval. Rating and purchase unlock after review.</p>` : isOwner ? `<p class="mt-2 text-[11px] font-semibold text-slate-400">You cannot rate or purchase your own project.</p>` : ``}
                 </div>
                       <div class="flex items-center gap-2">
-                        <div class="flex items-center gap-1">
-                          ${[1, 2, 3, 4, 5]
-                            .map(
-                              (value) => `<button onclick="event.stopPropagation(); rateMarketplaceItem('${item._id}', ${value})" class="inline-flex h-8 w-8 items-center justify-center rounded-xl border ${ratingDisabled ? "border-white/10 bg-white/[0.04] text-slate-500 cursor-not-allowed" : "border-white/10 bg-white/5 text-slate-200 hover:border-amber-300/30 hover:text-amber-300"} ${item.viewerHasRated ? "border-amber-400/30 bg-amber-500/10 text-amber-300" : ""} transition-all"><i class="fas fa-star text-[11px]"></i></button>`,
-                            )
-                            .join("")}
-                        </div>
+                        <button onclick="event.stopPropagation(); cycleMarketplaceItemRating('${item._id}', ${nextRatingValue})" class="inline-flex items-center gap-2 rounded-2xl border ${ratingDisabled ? "border-white/10 bg-white/[0.04] text-slate-500 cursor-not-allowed" : "border-white/10 bg-white/5 text-slate-200 hover:border-amber-300/30 hover:text-amber-300"} ${(viewerRatingValue > 0 && !ratingDisabled) ? "border-amber-400/30 bg-amber-500/10 text-amber-300" : ""} px-3 py-2 text-[11px] font-black uppercase tracking-[0.14em] transition-all">
+                          <i class="fas fa-star"></i>
+                          ${viewerRatingValue > 0 ? `${viewerRatingValue}/5` : "Rate"}
+                        </button>
                         ${
                           isTemplateItem
                             ? `<button onclick="event.stopPropagation(); purchaseMarketplaceItem('${item._id}')" class="inline-flex items-center gap-2 rounded-2xl border border-fuchsia-400/20 bg-fuchsia-500/10 px-3 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-fuchsia-200 hover:bg-fuchsia-500/15 transition-all">Add to Workspace</button>`
@@ -8800,7 +8809,11 @@
             <div class="rounded-[1.8rem] border border-white/10 bg-slate-900/80 p-5 shadow-[0_16px_40px_rgba(2,6,23,0.28)]">
               <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div class="w-full max-w-[220px] overflow-hidden rounded-[1.5rem] border border-white/10 bg-slate-950/70 shadow-[0_18px_40px_rgba(2,6,23,0.28)]">
-                  <img src="${escapeHtmlText(getMarketplacePreviewImageAt(item) || item.previewImage || "")}" data-marketplace-preview-id="${escapeHtmlText(String(item._id || ""))}" class="h-36 w-full object-cover transition-all duration-[1400ms] ease-out" alt="${escapeHtmlText(item.title || "Sale preview")}" />
+                  ${
+                    String(item?.listingKind || "sale").toLowerCase() === "template" && String(item?.sourceHtml || "").trim()
+                      ? renderMarketplaceTemplateAnimatedPreview(item, "h-36 w-full")
+                      : `<img src="${escapeHtmlText(getMarketplacePreviewImageAt(item) || item.previewImage || "")}" data-marketplace-preview-id="${escapeHtmlText(String(item._id || ""))}" class="h-36 w-full object-cover transition-all duration-[1400ms] ease-out" alt="${escapeHtmlText(item.title || "Sale preview")}" />`
+                  }
                 </div>
                 <div class="min-w-0">
                   <div class="flex flex-wrap items-center gap-3">
@@ -9800,7 +9813,11 @@
                 .map((item) => {
                   const iconMeta = getTemplateIconMeta(item.slug || item.title || item.marketplaceItemId || "");
                   const preview = getTemplatePreviewUrl(item);
-                  return `<button onclick="loadBuilderSiteTemplate('${escapeInlineJsString(item.slug || "")}'); hideBuilderPanels();" class="group overflow-hidden rounded-2xl border border-fuchsia-400/15 bg-slate-950/80 text-left hover:border-fuchsia-400/35">
+                  return `<div class="group relative overflow-hidden rounded-2xl border border-fuchsia-400/15 bg-slate-950/80 text-left hover:border-fuchsia-400/35">
+                    <button type="button" title="Remove from workspace" onclick="event.stopPropagation(); removePurchasedBuilderTemplate('${escapeInlineJsString(item.marketplaceItemId || "")}')" class="absolute right-2 top-2 z-10 inline-flex h-7 w-7 items-center justify-center rounded-lg border border-rose-400/30 bg-rose-500/15 text-rose-200 hover:bg-rose-500/25">
+                      <i class="fas fa-trash text-[10px]"></i>
+                    </button>
+                    <button onclick="loadBuilderSiteTemplate('${escapeInlineJsString(item.slug || "")}'); hideBuilderPanels();" class="block w-full text-left">
                     <div class="relative h-28 w-full bg-slate-900">
                       ${
                         preview
@@ -9812,7 +9829,8 @@
                       <p class="truncate text-sm font-semibold text-white">${escapeHtmlText(item.title || "Purchased Template")}</p>
                       <p class="mt-1 line-clamp-2 text-xs text-slate-400">${escapeHtmlText(item.description || "Purchased template")}</p>
                     </div>
-                  </button>`;
+                    </button>
+                  </div>`;
                 })
                 .join("")}
             </div>` : ""}
@@ -9827,10 +9845,15 @@
                 .map((item) => {
                   const iconMeta = getTemplateIconMeta(item.slug || item.title || item.marketplaceItemId || "");
                   return `
-                  <button onclick="loadBuilderSiteTemplate('${escapeInlineJsString(item.slug || "")}'); hideBuilderPanels();" class="builder-cmd">
-                    <i class="fas ${iconMeta.icon} ${iconMeta.tone}"></i>
-                    <span>${escapeHtmlText(item.title || "Purchased Template")}<small>${escapeHtmlText(item.category || "General")} • ${escapeHtmlText(item.description || "Purchased template")}</small></span>
-                  </button>`;
+                  <div class="flex items-center gap-2">
+                    <button onclick="loadBuilderSiteTemplate('${escapeInlineJsString(item.slug || "")}'); hideBuilderPanels();" class="builder-cmd flex-1">
+                      <i class="fas ${iconMeta.icon} ${iconMeta.tone}"></i>
+                      <span>${escapeHtmlText(item.title || "Purchased Template")}<small>${escapeHtmlText(item.category || "General")} • ${escapeHtmlText(item.description || "Purchased template")}</small></span>
+                    </button>
+                    <button type="button" title="Remove from workspace" onclick="event.stopPropagation(); removePurchasedBuilderTemplate('${escapeInlineJsString(item.marketplaceItemId || "")}')" class="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-rose-400/30 bg-rose-500/15 text-rose-200 hover:bg-rose-500/25">
+                      <i class="fas fa-trash text-[11px]"></i>
+                    </button>
+                  </div>`;
                 })
                 .join("")
             : `<div class="col-span-full rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-6 text-center text-xs text-slate-400">No purchased templates yet.</div>`);
@@ -9853,6 +9876,40 @@
           console.warn("Builder template fetch skipped:", error.message);
           builderCommunityTemplates = [];
           renderBuilderCommunityTemplates();
+        }
+      }
+      async function removePurchasedBuilderTemplate(marketplaceItemId = "") {
+        if (!loggedIn) {
+          showLogin();
+          return;
+        }
+        const normalizedId = String(marketplaceItemId || "").trim();
+        if (!normalizedId) {
+          showBuilderSnackbar("Template identifier missing.", "error");
+          return;
+        }
+        beginUniversalProgress("Removing template from workspace...", 22, 90);
+        try {
+          const res = await fetch(
+            `/api/builder/templates/${encodeURIComponent(normalizedId)}/remove`,
+            {
+              method: "POST",
+              credentials: "include",
+              headers: { "Content-Type": "application/json" },
+            },
+          );
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            throw new Error(data.message || "Could not remove template from workspace.");
+          }
+          completeUniversalProgress("Template removed from workspace.");
+          await refreshMarketplaceData();
+          await fetchBuilderCommunityTemplates();
+          if (currentStudioToolId === "marketplace") mountMarketplaceTool("all");
+          showBuilderSnackbar("Template removed from workspace.", "success");
+        } catch (error) {
+          failUniversalProgress("Template removal failed.");
+          showBuilderSnackbar(error.message || "Could not remove template from workspace.", "error");
         }
       }
       fetchBuilderCommunityTemplates();
@@ -10269,8 +10326,8 @@
           showBuilderSnackbar("You cannot rate your own project.", "error");
           return;
         }
-        if (!access.canRate && sourceItem?.viewerHasRated) {
-          showBuilderSnackbar("You have already rated this marketplace project.", "error");
+        if (!access.canRate) {
+          showBuilderSnackbar("Rating is not available for this listing.", "error");
           return;
         }
         try {
@@ -10278,7 +10335,7 @@
             method: "POST",
             credentials: "include",
             headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ value: Math.max(1, Math.min(5, Number(value) || 5)) }),
+          body: JSON.stringify({ value: Math.max(0, Math.min(5, Number(value) || 0)) }),
           });
           const data = await res.json();
           if (!res.ok || !data.success) {
@@ -10290,10 +10347,17 @@
           }
           await refreshMarketplaceData();
           if (currentStudioToolId === "marketplace") refreshMarketplacePaneOnly();
-          showBuilderSnackbar("Thanks for rating this project.", "success");
+          showBuilderSnackbar(
+            Number(value) > 0 ? "Rating saved." : "Rating removed.",
+            "success",
+          );
         } catch (error) {
           showBuilderSnackbar(error.message || "Could not save that rating.", "error");
         }
+      }
+      function cycleMarketplaceItemRating(id, nextValue = 1) {
+        const normalized = Math.max(0, Math.min(5, Number(nextValue) || 0));
+        rateMarketplaceItem(id, normalized);
       }
       async function submitMarketplaceListing() {
         if (!loggedIn) {
@@ -10569,9 +10633,9 @@
                   </div>
                 </div>
                 ${!access.approved ? `<div class="mt-4 rounded-2xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">This project is still pending approval. Rating and purchase unlock after approval.</div>` : access.isOwner ? `<div class="mt-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">You are the owner of this project, so rating and purchase are disabled.</div>` : ``}
-                <button onclick="rateMarketplaceItem('${item._id}')" class="mt-4 inline-flex items-center gap-2 rounded-2xl border ${!access.canRate ? "border-white/10 bg-white/[0.04] text-slate-500 cursor-not-allowed" : item.viewerHasRated ? "border-amber-400/30 bg-amber-500/10 text-amber-300" : "border-white/10 bg-white/5 text-slate-200"} px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em]">
+                <button onclick="cycleMarketplaceItemRating('${item._id}', ${Math.max(0, Math.min(5, Number(item.viewerRatingValue || 0))) >= 5 ? 0 : Math.max(0, Math.min(5, Number(item.viewerRatingValue || 0))) + 1})" class="mt-4 inline-flex items-center gap-2 rounded-2xl border ${!access.canRate ? "border-white/10 bg-white/[0.04] text-slate-500 cursor-not-allowed" : Number(item.viewerRatingValue || 0) > 0 ? "border-amber-400/30 bg-amber-500/10 text-amber-300" : "border-white/10 bg-white/5 text-slate-200"} px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em]">
                   <i class="fas fa-star"></i>
-                  ${item.viewerHasRated ? "Rated" : "Rate Project"}
+                  ${Number(item.viewerRatingValue || 0) > 0 ? `${Math.max(0, Math.min(5, Number(item.viewerRatingValue || 0)))}/5` : "Rate"}
                 </button>
                 ${
                   item.viewerPurchaseStatus
@@ -10719,7 +10783,7 @@
         return {
           approved: normalizedStatus === "approved",
           isOwner,
-          canRate: normalizedStatus === "approved" && !isOwner && !Boolean(item?.viewerHasRated),
+          canRate: normalizedStatus === "approved" && !isOwner,
           canPurchase:
             normalizedStatus === "approved" &&
             !isOwner &&
@@ -10831,26 +10895,33 @@
           return;
         }
         if (!access.canPurchase && String(sourceItem?.viewerPurchaseStatus || "").trim()) {
+          const normalizedPurchaseStatus = String(sourceItem?.viewerPurchaseStatus || "").toLowerCase();
           showBuilderSnackbar(
-            String(sourceItem?.viewerPurchaseStatus || "").toLowerCase() === "approved"
-              ? "This project is already in your purchased items."
+            normalizedPurchaseStatus === "approved"
+              ? isTemplatePurchase
+                ? "Already added to workspace."
+                : "This project is already in your purchased items."
               : "Your purchase request is already pending approval.",
             "error",
           );
           return;
         }
-        const confirmed = await openAppDialog({
-          chip: "Marketplace Purchase",
-          title: "Start purchase request?",
-          message:
-            isTemplatePurchase
-              ? "This template purchase is approved instantly and added to your Web Builder templates."
-              : "MediaLab will create a pending purchase for admin review before the project is transferred to your builder dashboard.",
-          confirmLabel: "Continue",
-          cancelLabel: "Cancel",
-        });
-        if (!confirmed) return;
-        beginUniversalProgress("Submitting purchase request...", 20, 92);
+        if (!isTemplatePurchase) {
+          const confirmed = await openAppDialog({
+            chip: "Marketplace Purchase",
+            title: "Start purchase request?",
+            message:
+              "MediaLab will create a pending purchase for admin review before the project is transferred to your builder dashboard.",
+            confirmLabel: "Continue",
+            cancelLabel: "Cancel",
+          });
+          if (!confirmed) return;
+        }
+        beginUniversalProgress(
+          isTemplatePurchase ? "Adding template to workspace..." : "Submitting purchase request...",
+          20,
+          92,
+        );
         try {
           const res = await fetch(`/api/marketplace/${encodeURIComponent(id)}/purchase`, {
             method: "POST",

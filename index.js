@@ -1897,6 +1897,9 @@ function buildMarketplacePublicItem(item = {}, viewerId = "") {
     ? Number((((averageRating / 5) * 100) || 0).toFixed(1))
     : 0;
   const normalizedViewerId = String(viewerId || "").trim();
+  const viewerRatingEntry = normalizedViewerId
+    ? ratings.find((rating) => String(rating?.userId || "") === normalizedViewerId)
+    : null;
   const viewerIsOwner =
     normalizedViewerId && String(item.authorId || "") === normalizedViewerId;
   const viewerPurchase = normalizedViewerId
@@ -1951,9 +1954,8 @@ function buildMarketplacePublicItem(item = {}, viewerId = "") {
     ratingPercent,
     ratingCount: ratings.length,
     viewerIsOwner: Boolean(viewerIsOwner),
-    viewerHasRated: normalizedViewerId
-      ? ratings.some((rating) => String(rating?.userId || "") === normalizedViewerId)
-      : false,
+    viewerHasRated: Boolean(viewerRatingEntry),
+    viewerRatingValue: Number(viewerRatingEntry?.value || 0),
     purchaseCount: purchases.length,
     pendingPurchases: purchases.filter((purchase) => purchase.status === "pending").length,
     viewerPurchaseStatus: viewerPurchase?.status || "",
@@ -3731,6 +3733,40 @@ app.get("/api/builder/templates", async (req, res) => {
   } catch (error) {
     console.error("Builder templates fetch failed:", error);
     return res.status(500).json({ success: false, message: "Could not load builder templates." });
+  }
+});
+app.post("/api/builder/templates/:marketplaceItemId/remove", publishRateLimit, async (req, res) => {
+  if (!req.isAuthenticated() || !req.user) {
+    return res.status(401).json({ success: false, message: "Sign in first to remove templates." });
+  }
+  try {
+    const marketplaceItemId = String(req.params.marketplaceItemId || "").trim();
+    if (!marketplaceItemId) {
+      return res.status(400).json({ success: false, message: "Template identifier is required." });
+    }
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User account not found." });
+    }
+    user.purchasedTemplates = (Array.isArray(user.purchasedTemplates) ? user.purchasedTemplates : []).filter(
+      (entry) => String(entry?.marketplaceItemId || "") !== marketplaceItemId,
+    );
+    await user.save();
+    const sourceItem = await MarketplaceItem.findById(marketplaceItemId);
+    if (sourceItem) {
+      sourceItem.purchases = (Array.isArray(sourceItem.purchases) ? sourceItem.purchases : []).filter(
+        (purchase) => String(purchase?.buyerId || "") !== String(req.user._id || ""),
+      );
+      sourceItem.updatedAt = new Date();
+      await sourceItem.save();
+    }
+    return res.json({ success: true, message: "Template removed from workspace." });
+  } catch (error) {
+    console.error("Builder template removal failed:", error);
+    return res.status(500).json({
+      success: false,
+      message: error?.message || "Could not remove template from workspace.",
+    });
   }
 });
 app.get("/templates/:slug", async (req, res) => {
@@ -5555,21 +5591,35 @@ app.post("/api/marketplace/:id/rate", publishRateLimit, express.json(), async (r
         message: "You cannot rate your own marketplace project.",
       });
     }
-    const existingRating = (Array.isArray(item.ratings) ? item.ratings : []).find(
+    const value = Math.max(0, Math.min(5, Number(req.body?.value || 0)));
+    const ratings = Array.isArray(item.ratings) ? item.ratings : [];
+    const existingRatingIndex = ratings.findIndex(
       (rating) => String(rating?.userId || "") === String(req.user._id),
     );
-    if (existingRating) {
-      return res.status(400).json({
-        success: false,
-        message: "You have already rated this marketplace project.",
+    if (value <= 0) {
+      if (existingRatingIndex >= 0) {
+        ratings.splice(existingRatingIndex, 1);
+      }
+      item.ratings = ratings;
+      item.updatedAt = new Date();
+      await item.save();
+      return res.json({
+        success: true,
+        message: "Marketplace rating removed.",
+        item: buildMarketplacePublicItem(item, String(req.user._id || "")),
       });
     }
-    const value = Math.max(1, Math.min(5, Number(req.body?.value || 5)));
-    item.ratings.push({
-      userId: req.user._id,
-      value,
-      date: new Date(),
-    });
+    if (existingRatingIndex >= 0) {
+      ratings[existingRatingIndex].value = value;
+      ratings[existingRatingIndex].date = new Date();
+    } else {
+      ratings.push({
+        userId: req.user._id,
+        value,
+        date: new Date(),
+      });
+    }
+    item.ratings = ratings;
     item.updatedAt = new Date();
     await item.save();
     await createUserNotification({
@@ -5686,11 +5736,14 @@ app.post("/api/marketplace/:id/purchase", publishRateLimit, express.json(), asyn
         ["pending", "approved"].includes(String(purchase?.status || "").toLowerCase()),
     );
     if (existingPurchase) {
+      const isTemplate = String(item.listingKind || "sale").toLowerCase() === "template";
       return res.status(400).json({
         success: false,
         message:
           existingPurchase.status === "approved"
-            ? "This project is already in your purchased items."
+            ? isTemplate
+              ? "Already added to workspace."
+              : "This project is already in your purchased items."
             : "Your purchase request is already pending approval.",
       });
     }
