@@ -3625,6 +3625,39 @@ app.get("/api/virtualdb/models", async (req, res) => {
   }
 });
 
+app.get("/api/virtualdb/model/:name", async (req, res) => {
+  try {
+    if (!requireAuth(req, res)) return;
+    const state = await getOrCreateVirtualDbConnection();
+    const name = normalizeVirtualModelName(req.params?.name || "");
+    if (!name) {
+      return res.status(400).json({ success: false, message: "Model name is required." });
+    }
+    const now = new Date();
+    const model = await state.VirtualDbModel.findOne({
+      userId: req.user._id,
+      name,
+      $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }],
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+    const serialized = serializeExplorerValue(model || null);
+    const fieldSet = new Set();
+    if (serialized) {
+      collectExplorerFieldPaths(serialized, "", fieldSet);
+    }
+    const fields = Array.from(fieldSet).sort((a, b) => a.localeCompare(b));
+    res.json({
+      success: true,
+      model: serialized,
+      documents: serialized ? [serialized] : [],
+      fields,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message || "Could not load that model." });
+  }
+});
+
 app.post("/api/virtualdb/model", async (req, res) => {
   try {
     if (!requireAuth(req, res)) return;

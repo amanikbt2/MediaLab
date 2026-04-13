@@ -2825,7 +2825,7 @@
             >
           </div>
           <div
-            data-tool-switch="image-pdf"
+            data-tool-switch="data-explorer"
             onclick="switchTool('data-explorer')"
             class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 px-5 py-2.5 rounded-3xl cursor-pointer"
           >
@@ -2834,7 +2834,7 @@
           </div>
           <div
             data-tool-switch="text-doc"
-                                                onclick="switchTool('data-explorer')"
+            onclick="switchTool('text-doc')"
             class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 px-5 py-2.5 rounded-3xl cursor-pointer"
           >
             <i class="fas fa-file-alt text-cyan-400"></i>
@@ -2979,7 +2979,7 @@
               >
             </div>
             <div
-                                onclick="switchTool('data-explorer')"
+              onclick="switchTool('text-doc')"
               class="flex items-center gap-x-4 px-5 py-3.5 hover:bg-gray-800 rounded-2xl cursor-pointer group transition-all"
             >
               <i
@@ -3121,7 +3121,7 @@
                 >
               </button>
               <button
-                data-tool-switch="image-pdf"
+                data-tool-switch="data-explorer"
                 onclick="switchTool('data-explorer')"
                 class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 border border-white/5 px-5 py-2.5 rounded-3xl cursor-pointer"
               >
@@ -3132,12 +3132,12 @@
               </button>
               <button
                 data-tool-switch="text-doc"
-                        onclick="switchTool('data-explorer')"
+                onclick="switchTool('text-doc')"
                 class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 border border-white/5 px-5 py-2.5 rounded-3xl cursor-pointer"
               >
-                <i class="fas fa-database text-cyan-400"></i
+                <i class="fas fa-file-alt text-cyan-400"></i
                 ><span class="font-medium text-sm text-gray-200"
-                  >Data Explorer</span
+                  >Text → Word</span
                 >
               </button>
               <button
@@ -4958,7 +4958,7 @@
       let authSessionFailureCount = 0;
       let lastSuccessfulAuthAt = 0;
       let currentPremiumRequest = null;
-      let currentStudioToolId = "image-pdf";
+      let currentStudioToolId = "data-explorer";
       let currentLiveProjectDetail = null;
       let currentLiveProjectMonitor = null;
       let routerSyncSuspended = false;
@@ -5053,6 +5053,7 @@
       let dataExplorerEngine = "";
       let dataExplorerEngineConfirmed = false;
       let dataExplorerBindTarget = null;
+      let virtualDbModelIndex = [];
       let currentRenderHostingProject = null;
       let currentRenderLiveProject = null;
       let renderProjectSyncPoller = null;
@@ -5170,7 +5171,7 @@
       let marketplaceTemplateCaptureLibPromise = null;
       let marketplaceTemplateScreenshotAutoCapturing = false;
       let builderTemplateGridExpanded = false;
-      const LOGIN_REQUIRED_TOOL_IDS = ["console", "image-pdf"];
+      const LOGIN_REQUIRED_TOOL_IDS = ["console", "data-explorer"];
       const PREMIUM_TOOL_IDS = ["voice-clone", "text-to-speech", "image-edit"];
       function normalizeHostedBaseUrl(url = "") {
         return String(url || "").trim().replace(/\/$/, "");
@@ -5245,7 +5246,7 @@
           isNew: true,
         },
         {
-          id: "image-pdf",
+          id: "data-explorer",
           title: "Database",
           icon: "fa-database",
           desc: "Connect MongoDB and inspect live collections",
@@ -7765,9 +7766,8 @@
           marketplace: "Loading Marketplace...",
           history: "Loading Projects...",
           "web-builder": "Loading Web Builder...",
-          "image-pdf": "Loading Database...",
           "text-doc": "Loading Data Explorer...",
-          "data-explorer": "Loading Data Explorer...",
+          "data-explorer": "Loading Database...",
           "video-audio": "Loading Video to Audio...",
           "text-to-speech": "Loading Text to Speech...",
           "voice-clone": "Loading Voice Clone...",
@@ -7798,7 +7798,7 @@
         return typeof value === "object" ? JSON.stringify(value) : String(value);
       }
       function dataExplorerNeedsRender() {
-        return currentStudioToolId === "data-explorer" || currentStudioToolId === "text-doc";
+        return currentStudioToolId === "data-explorer";
       }
       async function initializeDataExplorerSession() {
         try {
@@ -7845,16 +7845,42 @@
           dataExplorerEngineConfirmed = true;
           dataExplorerDbName = String(data.dbName || "");
           dataExplorerUriLabel = String(data.uriLabel || "");
-          dataExplorerCollections = Array.isArray(data.collections) ? data.collections : [];
+          await refreshVirtualDbModelIndex();
           dataExplorerChannelId = String(data.channelId || dataExplorerChannelId || "");
-          dataExplorerSelectedCollection = dataExplorerCollections[0] || "virtual_models";
-          await loadDataExplorerCollection(dataExplorerSelectedCollection);
+          dataExplorerSelectedCollection = dataExplorerCollections[0] || "";
+          if (dataExplorerSelectedCollection) {
+            await loadDataExplorerCollection(dataExplorerSelectedCollection);
+          }
           showBuilderSnackbar("VirtualDB connected.", "success");
         } catch (error) {
           showBuilderSnackbar(error.message || "Could not connect VirtualDB.", "error");
         } finally {
           dataExplorerLoading = false;
           renderDataExplorerTool();
+        }
+      }
+
+      async function refreshVirtualDbModelIndex() {
+        const res = await fetch("/api/virtualdb/models", { credentials: "include" });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) {
+          throw new Error(data.message || "Could not load VirtualDB models.");
+        }
+        const documents = Array.isArray(data.documents) ? data.documents : [];
+        virtualDbModelIndex = documents;
+        const names = Array.from(
+          new Set(
+            documents
+              .map((doc) => String(doc?.name || "").trim())
+              .filter(Boolean),
+          ),
+        ).sort((a, b) => a.localeCompare(b));
+        dataExplorerCollections = names;
+        if (dataExplorerSelectedCollection && !names.includes(dataExplorerSelectedCollection)) {
+          dataExplorerSelectedCollection = "";
+        }
+        if (!dataExplorerSelectedCollection && names.length) {
+          dataExplorerSelectedCollection = names[0];
         }
       }
 
@@ -7896,7 +7922,12 @@
           if (!res.ok || !data.success) {
             throw new Error(data.message || "Could not create model.");
           }
-          await loadDataExplorerCollection("virtual_models");
+          await refreshVirtualDbModelIndex();
+          const nextName = String(data?.model?.name || name || "").trim();
+          if (nextName) {
+            dataExplorerSelectedCollection = nextName;
+            await loadDataExplorerCollection(nextName);
+          }
           showBuilderSnackbar("Model created.", "success");
         } catch (error) {
           showBuilderSnackbar(error.message || "Could not create model.", "error");
@@ -8023,6 +8054,11 @@
       }
       async function refreshDataExplorerCollections() {
         try {
+          if (dataExplorerEngine === "virtual-medialabdb") {
+            await refreshVirtualDbModelIndex();
+            renderDataExplorerTool();
+            return;
+          }
           const res = await fetch("/api/data-explorer/collections", { credentials: "include" });
           const data = await res.json().catch(() => ({}));
           if (!res.ok || !data.success) {
@@ -8042,6 +8078,28 @@
       async function loadDataExplorerCollection(collectionName = "") {
         const collection = String(collectionName || "").trim();
         if (!collection) return;
+        if (dataExplorerEngine === "virtual-medialabdb") {
+          dataExplorerSelectedCollection = collection;
+          dataExplorerLoading = true;
+          renderDataExplorerTool();
+          try {
+            const res = await fetch(`/api/virtualdb/model/${encodeURIComponent(collection)}`, {
+              credentials: "include",
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data.success) {
+              throw new Error(data.message || "Could not load that model.");
+            }
+            dataExplorerDocuments = Array.isArray(data.documents) ? data.documents : [];
+            dataExplorerFields = Array.isArray(data.fields) ? data.fields : [];
+          } catch (error) {
+            showBuilderSnackbar(error.message || "Could not load model.", "error");
+          } finally {
+            dataExplorerLoading = false;
+            renderDataExplorerTool();
+          }
+          return;
+        }
         if (collection === dataExplorerSelectedCollection && dataExplorerDocuments.length) {
           renderDataExplorerTool();
           return;
@@ -8160,16 +8218,7 @@
         let root = document.getElementById("data-explorer-root");
         if (!root) {
           area.innerHTML = `<div id="data-explorer-root" class="data-explorer-shell animate-fadeIn">
-            <div class="data-explorer-panel p-5 sm:p-6">
-              <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                <div>
-                  <p class="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-300">Database</p>
-                  <h2 class="mt-2 text-3xl font-semibold tracking-tight text-white">Real-time MongoDB collections inside Studio.</h2>
-                  <p id="data-explorer-summary" class="mt-2 text-sm text-slate-400"></p>
-                </div>
-                <div id="data-explorer-view-actions" class="flex flex-wrap gap-3"></div>
-              </div>
-            </div>
+            <div id="data-explorer-view-actions" class="mb-4 flex flex-wrap justify-end gap-3"></div>
             <div id="data-explorer-content"></div>
             <div id="virtualdb-modal-layer" class="hidden fixed inset-0 z-[120] items-center justify-center bg-slate-950/80 p-6">
               <div class="w-full max-w-xl rounded-[2rem] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(2,6,23,0.94))] p-6 shadow-[0_24px_90px_rgba(2,6,23,0.55)]">
@@ -8193,34 +8242,31 @@
           </div>`;
           root = document.getElementById("data-explorer-root");
         }
-        const summary = document.getElementById("data-explorer-summary");
         const actions = document.getElementById("data-explorer-view-actions");
         const content = document.getElementById("data-explorer-content");
-        if (!root || !summary || !actions || !content) return;
+        if (!root || !actions || !content) return;
         const engineLabel =
           dataExplorerEngine === "virtual-medialabdb"
             ? "virtual-MedialabDB"
             : dataExplorerEngine === "sql"
               ? "SQL"
               : "MongoDB";
-        summary.textContent = dataExplorerConnected
-          ? `Connected to ${dataExplorerDbName || "database"} • ${dataExplorerUriLabel}`
-          : dataExplorerEngineConfirmed
-            ? `${engineLabel} mode selected. Continue with connection setup.`
-            : "Select a database type to continue.";
-        actions.innerHTML = `<button onclick="setDataExplorerViewMode('table')" class="rounded-2xl border px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] ${dataExplorerViewMode === "table" ? "border-cyan-400/30 bg-cyan-500/10 text-cyan-100" : "border-white/10 bg-white/5 text-slate-300"}">Table</button>
-                <button onclick="setDataExplorerViewMode('json')" class="rounded-2xl border px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] ${dataExplorerViewMode === "json" ? "border-cyan-400/30 bg-cyan-500/10 text-cyan-100" : "border-white/10 bg-white/5 text-slate-300"}">JSON</button>
-                ${
-                  dataExplorerConnected
-                    ? dataExplorerEngine === "virtual-medialabdb"
-                      ? `<button onclick="openVirtualDbModelModal()" class="rounded-2xl border border-fuchsia-400/30 bg-fuchsia-500/10 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-fuchsia-100 hover:bg-fuchsia-500/20">Create Model</button>
-                         <button onclick="openVirtualDbDisconnectModal()" class="rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-rose-100 hover:bg-rose-500/20">Disconnect DB</button>`
-                      : `<button onclick="disconnectDataExplorer()" class="rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-rose-100 hover:bg-rose-500/20">Disconnect DB</button>`
-                    : ``
-                }`;
+        actions.innerHTML = dataExplorerConnected
+          ? `<button onclick="setDataExplorerViewMode('table')" class="rounded-2xl border px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] ${dataExplorerViewMode === "table" ? "border-cyan-400/30 bg-cyan-500/10 text-cyan-100" : "border-white/10 bg-white/5 text-slate-300"}">Table</button>
+              <button onclick="setDataExplorerViewMode('json')" class="rounded-2xl border px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] ${dataExplorerViewMode === "json" ? "border-cyan-400/30 bg-cyan-500/10 text-cyan-100" : "border-white/10 bg-white/5 text-slate-300"}">JSON</button>
+              ${
+                dataExplorerEngine === "virtual-medialabdb"
+                  ? `<button onclick="openVirtualDbModelModal()" class="rounded-2xl border border-fuchsia-400/30 bg-fuchsia-500/10 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-fuchsia-100 hover:bg-fuchsia-500/20">Create Model</button>
+                     <button onclick="openVirtualDbDisconnectModal()" class="rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-rose-100 hover:bg-rose-500/20">Disconnect DB</button>`
+                  : `<button onclick="disconnectDataExplorer()" class="rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-rose-100 hover:bg-rose-500/20">Disconnect DB</button>`
+              }`
+          : "";
         const collectionMarkup = dataExplorerCollections.length
           ? dataExplorerCollections.map((name) => `<button onclick="loadDataExplorerCollection('${escapeAttr(name)}')" class="data-explorer-collection-btn ${name === dataExplorerSelectedCollection ? "active" : ""} w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left text-sm text-slate-200 transition-all hover:border-cyan-400/25 hover:bg-white/[0.05]">${escapeHtmlText(name)}</button>`).join("")
-          : `<div class="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-sm text-slate-500">No collections found yet.</div>`;
+          : dataExplorerEngine === "virtual-medialabdb"
+            ? `<div class="rounded-2xl border border-dashed border-fuchsia-400/20 bg-fuchsia-500/5 px-4 py-6 text-sm text-slate-300">No virtual models yet.</div>
+               <button onclick="openVirtualDbModelModal()" class="mt-3 w-full rounded-2xl border border-fuchsia-400/25 bg-fuchsia-500/10 px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-fuchsia-100 hover:bg-fuchsia-500/20">Create Model</button>`
+            : `<div class="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-sm text-slate-500">No collections found yet.</div>`;
         const gridFields = dataExplorerFields.length ? dataExplorerFields : ["_id"];
         const tableRows = dataExplorerDocuments.length
           ? dataExplorerDocuments.map((doc) => {
@@ -8234,7 +8280,7 @@
             : dataExplorerEngine === "sql"
               ? `<div class="data-explorer-panel p-6 sm:p-8"><div class="mx-auto max-w-3xl"><p class="text-[10px] font-black uppercase tracking-[0.24em] text-amber-300">SQL (Coming Later)</p><h3 class="mt-2 text-2xl font-semibold text-white">SQL connector is planned next.</h3><p class="mt-3 text-sm text-slate-400">Keep MongoDB mode for now. SQL functionality will be added in a later update.</p><div class="mt-5 flex flex-wrap gap-3"><button onclick="resetDataExplorerEngineSelection()" class="rounded-[1.2rem] border border-white/10 bg-white/5 px-5 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-slate-200 hover:bg-white/10">Back</button><button onclick="setDataExplorerEngine('mongodb'); continueDataExplorerEngineSelection();" class="rounded-[1.2rem] bg-cyan-500 px-5 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-slate-950 hover:bg-cyan-400">Use MongoDB</button></div></div></div>`
               : `<div class="data-explorer-panel p-6 sm:p-8"><div class="mx-auto max-w-3xl"><p class="text-[10px] font-black uppercase tracking-[0.24em] ${dataExplorerEngine === "virtual-medialabdb" ? "text-fuchsia-300" : "text-cyan-300"}">${dataExplorerEngine === "virtual-medialabdb" ? "virtual-MedialabDB" : "Connect To Database"}</p>${dataExplorerEngine === "virtual-medialabdb" ? `<p class="mt-2 text-sm text-slate-400">Use your real MongoDB URI as the base; MediaLab will layer temporary virtual models over that structure.</p>` : ``}<div class="mt-4 flex flex-col gap-3 lg:flex-row"><input id="data-explorer-uri-input" oninput="setDataExplorerUriDraft(this.value)" class="data-explorer-mono min-w-0 flex-1 rounded-[1.4rem] border border-cyan-400/20 bg-[#020617] px-5 py-4 text-sm text-cyan-100 outline-none focus:border-cyan-400" placeholder="mongodb+srv://..." value="${escapeAttr(dataExplorerUriDraft)}" /><button onclick="connectDataExplorer()" class="rounded-[1.4rem] bg-cyan-500 px-6 py-4 text-sm font-black text-slate-950 hover:bg-cyan-400">${dataExplorerLoading ? "Connecting..." : "Verify & Connect"}</button></div><div class="mt-4"><button onclick="resetDataExplorerEngineSelection()" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-300 hover:bg-white/10">Back</button></div></div></div>`
-          : `<div class="data-explorer-grid"><aside class="data-explorer-panel p-4 sm:p-5"><div class="flex items-center justify-between gap-3"><p class="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-300">Collections</p><button onclick="refreshDataExplorerCollections()" class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-200 hover:bg-white/10">Refresh</button></div><div class="mt-4 space-y-2 max-h-[62vh] overflow-y-auto custom-scrollbar">${collectionMarkup}</div></aside><section class="data-explorer-panel p-4 sm:p-5 overflow-hidden"><div><p class="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-300">${escapeHtmlText(dataExplorerSelectedCollection || "Collection")}</p><p class="mt-1 text-sm text-slate-400">${dataExplorerDocuments.length} documents loaded • Double-click a cell to edit</p></div><div class="mt-4 overflow-auto custom-scrollbar rounded-[1.4rem] border border-white/10">${dataExplorerViewMode === "json" ? `<pre class="data-explorer-mono min-h-[420px] whitespace-pre-wrap px-4 py-4 text-xs leading-6 text-slate-200">${escapeHtmlText(JSON.stringify(dataExplorerDocuments, null, 2))}</pre>` : `<table class="min-w-full table-fixed border-collapse"><thead class="bg-white/[0.03]"><tr>${gridFields.map((field) => `<th class="px-3 py-3 text-left text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">${escapeHtmlText(field)}</th>`).join("")}</tr></thead><tbody>${tableRows}</tbody></table>`}</div></section></div>`;
+          : `<div class="data-explorer-grid"><aside class="data-explorer-panel p-4 sm:p-5"><div class="flex items-center justify-between gap-3"><p class="text-[10px] font-black uppercase tracking-[0.22em] ${dataExplorerEngine === "virtual-medialabdb" ? "text-fuchsia-300" : "text-cyan-300"}">${dataExplorerEngine === "virtual-medialabdb" ? "Virtual_Models" : "Collections"}</p><button onclick="refreshDataExplorerCollections()" class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-200 hover:bg-white/10">Refresh</button></div><div class="mt-4 space-y-2 max-h-[62vh] overflow-y-auto custom-scrollbar">${collectionMarkup}</div></aside><section class="data-explorer-panel p-4 sm:p-5 overflow-hidden"><div><p class="text-[10px] font-black uppercase tracking-[0.22em] ${dataExplorerEngine === "virtual-medialabdb" ? "text-fuchsia-300" : "text-cyan-300"}">${escapeHtmlText(dataExplorerSelectedCollection || (dataExplorerEngine === "virtual-medialabdb" ? "Virtual Model" : "Collection"))}</p><p class="mt-1 text-sm text-slate-400">${dataExplorerEngine === "virtual-medialabdb" ? "Model definition loaded" : `${dataExplorerDocuments.length} documents loaded • Double-click a cell to edit`}</p></div><div class="mt-4 overflow-auto custom-scrollbar rounded-[1.4rem] border border-white/10">${dataExplorerViewMode === "json" ? `<pre class="data-explorer-mono min-h-[420px] whitespace-pre-wrap px-4 py-4 text-xs leading-6 text-slate-200">${escapeHtmlText(JSON.stringify(dataExplorerDocuments, null, 2))}</pre>` : `<table class="min-w-full table-fixed border-collapse"><thead class="bg-white/[0.03]"><tr>${gridFields.map((field) => `<th class="px-3 py-3 text-left text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">${escapeHtmlText(field)}</th>`).join("")}</tr></thead><tbody>${tableRows}</tbody></table>`}</div></section></div>`;
       }
       function openBuilderDataBindingModal() {
         if (!dataExplorerConnected) {
@@ -14818,10 +14864,9 @@
           "candycrush-template": "Candy Crush Premium Template",
           "voice-clone": "AI Voice Clone Pro",
           "text-to-speech": "Text to Speech Pro",
-          "image-pdf": "Database",
           "video-audio": "Video to Audio Pro",
-                      "text-doc": "Data Explorer",
-                      "data-explorer": "Data Explorer",
+          "text-doc": "Text → Word",
+          "data-explorer": "Database",
           "image-edit": "AI Image Editor Pro",
         };
         return labels[currentStudioToolId] || "MediaLab Pro";
