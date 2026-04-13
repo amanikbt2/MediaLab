@@ -5166,6 +5166,7 @@
       let marketplaceTemplatePreviewExpanded = false;
       let marketplaceTemplateCaptureLibPromise = null;
       let marketplaceTemplateScreenshotAutoCapturing = false;
+      let builderTemplateGridExpanded = false;
       const LOGIN_REQUIRED_TOOL_IDS = ["console", "image-pdf"];
       const PREMIUM_TOOL_IDS = ["voice-clone", "text-to-speech", "image-edit"];
       function normalizeHostedBaseUrl(url = "") {
@@ -9754,18 +9755,53 @@
           const tone = templateIconTonePool[Math.abs(hash * 7) % templateIconTonePool.length];
           return { icon, tone };
         };
-        wrap.innerHTML = (Array.isArray(builderCommunityTemplates) ? builderCommunityTemplates : [])
-          .map(
-            (item) => {
+        const templates = Array.isArray(builderCommunityTemplates) ? builderCommunityTemplates : [];
+        const controls = `<div class="col-span-full mb-1 flex items-center justify-between gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2">
+          <p class="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Community Templates</p>
+          <button type="button" onclick="toggleBuilderTemplateGridExpanded()" class="rounded-xl border ${builderTemplateGridExpanded ? "border-fuchsia-400/30 bg-fuchsia-500/10 text-fuchsia-200" : "border-cyan-400/20 bg-cyan-500/10 text-cyan-200"} px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em]">${builderTemplateGridExpanded ? "&lt;&gt; Minimize" : "&lt;&gt; Expand"}</button>
+        </div>`;
+        if (builderTemplateGridExpanded) {
+          wrap.innerHTML =
+            controls +
+            `<div class="col-span-full grid grid-cols-1 sm:grid-cols-2 gap-3">
+              ${templates
+                .map((item) => {
+                  const iconMeta = getTemplateIconMeta(item.slug || item.title || item.marketplaceItemId || "");
+                  const preview = String(item.previewImage || "").trim();
+                  return `<button onclick="loadBuilderSiteTemplate('${escapeInlineJsString(item.slug || "")}'); hideBuilderPanels();" class="group overflow-hidden rounded-2xl border border-white/10 bg-slate-950/80 text-left hover:border-cyan-400/30">
+                    <div class="relative h-28 w-full bg-slate-900">
+                      ${
+                        preview
+                          ? `<img src="${escapeHtmlText(preview)}" alt="${escapeHtmlText(item.title || "Template preview")}" class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]" />`
+                          : `<div class="flex h-full w-full items-center justify-center text-sm ${iconMeta.tone}"><i class="fas ${iconMeta.icon} mr-2"></i>Template Preview</div>`
+                      }
+                    </div>
+                    <div class="p-3">
+                      <p class="truncate text-sm font-semibold text-white">${escapeHtmlText(item.title || "Official Template")}</p>
+                      <p class="mt-1 line-clamp-2 text-xs text-slate-400">${escapeHtmlText(item.description || "Official MediaLab builder template")}</p>
+                    </div>
+                  </button>`;
+                })
+                .join("")}
+            </div>`;
+          return;
+        }
+        wrap.innerHTML =
+          controls +
+          templates
+            .map((item) => {
               const iconMeta = getTemplateIconMeta(item.slug || item.title || item.marketplaceItemId || "");
               return `
               <button onclick="loadBuilderSiteTemplate('${escapeInlineJsString(item.slug || "")}'); hideBuilderPanels();" class="builder-cmd">
                 <i class="fas ${iconMeta.icon} ${iconMeta.tone}"></i>
                 <span>${escapeHtmlText(item.title || "Official Template")}<small>${escapeHtmlText(item.category || "General")} • ${escapeHtmlText(item.description || "Official MediaLab builder template")}</small></span>
               </button>`;
-            },
-          )
-          .join("");
+            })
+            .join("");
+      }
+      function toggleBuilderTemplateGridExpanded() {
+        builderTemplateGridExpanded = !builderTemplateGridExpanded;
+        renderBuilderCommunityTemplates();
       }
       async function fetchBuilderCommunityTemplates() {
         try {
