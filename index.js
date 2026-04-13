@@ -3687,12 +3687,11 @@ app.get("/api/builder/templates", async (req, res) => {
       const fallbackPreviewFromShots = (Array.isArray(item?.screenshots) ? item.screenshots : [])
         .map((url) => String(url || "").trim())
         .find(Boolean);
+      const sourceAssets = Array.isArray(sourceItem?.screenshotAssets) ? sourceItem.screenshotAssets : [];
+      const sourceScreens = Array.isArray(sourceItem?.screenshots) ? sourceItem.screenshots : [];
       const fallbackSourcePreview =
-        (Array.isArray(sourceItem?.screenshotAssets) ? sourceItem.screenshotAssets : [])
-          .map((asset) => String(asset?.thumbnailUrl || asset?.url || "").trim())
-          .find(Boolean) ||
-        (Array.isArray(sourceItem?.screenshots) ? sourceItem.screenshots : [])
-          .map((url) => String(url || "").trim())
+        sourceAssets.map((asset) => String(asset?.thumbnailUrl || asset?.url || "").trim()).find(Boolean) ||
+        sourceScreens.map((url) => String(url || "").trim())
           .find(Boolean) ||
         "";
       return ({
@@ -3709,6 +3708,19 @@ app.get("/api/builder/templates", async (req, res) => {
       isPurchased: true,
       marketplaceItemId: String(item?.marketplaceItemId || ""),
       sourceHtml: String(item?.sourceHtml || ""),
+      screenshots: (Array.isArray(item?.screenshots) ? item.screenshots : sourceScreens)
+        .map((url) => String(url || "").trim())
+        .filter(Boolean)
+        .slice(0, 4),
+      screenshotAssets: (Array.isArray(item?.screenshotAssets) ? item.screenshotAssets : sourceAssets)
+        .map((asset) => ({
+          url: String(asset?.url || "").trim(),
+          thumbnailUrl: String(asset?.thumbnailUrl || asset?.url || "").trim(),
+          fileId: String(asset?.fileId || "").trim(),
+          name: String(asset?.name || "").trim(),
+        }))
+        .filter((asset) => asset.url || asset.thumbnailUrl)
+        .slice(0, 4),
       previewImage: String(item?.previewImage || fallbackPreviewFromAssets || fallbackPreviewFromShots || fallbackSourcePreview || ""),
     });
     });
