@@ -1553,6 +1553,14 @@
         font-size: 10px;
         color: #94a3b8;
       }
+      .ai-inline-status {
+        margin-bottom: 0.45rem;
+        font-size: 10px;
+        color: #94a3b8;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.42rem;
+      }
       .ai-agent-stage-ring {
         width: 10px;
         height: 10px;
@@ -2327,8 +2335,6 @@
         }
         #word-processor-ribbon-groups {
           margin-top: 6px;
-        }
-        .code-editor {
         }
         .builder-tabbar {
           width: 100%;
@@ -17113,6 +17119,7 @@
                 </div>
                 <div id="ai-chat-messages" class="ai-chat-messages"></div>
                 <div class="px-3 pb-3 pt-2 border-t border-white/10">
+                    <p id="ai-inline-status" class="ai-inline-status"><span class="ai-agent-stage-ring"></span><span>Agent is standby</span></p>
                     <div class="flex items-center gap-2">
                         <button id="btn-magic-fix" onclick="triggerMagicFix()" class="inline-flex h-9 w-9 items-center justify-center rounded-xl text-amber-300" title="Magic Auto-Fix">
                             <i id="magic-fix-icon" class="fas fa-magic text-amber-400"></i>
@@ -22319,6 +22326,12 @@ console.log("Triggered ${eventName}", { source, event });
             normalizedStyles.top = `${Math.round(top)}px`;
           }
         }
+        // Hard safety clamp so inserts never spawn at extreme-left/offscreen.
+        const leftRaw = String(normalizedStyles.left || "").trim();
+        const leftValue = Number.parseFloat(leftRaw);
+        if (Number.isFinite(leftValue)) {
+          normalizedStyles.left = `${Math.max(50, Math.round(leftValue))}px`;
+        }
         const mergedAttrs = {
           ...getDefaultElementAttributes(type),
           ...attrs,
@@ -27308,6 +27321,26 @@ ${interactionBlock}
       }
       function setAiAgentStage(stage = "idle") {
         aiAgentStage = String(stage || "idle").trim().toLowerCase();
+        const inlineStatus = document.getElementById("ai-inline-status");
+        if (inlineStatus) {
+          const activeFile = normalizeBuilderFilePath(activeBuilderFilePath || "index.html") || "index.html";
+          const textMap = {
+            idle: "Agent is standby",
+            thinking: `Agent is analyzing ${activeFile}`,
+            searching: `Agent is searching workspace map`,
+            planning: "Agent is planning surgical patch",
+            parsing: "Agent is parsing action blocks",
+            applying: "Agent is applying changes",
+            done: "Agent update complete",
+          };
+          const isBusy = !["idle", "done"].includes(aiAgentStage);
+          inlineStatus.innerHTML =
+            '<span class="ai-agent-stage-ring" style="' +
+            (isBusy ? "" : "animation:none;border-color:rgba(34,211,238,0.22);") +
+            '"></span><span>' +
+            escapeHtmlText(textMap[aiAgentStage] || "Agent is standby") +
+            "</span>";
+        }
         renderBuilderAiChat();
       }
       function toggleBuilderAiPopup(force = null) {
@@ -27439,6 +27472,24 @@ ${interactionBlock}
         const match = String(responseText || "").match(/REQUEST_FILE:\s*([^\n\r]+)/i);
         return String(match?.[1] || "").trim();
       }
+      function extractAgentActionBlocks(responseText = "") {
+        const actions = [];
+        const regex = /\[ACTION\]\s*([\s\S]*?)\s*\[\/ACTION\]/gi;
+        let match;
+        while ((match = regex.exec(String(responseText || ""))) !== null) {
+          const raw = String(match[1] || "").trim();
+          if (!raw) continue;
+          try {
+            actions.push(JSON.parse(raw));
+          } catch {}
+        }
+        return actions;
+      }
+      function stripAgentActionBlocks(responseText = "") {
+        return String(responseText || "")
+          .replace(/\[ACTION\]\s*[\s\S]*?\s*\[\/ACTION\]/gi, "")
+          .trim();
+      }
       function ensureBuilderFolderByPath(path = "") {
         const parts = splitBuilderFilePath(path);
         let currentPath = "";
@@ -27472,10 +27523,70 @@ ${interactionBlock}
         const response = String(responseText || "");
         const applied = [];
         let shouldRefreshCanvas = false;
+        const jsonActions = extractAgentActionBlocks(response);
+        jsonActions.forEach((action) => {
+          const type = String(action?.type || "").trim().toUpperCase();
+          if (type === "CREATE_FOLDER") {
+            const folderPath = normalizeBuilderFilePath(action.path || "");
+            if (folderPath && !findBuilderNodeByPath(folderPath)) {
+              ensureBuilderFolderByPath(folderPath);
+              applied.push(`CREATE_FOLDER ${folderPath}`);
+            }
+            return;
+          }
+          if (type === "UPDATE_FILE" || type === "CREATE_FILE") {
+            const targetPath = normalizeBuilderFilePath(action.path || "");
+            const content = String(action.content || "");
+            if (!targetPath) return;
+            const parentParts = splitBuilderFilePath(targetPath);
+            const fileName = parentParts.pop() || "file.txt";
+            const parentPath = normalizeBuilderFilePath(parentParts.join("/"));
+            if (!findBuilderNodeByPath(targetPath)) {
+              if (parentPath) ensureBuilderFolderByPath(parentPath);
+              addBuilderNodeToFolder(createBuilderFileNode(fileName, content), parentPath);
+            } else {
+              updateBuilderFileContent(targetPath, content);
+            }
+            applied.push(`${type} ${targetPath}`);
+            if (targetPath === normalizeBuilderFilePath(activeBuilderFilePath || "")) {
+              const editor = document.getElementById("builder-code-editor");
+              if (editor) {
+                editor.value = content;
+                handleBuilderCodeInput();
+              }
+              shouldRefreshCanvas = true;
+            }
+            return;
+          }
+          if (type === "UPDATE_CSS") {
+            const selector = String(action.selector || "").trim().toLowerCase();
+            const styles = action?.styles && typeof action.styles === "object" ? action.styles : {};
+            if (selector === "body" && styles.background) {
+              applyCanvasPageBackground(String(styles.background), true);
+              applied.push("UPDATE_CSS body");
+              shouldRefreshCanvas = true;
+            }
+            return;
+          }
+          if (type === "EDIT_CANVAS") {
+            const html = String(action.html || action.code || "").trim();
+            if (html) {
+              const activePath = normalizeBuilderFilePath(activeBuilderFilePath || "index.html");
+              updateBuilderFileContent(activePath, html);
+              const editor = document.getElementById("builder-code-editor");
+              if (editor) {
+                editor.value = html;
+                handleBuilderCodeInput();
+              }
+            }
+            applied.push("EDIT_CANVAS");
+            shouldRefreshCanvas = true;
+          }
+        });
         const updateOrCreateRegex =
           /(UPDATE_FILE|CREATE_FILE):\s*([^\n\r]+)\s*CONTENT:\s*([\s\S]*?)(?=\n(?:UPDATE_FILE|CREATE_FILE|CREATE_FOLDER|EDIT_CANVAS):|\s*$)/g;
         let match;
-        while ((match = updateOrCreateRegex.exec(response)) !== null) {
+        while (!jsonActions.length && (match = updateOrCreateRegex.exec(response)) !== null) {
           const action = String(match[1] || "").trim();
           const targetPath = normalizeBuilderFilePath(match[2] || "");
           const content = String(match[3] || "").replace(/^\s+/, "");
@@ -27500,7 +27611,7 @@ ${interactionBlock}
           }
         }
         const folderRegex = /CREATE_FOLDER:\s*([^\n\r]+)/g;
-        while ((match = folderRegex.exec(response)) !== null) {
+        while (!jsonActions.length && (match = folderRegex.exec(response)) !== null) {
           const folderPath = normalizeBuilderFilePath(match[1] || "");
           if (!folderPath) continue;
           if (!findBuilderNodeByPath(folderPath)) {
@@ -27509,7 +27620,7 @@ ${interactionBlock}
           }
         }
         const canvasRegex = /EDIT_CANVAS:\s*([\s\S]*?)(?=\n(?:UPDATE_FILE|CREATE_FILE|CREATE_FOLDER|EDIT_CANVAS):|\s*$)/g;
-        while ((match = canvasRegex.exec(response)) !== null) {
+        while (!jsonActions.length && (match = canvasRegex.exec(response)) !== null) {
           const instruction = String(match[1] || "").trim();
           if (!instruction) continue;
           applied.push("EDIT_CANVAS");
@@ -27518,6 +27629,11 @@ ${interactionBlock}
         if (applied.length) {
           renderBuilderProjectExplorer();
           if (shouldRefreshCanvas) applyCodeModeToCanvas();
+          const canvas = document.getElementById("web-canvas");
+          if (canvas) {
+            canvas.classList.add("magic-fix-active");
+            setTimeout(() => canvas.classList.remove("magic-fix-active"), 500);
+          }
           logUsageActivity(
             `[AI Agent]: Successfully patched ${applied.join(", ")}`,
             { source: "ai-agent" },
@@ -27629,16 +27745,19 @@ ${interactionBlock}
           const agentReply = await runBuilderAiAgent(prompt, currentCode);
           setAiAgentStage("parsing");
           const actions = executeAIActions(agentReply);
+          const visibleReply = stripAgentActionBlocks(agentReply);
           if (actions.length) {
             setAiAgentStage("applying");
             aiChatMessages.push({
               role: "assistant",
-              text: `Applied ${actions.length} action(s) using ${aiActiveModel || "active model"}.`,
+              text:
+                visibleReply ||
+                `Applied ${actions.length} action(s) using ${aiActiveModel || "active model"}.`,
             });
           } else {
             aiChatMessages.push({
               role: "assistant",
-              text: agentReply || "Ready. Tell me what you want to build or fix next.",
+              text: visibleReply || "Ready. Tell me what you want to build or fix next.",
             });
           }
           setAiAgentStage("done");
