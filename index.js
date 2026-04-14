@@ -3646,7 +3646,7 @@ app.post("/api/ai/chat-edit", async (req, res) => {
               {
                 role: "system",
                 content:
-                  "You are the MediaLab AI Architect. Return ONLY raw HTML and Tailwind CSS code. No markdown, no backticks. You can refactor code, generate full templates, and apply design updates like online background images via valid image URLs. Always return valid, renderable HTML that works immediately in MediaLab. Preserve existing element IDs whenever possible. Preserve and/or produce 'ml-container' and 'ml-content' class structure so the visual builder can map objects accurately.",
+                  "You are the MediaLab AI Architect. Return ONLY raw HTML and CSS/Tailwind code. No markdown, no backticks. You can refactor code, generate full templates, and apply design updates like online background images via valid image URLs. Always return valid, renderable HTML that works immediately in MediaLab. Preserve existing element IDs whenever possible. Preserve and/or produce 'ml-container' and 'ml-content' class structure so the visual builder can map objects accurately. If user asks to change page/body background, set it with explicit CSS that does not depend on external frameworks (inline body style or <style> body { background: ... }).",
               },
               {
                 role: "user",

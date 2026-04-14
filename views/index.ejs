@@ -22226,6 +22226,7 @@ console.log("Triggered ${eventName}", { source, event });
       }
       function addObject(type, styles, attrs) {
         const canvas = document.getElementById("web-canvas");
+        const canvasContainer = document.getElementById("canvas-container");
         ensureBuilderGuides(canvas);
         const wrap = document.createElement("div");
         wrap.id = attrs?.id || generateBuilderElementId();
@@ -22252,6 +22253,26 @@ console.log("Triggered ${eventName}", { source, event });
     `;
         const body = wrap.querySelector(".element-body");
         const normalizedStyles = normalizeBuilderStyles(styles, type);
+        const hasExplicitLeft = Boolean(styles && Object.prototype.hasOwnProperty.call(styles, "left"));
+        const hasExplicitTop = Boolean(styles && Object.prototype.hasOwnProperty.call(styles, "top"));
+        if ((!hasExplicitLeft || !hasExplicitTop) && canvas && canvasContainer) {
+          const width = Math.max(80, Number.parseFloat(normalizedStyles.width || "260") || 260);
+          const height = Math.max(48, Number.parseFloat(normalizedStyles.height || "100") || 100);
+          const canvasRect = canvas.getBoundingClientRect();
+          const containerRect = canvasContainer.getBoundingClientRect();
+          const centerX = containerRect.left + containerRect.width / 2;
+          const centerY = containerRect.top + containerRect.height / 2;
+          const localX = centerX - canvasRect.left;
+          const localY = centerY - canvasRect.top;
+          if (!hasExplicitLeft) {
+            const left = Math.max(0, Math.min((canvas.clientWidth || width) - width, localX - width / 2));
+            normalizedStyles.left = `${Math.round(left)}px`;
+          }
+          if (!hasExplicitTop) {
+            const top = Math.max(0, Math.min((canvas.scrollHeight || height) - height, localY - height / 2));
+            normalizedStyles.top = `${Math.round(top)}px`;
+          }
+        }
         const mergedAttrs = {
           ...getDefaultElementAttributes(type),
           ...attrs,
@@ -26313,6 +26334,8 @@ console.log("Triggered ${eventName}", { source, event });
       function extractBodyBackgroundFromDocument(doc) {
         const inlineBackground = doc.body?.style?.background;
         if (inlineBackground) return inlineBackground;
+        const inlineBackgroundColor = doc.body?.style?.backgroundColor;
+        if (inlineBackgroundColor) return inlineBackgroundColor;
         const styleText = Array.from(doc.querySelectorAll("style"))
           .map((style) => style.textContent || "")
           .join("\n");
@@ -26320,7 +26343,11 @@ console.log("Triggered ${eventName}", { source, event });
         const backgroundMatch = bodyMatch?.[1]?.match(
           /background\s*:\s*([^;]+);?/i,
         );
-        return backgroundMatch?.[1]?.trim() || "#ffffff";
+        if (backgroundMatch?.[1]?.trim()) return backgroundMatch[1].trim();
+        const backgroundColorMatch = bodyMatch?.[1]?.match(
+          /background-color\s*:\s*([^;]+);?/i,
+        );
+        return backgroundColorMatch?.[1]?.trim() || "#ffffff";
       }
       function getImportableBodyNodes(doc) {
         return Array.from(doc?.body?.children || []).filter((node) => {
