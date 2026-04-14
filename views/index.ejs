@@ -1070,6 +1070,9 @@
       .canvas-element {
         touch-action: none;
         cursor: default;
+        box-sizing: border-box;
+        transform-origin: top left;
+        will-change: left, top, width, height;
       }
       .canvas-element.locked .drag-handle,
       .canvas-element.locked .resizer {
@@ -24474,10 +24477,22 @@ console.log("Triggered ${eventName}", { source, event });
         }
         const startX = e.clientX,
           startY = e.clientY;
-        const startW = el.offsetWidth,
-          startH = el.offsetHeight;
+        const startRect = el.getBoundingClientRect();
+        const startW = Math.max(30, Math.round(startRect.width)),
+          startH = Math.max(30, Math.round(startRect.height));
         const startL = el.offsetLeft,
           startT = el.offsetTop;
+        // Stabilize drag/resize math by freezing auto/% dimensions to px before move.
+        if (!movingSelection && !isResizer) {
+          const widthText = String(el.style.width || "").trim().toLowerCase();
+          const heightText = String(el.style.height || "").trim().toLowerCase();
+          if (!widthText || widthText.includes("%") || widthText === "auto") {
+            el.style.width = `${startW}px`;
+          }
+          if (!heightText || heightText.includes("%") || heightText === "auto") {
+            el.style.height = `${startH}px`;
+          }
+        }
         const selectionStarts = movingSelection
           ? selectedElements.map((item) => ({
               el: item,
@@ -24529,7 +24544,7 @@ console.log("Triggered ${eventName}", { source, event });
               selectionStarts.forEach((item) => {
                 const nextLeft = clamp(
                   snap(item.left + dx),
-                  0,
+                  50,
                   canvas.clientWidth - item.el.offsetWidth,
                 );
                 const nextTop = clamp(
@@ -24541,23 +24556,29 @@ console.log("Triggered ${eventName}", { source, event });
                 item.el.style.top = nextTop + "px";
               });
             } else {
-              const layoutTargetMatch = getNearestLayoutDropTarget(ev, el);
-              if (layoutTargetMatch) {
-                activeLayoutPreview = buildLayoutDropPreview(
-                  ev,
-                  el,
-                  layoutTargetMatch.target,
-                  layoutTargetMatch.layoutType,
-                );
-                showLayoutDropGuides(activeLayoutPreview);
-                maybeAutoScrollLayoutHost(activeLayoutPreview, ev);
+              // Only trigger layout auto-attach when Shift is held to avoid accidental shrink/reflow.
+              if (ev.shiftKey) {
+                const layoutTargetMatch = getNearestLayoutDropTarget(ev, el);
+                if (layoutTargetMatch) {
+                  activeLayoutPreview = buildLayoutDropPreview(
+                    ev,
+                    el,
+                    layoutTargetMatch.target,
+                    layoutTargetMatch.layoutType,
+                  );
+                  showLayoutDropGuides(activeLayoutPreview);
+                  maybeAutoScrollLayoutHost(activeLayoutPreview, ev);
+                } else {
+                  activeLayoutPreview = null;
+                  clearLayoutDropGuides();
+                }
               } else {
                 activeLayoutPreview = null;
                 clearLayoutDropGuides();
               }
               const nextLeft = clamp(
                 snap(startL + dx),
-                0,
+                50,
                 canvas.clientWidth - el.offsetWidth,
               );
               const nextTop = clamp(
