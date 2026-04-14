@@ -27321,6 +27321,7 @@ ${interactionBlock}
           planning: "planning",
           parsing: "parsing",
           applying: "applying",
+          implementing: "implementing changes",
           done: "done",
         };
         const stageText = stageTextMap[aiAgentStage] || "standby";
@@ -27353,6 +27354,7 @@ ${interactionBlock}
             planning: "Agent is planning surgical patch",
             parsing: "Agent is parsing action blocks",
             applying: "Agent is applying changes",
+            implementing: "Agent is implementing changes",
             done: "Agent update complete",
           };
           const isBusy = !["idle", "done"].includes(aiAgentStage);
@@ -27727,6 +27729,25 @@ ${interactionBlock}
           };
         }
         return null;
+      }
+      function forceImplementAiCanvasSync() {
+        const activePath = normalizeBuilderFilePath(activeBuilderFilePath || "index.html") || "index.html";
+        if (!isBuilderHtmlFile(activePath)) return false;
+        const editor = document.getElementById("builder-code-editor");
+        const latestHtml =
+          getBuilderFileContent(activePath) ||
+          editor?.value ||
+          buildCodeModeDocument() ||
+          "";
+        if (!String(latestHtml || "").trim()) return false;
+        if (editor) {
+          editor.value = String(latestHtml);
+          handleBuilderCodeInput();
+        }
+        tryApplyCodeModeToCanvas({ silent: true });
+        builderCodeMode = false;
+        updateBuilderUI();
+        return true;
       }
       function stripAgentActionBlocks(responseText = "") {
         return String(responseText || "")
@@ -28113,6 +28134,8 @@ ${interactionBlock}
               text: visibleReply || "Ready. Tell me what you want to build or fix next.",
             });
           }
+          setAiAgentStage("implementing");
+          forceImplementAiCanvasSync();
           setAiAgentStage("done");
           renderBuilderAiChat();
         } catch (error) {
