@@ -36,6 +36,7 @@ import Notification from "./models/Notification.js";
 import ReferralLedger from "./models/ReferralLedger.js";
 import CollaborationMeeting from "./models/CollaborationMeeting.js";
 import AIModel from "./models/AIModel.js";
+import AIContext from "./models/AIContext.js";
 import VirtualDbModelSchema from "./models/VirtualDbModel.js";
 import VirtualDbDocumentSchema from "./models/VirtualDbDocument.js";
 import {
@@ -106,6 +107,36 @@ let virtualDbConnectionState = null;
 const GROQ_API_KEY = String(process.env.GROQ_API_KEY || process.env.grog || "").trim();
 let aiModelsLastRefreshedAt = 0;
 let aiModelsRefreshTimer = null;
+
+function getAiContextExpiryDate() {
+  return new Date(Date.now() + 24 * 60 * 60 * 1000);
+}
+
+async function upsertAIContext(userId = "", currentCode = "") {
+  const normalizedUserId = String(userId || "").trim();
+  if (!normalizedUserId || !String(currentCode || "").trim()) return;
+  await AIContext.findOneAndUpdate(
+    { userId: normalizedUserId },
+    {
+      $set: {
+        currentCode: String(currentCode || ""),
+        updatedAt: new Date(),
+        expiresAt: getAiContextExpiryDate(),
+      },
+    },
+    { upsert: true, new: true, setDefaultsOnInsert: true },
+  );
+}
+
+async function getAIContextCode(userId = "") {
+  const normalizedUserId = String(userId || "").trim();
+  if (!normalizedUserId) return "";
+  const row = await AIContext.findOne({ userId: normalizedUserId })
+    .select("currentCode updatedAt expiresAt")
+    .lean();
+  if (!row?.currentCode) return "";
+  return String(row.currentCode || "").trim();
+}
 
 function isSameCalendarDay(a = null, b = null) {
   if (!a || !b) return false;
@@ -3707,10 +3738,10 @@ app.post("/api/ai/chat-edit", async (req, res) => {
     const prompt = String(req.body?.prompt || "").trim();
     const mode = String(req.body?.mode || "edit").trim().toLowerCase();
     const currentCode = String(req.body?.currentCode || "").trim();
-    if (!prompt) {
+    if (!prompt && mode !== "context") {
       return res.status(400).json({ success: false, message: "Prompt is required." });
     }
-    if (!currentCode && mode !== "chat") {
+    if (!currentCode && mode !== "chat" && mode !== "context") {
       return res.status(400).json({ success: false, message: "Current code is required." });
     }
 
@@ -3721,6 +3752,15 @@ app.post("/api/ai/chat-edit", async (req, res) => {
 
     if (!user.aiQuota) {
       user.aiQuota = { dailyLimit: 10, usedToday: 0, lastUsed: null };
+    }
+    const userContextKey = String(user._id || "").trim();
+    if (mode === "context") {
+      if (currentCode) await upsertAIContext(userContextKey, currentCode);
+      return res.json({
+        success: true,
+        mode: "context",
+        contextSynced: true,
+      });
     }
     const now = new Date();
     if (!isSameCalendarDay(user.aiQuota.lastUsed, now)) {
@@ -3736,6 +3776,9 @@ app.post("/api/ai/chat-edit", async (req, res) => {
         message: "Daily AI credits reached. Upgrade to MediaLab Pro.",
       });
     }
+
+    const storedContextCode = await getAIContextCode(userContextKey);
+    const contextCode = currentCode || storedContextCode;
 
     const models = await AIModel.find({ isActive: true, status: "online" })
       .sort({ priority: 1 })
@@ -3767,7 +3810,7 @@ app.post("/api/ai/chat-edit", async (req, res) => {
                 role: "system",
                 content:
                   mode === "chat"
-                    ? "You are the MediaLab AI Copilot, like a friendly mini Cursor assistant. Be concise, warm, and practical. Help users plan next steps, clarify intent, and suggest actionable UI/code tasks for their builder workflow. Return plain text only."
+                    ? "You are the MediaLab AI Copilot, like a friendly mini Cursor assistant. Be concise, warm, and practical. Return plain text only. Do NOT perform, imply, or apply code changes unless the user explicitly asks for implementation/fixes. If user greets you (e.g. hello), reply naturally and briefly."
                     : "You are the MediaLab AI Architect. Return ONLY raw HTML and CSS/Tailwind code. No markdown, no backticks. You can refactor code, generate full templates, and apply design updates like online background images via valid image URLs. Always return valid, renderable HTML that works immediately in MediaLab. Preserve existing element IDs whenever possible. Preserve and/or produce 'ml-container' and 'ml-content' class structure so the visual builder can map objects accurately. If user asks to change page/body background, set it with explicit CSS that does not depend on external frameworks (inline body style or <style> body { background: ... }).",
               },
               {
@@ -3775,7 +3818,7 @@ app.post("/api/ai/chat-edit", async (req, res) => {
                 content:
                   mode === "chat"
                     ? prompt
-                    : `Current HTML:\n${currentCode}\n\nInstruction:\n${prompt}`,
+                    : `Current HTML:\n${contextCode}\n\nInstruction:\n${prompt}`,
               },
             ],
           }),
@@ -3833,6 +3876,8 @@ app.post("/api/ai/chat-edit", async (req, res) => {
     user.aiQuota.usedToday = Number(user.aiQuota.usedToday || 0) + 1;
     user.aiQuota.lastUsed = now;
     await user.save();
+    if (updatedCode) await upsertAIContext(userContextKey, updatedCode);
+    else if (contextCode) await upsertAIContext(userContextKey, contextCode);
     await createUsageLog({
       user,
       action: "ai-chat-edit",

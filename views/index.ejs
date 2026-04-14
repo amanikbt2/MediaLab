@@ -19207,6 +19207,8 @@
       let aiActiveModel = "";
       let aiChatSending = false;
       let aiMagicFixRunning = false;
+      let aiContextSyncInFlight = false;
+      let aiLastContextFingerprint = "";
       let aiInfrastructureModels = [];
       let builderStyleSyncTimer = null;
       let builderProjectFiles = null;
@@ -27265,7 +27267,40 @@ ${interactionBlock}
         if (!popup) return;
         const shouldOpen = force == null ? popup.classList.contains("hidden") : Boolean(force);
         popup.classList.toggle("hidden", !shouldOpen);
+        if (shouldOpen) syncAiContextSilently();
         renderBuilderAiChat();
+      }
+      async function syncAiContextSilently() {
+        if (aiContextSyncInFlight) return;
+        if (!loggedIn || !currentUser) return;
+        const editor = document.getElementById("builder-code-editor");
+        const code =
+          editor?.value?.trim() ||
+          buildCodeModeDocument() ||
+          `<div id="ml-root" class="ml-container"><div class="ml-content">New MediaLab template</div></div>`;
+        const fingerprint = `${String(activeBuilderFilePath || "index.html")}::${code.length}::${code.slice(0, 160)}`;
+        if (fingerprint === aiLastContextFingerprint) return;
+        aiContextSyncInFlight = true;
+        try {
+          await fetch("/api/ai/chat-edit", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              mode: "context",
+              prompt: "silent-context-sync",
+              currentCode: code,
+            }),
+          });
+          aiLastContextFingerprint = fingerprint;
+        } catch (error) {
+          await logErrorEvent(
+            `AI context sync failed: ${error.message || "unknown error"}`,
+            "ai-chat-context",
+          );
+        } finally {
+          aiContextSyncInFlight = false;
+        }
       }
       async function sendBuilderAiChat() {
         if (aiChatSending) return;
@@ -27303,6 +27338,7 @@ ${interactionBlock}
         const mode = editKeywords.some((keyword) => lowerPrompt.includes(keyword))
           ? "edit"
           : "chat";
+        await syncAiContextSilently();
         aiChatSending = true;
         if (input) input.value = "";
         if (sendBtn) {
