@@ -1546,6 +1546,24 @@
         background: rgba(148, 163, 184, 0.14);
         color: #e2e8f0;
       }
+      #web-canvas.magic-fix-active {
+        filter: blur(15px) brightness(1.2) saturate(1.5);
+        transition: filter 0.3s ease;
+      }
+      #btn-magic-fix {
+        border: 1px solid rgba(251, 191, 36, 0.28);
+        background: rgba(251, 191, 36, 0.08);
+      }
+      #btn-magic-fix:hover {
+        background: rgba(251, 191, 36, 0.16);
+      }
+      #btn-magic-fix .fa-magic.is-spinning {
+        animation: mlMagicFixSpin 0.9s linear infinite;
+      }
+      @keyframes mlMagicFixSpin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
       .ml-section-active {
         animation: mlSectionFadeIn 0.3s ease;
       }
@@ -2347,6 +2365,9 @@
           border-radius: 22px;
         }
         .feature-gate-shell {
+          width: 100%;
+          display: flex;
+          justify-content: center;
           padding: 1.15rem 0.5rem 1.5rem;
         }
         .feature-gate-card {
@@ -2383,7 +2404,8 @@
           letter-spacing: 0.14em;
         }
         .studio-launch-overlay {
-          align-items: flex-start;
+          align-items: center;
+          justify-content: center;
           padding: 0.9rem 0.55rem;
         }
         #design-modal {
@@ -17050,7 +17072,10 @@
                 <div id="ai-chat-messages" class="ai-chat-messages"></div>
                 <div class="px-3 pb-3 pt-2 border-t border-white/10">
                     <div class="flex items-center gap-2">
-                        <input id="ai-chat-input" type="text" placeholder="Ask AI Architect to refine your current HTML..." onkeydown="if(event.key==='Enter'){event.preventDefault();sendBuilderAiChat();}" class="min-w-0 flex-1 rounded-xl border border-white/10 bg-slate-950/85 px-3 py-2 text-sm text-slate-200 outline-none focus:border-cyan-400" />
+                        <button id="btn-magic-fix" onclick="triggerMagicFix()" class="inline-flex h-9 w-9 items-center justify-center rounded-xl text-amber-300" title="Magic Auto-Fix">
+                            <i id="magic-fix-icon" class="fas fa-magic text-amber-400"></i>
+                        </button>
+                        <input id="ai-chat-input" type="text" placeholder="Ask for fixes, templates, or backgrounds (e.g. cat image URL)..." onkeydown="if(event.key==='Enter'){event.preventDefault();sendBuilderAiChat();}" class="min-w-0 flex-1 rounded-xl border border-white/10 bg-slate-950/85 px-3 py-2 text-sm text-slate-200 outline-none focus:border-cyan-400" />
                         <button id="ai-chat-send" onclick="sendBuilderAiChat()" class="rounded-xl bg-cyan-500 px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-950 hover:bg-cyan-400">Send</button>
                     </div>
                 </div>
@@ -19162,6 +19187,7 @@
       let aiCreditsRemaining = null;
       let aiActiveModel = "";
       let aiChatSending = false;
+      let aiMagicFixRunning = false;
       let aiInfrastructureModels = [];
       let builderStyleSyncTimer = null;
       let builderProjectFiles = null;
@@ -27263,6 +27289,63 @@ ${interactionBlock}
             sendBtn.disabled = false;
             sendBtn.textContent = "Send";
           }
+        }
+      }
+      async function triggerMagicFix() {
+        if (aiMagicFixRunning) return;
+        if (!loggedIn || !currentUser) {
+          showLogin();
+          return;
+        }
+        const editor = document.getElementById("builder-code-editor");
+        const canvas = document.getElementById("web-canvas");
+        const magicBtn = document.getElementById("btn-magic-fix");
+        const magicIcon = document.getElementById("magic-fix-icon");
+        const code = buildCodeModeDocument();
+        if (!String(code || "").trim()) {
+          showBuilderSnackbar("No canvas code found for Magic Auto-Fix.", "error");
+          return;
+        }
+        aiMagicFixRunning = true;
+        if (canvas) canvas.classList.add("magic-fix-active");
+        if (magicBtn) magicBtn.disabled = true;
+        if (magicIcon) magicIcon.classList.add("is-spinning");
+        try {
+          const res = await fetch("/api/ai/autofix", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ currentCode: code }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data.success) {
+            if (data.limitReached) {
+              openUpgradeModal();
+              showBuilderSnackbar("Daily Auto-Fix credits reached. Upgrade to Pro.", "error");
+              return;
+            }
+            throw new Error(data.message || "Magic Auto-Fix failed.");
+          }
+          aiActiveModel = String(data.modelUsed || "deepseek-r1-distill-llama-70b");
+          if (data.creditsRemaining !== undefined) aiCreditsRemaining = data.creditsRemaining;
+          if (editor) {
+            editor.value = String(data.updatedCode || "");
+            handleBuilderCodeInput();
+          }
+          applyCodeModeToCanvas();
+          aiChatMessages.push({
+            role: "assistant",
+            text: "Magic Auto-Fix applied successfully with " + aiActiveModel + ".",
+          });
+          renderBuilderAiChat();
+          showBuilderSnackbar("Magic Auto-Fix complete.", "success");
+        } catch (error) {
+          showBuilderSnackbar(error.message || "Magic Auto-Fix failed.", "error");
+        } finally {
+          aiMagicFixRunning = false;
+          if (canvas) canvas.classList.remove("magic-fix-active");
+          if (magicBtn) magicBtn.disabled = false;
+          if (magicIcon) magicIcon.classList.remove("is-spinning");
         }
       }
       function refreshBuilderCodeMode() {

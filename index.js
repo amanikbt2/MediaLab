@@ -3635,7 +3635,7 @@ app.post("/api/ai/chat-edit", async (req, res) => {
               {
                 role: "system",
                 content:
-                  "You are the MediaLab AI Architect. Return ONLY raw HTML and Tailwind CSS code. No markdown, no backticks. Ensure you maintain the 'ml-container' and 'ml-content' class structure for visual builder parsing.",
+                  "You are the MediaLab AI Architect. Return ONLY raw HTML and Tailwind CSS code. No markdown, no backticks. You can refactor code, generate full templates, and apply design updates like online background images via valid image URLs. Always return valid, renderable HTML that works immediately in MediaLab. Preserve existing element IDs whenever possible. Preserve and/or produce 'ml-container' and 'ml-content' class structure so the visual builder can map objects accurately.",
               },
               {
                 role: "user",
@@ -3649,7 +3649,9 @@ app.post("/api/ai/chat-edit", async (req, res) => {
           throw new Error(errText || `Groq request failed for ${model.modelId}`);
         }
         const payload = await groqResponse.json();
-        const content = String(payload?.choices?.[0]?.message?.content || "").trim();
+        const content = String(payload?.choices?.[0]?.message?.content || "")
+          .replace(/<think>[\s\S]*?<\/think>/g, "")
+          .trim();
         if (!content) {
           throw new Error(`Empty completion from ${model.modelId}`);
         }
@@ -3692,6 +3694,98 @@ app.post("/api/ai/chat-edit", async (req, res) => {
     res.status(500).json({
       success: false,
       message: error.message || "AI edit failed.",
+    });
+  }
+});
+
+app.post("/api/ai/autofix", async (req, res) => {
+  try {
+    if (!req.isAuthenticated?.() || !req.user?._id) {
+      return res.status(401).json({ success: false, message: "Login required." });
+    }
+    if (!GROQ_API_KEY) {
+      return res.status(500).json({
+        success: false,
+        message: "Missing GROQ_API_KEY configuration.",
+      });
+    }
+    const currentCode = String(req.body?.currentCode || "").trim();
+    if (!currentCode) {
+      return res.status(400).json({ success: false, message: "Current code is required." });
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found." });
+    }
+    if (!user.aiQuota) {
+      user.aiQuota = { dailyLimit: 10, usedToday: 0, lastUsed: null };
+    }
+    const now = new Date();
+    const today = now.toDateString();
+    const lastUsedDay = user.aiQuota.lastUsed ? new Date(user.aiQuota.lastUsed).toDateString() : "";
+    if (today !== lastUsedDay) {
+      user.aiQuota.usedToday = 0;
+    }
+    const dailyLimit = Number(user.aiQuota.dailyLimit ?? 10);
+    const usedToday = Number(user.aiQuota.usedToday ?? 0);
+    if (!user.isPro && usedToday >= dailyLimit) {
+      return res.status(403).json({
+        success: false,
+        limitReached: true,
+        message: "Daily AI credits reached. Upgrade to MediaLab Pro.",
+      });
+    }
+
+    const groqResponse = await nodeFetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${GROQ_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: "deepseek-r1-distill-llama-70b",
+        temperature: 0.15,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are the MediaLab UI Surgeon. Your task is to refactor the user's code to be modern, scalable, and professional. Fix overlapping elements and CSS layout conflicts. Optimize Tailwind CSS classes for responsiveness. Return ONLY raw HTML and Tailwind code. Do NOT use markdown backticks or triple quotes. Preserve all 'ml-container' and 'ml-content' IDs so the visual builder can re-map the objects.",
+          },
+          {
+            role: "user",
+            content: `Refactor and auto-fix this canvas code:\n${currentCode}`,
+          },
+        ],
+      }),
+    });
+    if (!groqResponse.ok) {
+      const errText = await groqResponse.text();
+      throw new Error(errText || "Groq Auto-Fix request failed.");
+    }
+    const payload = await groqResponse.json();
+    const rawContent = String(payload?.choices?.[0]?.message?.content || "");
+    const sanitizedContent = rawContent.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+    if (!sanitizedContent) {
+      throw new Error("Auto-Fix returned empty content.");
+    }
+
+    user.aiQuota.usedToday = Number(user.aiQuota.usedToday || 0) + 1;
+    user.aiQuota.lastUsed = now;
+    await user.save();
+
+    return res.json({
+      success: true,
+      updatedCode: sanitizedContent,
+      modelUsed: "deepseek-r1-distill-llama-70b",
+      creditsRemaining: user.isPro
+        ? null
+        : Math.max(0, Number(user.aiQuota.dailyLimit || 10) - Number(user.aiQuota.usedToday || 0)),
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message || "Magic Auto-Fix failed.",
     });
   }
 });
