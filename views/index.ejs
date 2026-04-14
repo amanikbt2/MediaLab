@@ -22437,22 +22437,58 @@ console.log("Triggered ${eventName}", { source, event });
       function handleBuilderFileImport(file) {
         if (!file) return;
         const reader = new FileReader();
-        reader.onload = (e) => {
+        reader.onload = async (e) => {
           const text = e.target?.result;
           const editor = document.getElementById("builder-code-editor");
           if (typeof text !== "string" || !editor) return;
-          builderImportedProject = null;
-          builderCodeMode = true;
-          updateBuilderUI();
-          editor.value = text;
-          handleBuilderCodeInput();
           try {
-            applyCodeModeToCanvas();
+            const sourceName = String(file?.name || "page.html").trim() || "page.html";
+            beginUniversalProgress(`Importing ${sourceName}...`, 10, 96);
+            ensureBuilderProjectFiles();
+            updateUniversalProgress(18, "Preparing project files...");
+            const normalizedSource = sourceName.replace(/\\/g, "/").split("/").pop() || "page.html";
+            const hasHtmlExtension = /\.html?$/i.test(normalizedSource);
+            const baseName = normalizedSource.replace(/\.[^.]+$/, "") || "page";
+            const safeBaseName = baseName
+              .replace(/[^\w\-]+/g, "-")
+              .replace(/-+/g, "-")
+              .replace(/^-+|-+$/g, "")
+              .toLowerCase() || "page";
+            const importedFileName = `imported-${safeBaseName}${hasHtmlExtension ? normalizedSource.slice(normalizedSource.lastIndexOf(".")) : ".html"}`;
+            const targetFolderPath = normalizeBuilderFilePath(
+              selectedBuilderFolderPath || getBuilderParentFolderPath(activeBuilderFilePath || "index.html") || "",
+            );
+            const importedFilePath = addBuilderNodeToFolder(
+              createBuilderFileNode(importedFileName, text),
+              targetFolderPath,
+            );
+            switchBuilderProjectFile(importedFilePath);
+            builderImportedProject = null;
+            const converted = tryApplyCodeModeToCanvas({
+              silent: true,
+              onProgress: (percent = 0, message = "Processing imported HTML...") => {
+                updateUniversalProgress(percent, message);
+              },
+            });
+            preserveBuilderFullscreenAfterUpload();
+            if (converted) {
+              completeUniversalProgress(`Imported ${importedFileName} as editable objects.`);
+              showBuilderSnackbar(
+                `Imported as ${importedFileName} and converted into editable builder objects.`,
+                "success",
+              );
+            } else {
+              failUniversalProgress("Import completed, but object conversion was limited.");
+              showBuilderSnackbar(
+                `Imported ${importedFileName}, but full object conversion could not complete.`,
+                "error",
+              );
+            }
           } catch (_error) {
+            failUniversalProgress("HTML import failed.");
             renderRawImportedHtmlPreview(text);
+            showBuilderSnackbar("Import failed while processing HTML.", "error");
           }
-          preserveBuilderFullscreenAfterUpload();
-          showBuilderSnackbar("HTML imported into the editor and rendered visually.", "success");
         };
         reader.readAsText(file);
       }
@@ -22861,12 +22897,17 @@ console.log("Triggered ${eventName}", { source, event });
           ":scope > .canvas-element",
         ).length;
         const finishStarterInsert = (options = {}) => {
-          autoGroupStarterElements(startCount);
-          completeUniversalProgress(
-            `${starterLabels[kind] || "Template"} inserted.`,
-          );
-          if (!options.skipTutorialEvent) {
-            handleBuilderTutorialEvent("starter-inserted", { kind });
+          try {
+            autoGroupStarterElements(startCount);
+            if (!options.skipTutorialEvent) {
+              handleBuilderTutorialEvent("starter-inserted", { kind });
+            }
+          } catch (error) {
+            console.error("Post-insert starter workflow failed:", error);
+          } finally {
+            completeUniversalProgress(
+              `${starterLabels[kind] || "Template"} inserted.`,
+            );
           }
         };
         if (kind === "hero") {
@@ -23334,6 +23375,8 @@ console.log("Triggered ${eventName}", { source, event });
           finishStarterInsert();
           return;
         }
+        failUniversalProgress("Template insertion failed.");
+        showBuilderSnackbar("Could not insert that template block.", "error");
       }
       // ====================== 4. CONTEXTUAL MICRO-INSPECTOR ======================
       function openSmartInspector(type, existingEl = null) {
@@ -26023,7 +26066,7 @@ console.log("Triggered ${eventName}", { source, event });
           Boolean(styleMap["z-index"])
         );
       }
-      function buildSyntheticImportNode(sourceNode, index, stackedTop = 32) {
+      function buildSyntheticImportNode(sourceNode, index, stackedTop = 32, layout = {}) {
         const type = inferBuilderImportType(sourceNode);
         const wrapper = document.createElement("div");
         const clonedContent = sourceNode.cloneNode(true);
@@ -26031,6 +26074,10 @@ console.log("Triggered ${eventName}", { source, event });
           .querySelectorAll("script,style,link,meta,noscript,template")
           .forEach((node) => node.remove());
         const currentStyle = String(sourceNode.getAttribute("style") || "").trim();
+        const measuredLeft = Math.max(0, Number(layout?.left || 0));
+        const measuredTop = Math.max(0, Number(layout?.top || stackedTop));
+        const measuredWidth = Math.max(40, Number(layout?.width || 0));
+        const measuredHeight = Math.max(24, Number(layout?.height || 0));
         const widthByType = {
           text: "460px",
           button: "220px",
@@ -26057,10 +26104,10 @@ console.log("Triggered ${eventName}", { source, event });
           "style",
           [
             "position: absolute",
-            `left: 32px`,
-            `top: ${stackedTop}px`,
-            `width: ${widthByType[type] || "460px"}`,
-            `height: ${heightByType[type] || "180px"}`,
+            `left: ${measuredLeft || 32}px`,
+            `top: ${measuredTop || 32}px`,
+            `width: ${measuredWidth || Number.parseFloat(widthByType[type] || "460") || 460}px`,
+            `height: ${measuredHeight || Number.parseFloat(heightByType[type] || "180") || 180}px`,
             currentStyle,
           ]
             .filter(Boolean)
@@ -26068,6 +26115,47 @@ console.log("Triggered ${eventName}", { source, event });
         );
         wrapper.innerHTML = clonedContent.outerHTML;
         return wrapper;
+      }
+      function buildMeasuredImportLayoutMap(doc) {
+        const sourceNodes = getImportableBodyNodes(doc);
+        if (!sourceNodes.length) return [];
+        const host = document.createElement("div");
+        host.style.cssText = [
+          "position: fixed",
+          "left: -20000px",
+          "top: 0",
+          "width: 1366px",
+          "min-height: 900px",
+          "visibility: hidden",
+          "pointer-events: none",
+          "overflow: hidden",
+          "z-index: -1",
+          "background: #fff",
+        ].join("; ");
+        const styleBundle = document.createElement("style");
+        styleBundle.textContent = Array.from(doc.querySelectorAll("style"))
+          .map((node) => node.textContent || "")
+          .join("\n");
+        const root = document.createElement("div");
+        root.innerHTML = String(doc.body?.innerHTML || "");
+        host.appendChild(styleBundle);
+        host.appendChild(root);
+        document.body.appendChild(host);
+        try {
+          const measuredNodes = getImportableBodyNodes({ body: root });
+          const rootRect = root.getBoundingClientRect();
+          return measuredNodes.map((node) => {
+            const rect = node.getBoundingClientRect();
+            return {
+              left: Math.max(0, rect.left - rootRect.left),
+              top: Math.max(0, rect.top - rootRect.top),
+              width: Math.max(40, rect.width || node.offsetWidth || 0),
+              height: Math.max(24, rect.height || node.offsetHeight || 0),
+            };
+          });
+        } finally {
+          host.remove();
+        }
       }
       function isAutoGeneratedBuilderId(value = "") {
         const id = String(value || "").trim();
@@ -26100,12 +26188,15 @@ console.log("Triggered ${eventName}", { source, event });
       }
       function buildSyntheticImportNodesFromDocument(doc) {
         const sourceNodes = getImportableBodyNodes(doc);
+        const measuredLayout = buildMeasuredImportLayoutMap(doc);
         let stackedTop = 32;
         return sourceNodes.map((sourceNode, index) => {
-          if (sourceNodeLooksLayoutReady(sourceNode)) {
-            return sourceNode.cloneNode(true);
-          }
-          const node = buildSyntheticImportNode(sourceNode, index, stackedTop);
+          const node = buildSyntheticImportNode(
+            sourceNode,
+            index,
+            stackedTop,
+            measuredLayout[index] || {},
+          );
           stackedTop += inferBuilderImportType(sourceNode) === "text"
             ? 130
             : ["button", "a"].includes(inferBuilderImportType(sourceNode))
@@ -26874,16 +26965,25 @@ ${interactionBlock}
         if (tag === "input") return content.getAttribute("type") || "input";
         return content.textContent?.trim() ? "text" : "div";
       }
-      function importCodeNodesToCanvas(nodes) {
+      function importCodeNodesToCanvas(nodes, options = {}) {
         const canvas = document.getElementById("web-canvas");
         if (!canvas) return;
+        const reportProgress =
+          typeof options?.onProgress === "function"
+            ? options.onProgress
+            : null;
         builderImportedProject = null;
         builderRawImportDocument = "";
         canvas.innerHTML = "";
         ensureBuilderGuides(canvas);
         initCanvasSelection(canvas);
+        const totalNodes = Math.max(1, Array.isArray(nodes) ? nodes.length : 0);
         nodes.forEach((node, index) => {
           if (!(node instanceof HTMLElement)) return;
+          reportProgress?.(
+            Math.min(92, 42 + Math.round(((index + 1) / totalNodes) * 48)),
+            `Building draggable objects (${index + 1}/${totalNodes})...`,
+          );
           const type = detectImportedCanvasType(node);
           const wrapper = document.createElement("div");
           wrapper.id = node.id || `imported_${Date.now()}_${index}`;
@@ -26949,21 +27049,32 @@ ${interactionBlock}
         if (persistHistory) saveToHistory();
         updateBuilderUI();
       }
-      function tryApplyCodeModeToCanvas(silent = false) {
+      function tryApplyCodeModeToCanvas(config = false) {
+        const options =
+          typeof config === "object" && config !== null
+            ? config
+            : { silent: Boolean(config) };
+        const silent = Boolean(options.silent);
+        const reportProgress =
+          typeof options?.onProgress === "function"
+            ? options.onProgress
+            : null;
         const editor = document.getElementById("builder-code-editor");
-        if (!editor) return;
+        if (!editor) return false;
         const activePath = normalizeBuilderFilePath(activeBuilderFilePath || "index.html");
         if (isBuilderCodeOnlyFile(activePath)) {
           updateBuilderFileContent(activePath, editor.value);
           if (!silent) {
             showBuilderSnackbar(`${activePath} updated.`, "success");
           }
-          return;
+          return false;
         }
+        reportProgress?.(24, "Parsing imported HTML...");
         const parser = new DOMParser();
         const doc = parser.parseFromString(editor.value, "text/html");
         updateBuilderFileContent(activePath, editor.value);
         applyCanvasPageBackground(extractBodyBackgroundFromDocument(doc), true);
+        reportProgress?.(36, "Mapping DOM into builder graph...");
         const bodyChildren = Array.from(doc.body.children).filter(
           (node) =>
             node.classList.contains("ml-container") ||
@@ -26974,7 +27085,7 @@ ${interactionBlock}
           : buildSyntheticImportNodesFromDocument(doc);
         if (!importNodes.length) {
           renderRawImportedHtmlPreview(buildBuilderRuntimeDocument(activePath, editor.value), false);
-          return;
+          return false;
         }
         importNodes.forEach((node) => {
           if (node.classList.contains("ml-container")) {
@@ -26982,11 +27093,13 @@ ${interactionBlock}
               "canvas-element absolute group transition-shadow active:cursor-grabbing";
           }
         });
-        importCodeNodesToCanvas(importNodes);
+        importCodeNodesToCanvas(importNodes, { onProgress: reportProgress });
         builderRawImportDocument = "";
+        reportProgress?.(98, "Finalizing editable canvas...");
         if (!silent) {
           showBuilderSnackbar("Code converted into editable visual blocks.", "success");
         }
+        return true;
       }
       function applyCodeModeToCanvas() {
         tryApplyCodeModeToCanvas(false);
