@@ -27328,14 +27328,7 @@ ${interactionBlock}
         }
         messagesEl.innerHTML = rows.join("") || fallback;
         messagesEl.scrollTop = messagesEl.scrollHeight;
-        statusEl.innerHTML =
-          '<span class="ai-agent-stage ' +
-          (aiAgentStage === "idle" || aiAgentStage === "done" ? "is-idle" : "") +
-          '"><span class="ai-agent-stage-ring"></span><span>Model: ' +
-          escapeHtmlText(aiActiveModel || "standby") +
-          " · " +
-          escapeHtmlText(stageText) +
-          "</span></span>";
+        statusEl.textContent = "Model: " + (aiActiveModel || "standby");
         creditsEl.textContent =
           aiCreditsRemaining == null
             ? "Credits: Pro"
@@ -27545,6 +27538,13 @@ ${interactionBlock}
         const response = String(responseText || "");
         const applied = [];
         let shouldRefreshCanvas = false;
+        let renderTargetPath = "";
+        const markRenderTarget = (path = "") => {
+          const normalized = normalizeBuilderFilePath(path);
+          if (!normalized || !isBuilderHtmlFile(normalized)) return;
+          if (!renderTargetPath) renderTargetPath = normalized;
+          shouldRefreshCanvas = true;
+        };
         const jsonActions = extractAgentActionBlocks(response);
         jsonActions.forEach((action) => {
           const type = String(action?.type || "").trim().toUpperCase();
@@ -27570,13 +27570,13 @@ ${interactionBlock}
               updateBuilderFileContent(targetPath, content);
             }
             applied.push(`${type} ${targetPath}`);
+            markRenderTarget(targetPath);
             if (targetPath === normalizeBuilderFilePath(activeBuilderFilePath || "")) {
               const editor = document.getElementById("builder-code-editor");
               if (editor) {
                 editor.value = content;
                 handleBuilderCodeInput();
               }
-              shouldRefreshCanvas = true;
             }
             return;
           }
@@ -27586,7 +27586,7 @@ ${interactionBlock}
             if (selector === "body" && styles.background) {
               applyCanvasPageBackground(String(styles.background), true);
               applied.push("UPDATE_CSS body");
-              shouldRefreshCanvas = true;
+              markRenderTarget(normalizeBuilderFilePath(activeBuilderFilePath || "index.html") || "index.html");
             }
             return;
           }
@@ -27603,6 +27603,7 @@ ${interactionBlock}
             }
             applied.push("EDIT_CANVAS");
             shouldRefreshCanvas = true;
+            markRenderTarget(normalizeBuilderFilePath(activeBuilderFilePath || "index.html") || "index.html");
           }
         });
         const updateOrCreateRegex =
@@ -27623,13 +27624,13 @@ ${interactionBlock}
             updateBuilderFileContent(targetPath, content);
           }
           applied.push(`${action} ${targetPath}`);
+          markRenderTarget(targetPath);
           if (targetPath === normalizeBuilderFilePath(activeBuilderFilePath || "")) {
             const editor = document.getElementById("builder-code-editor");
             if (editor) {
               editor.value = content;
               handleBuilderCodeInput();
             }
-            shouldRefreshCanvas = true;
           }
         }
         const folderRegex = /CREATE_FOLDER:\s*([^\n\r]+)/g;
@@ -27646,22 +27647,30 @@ ${interactionBlock}
           const instruction = String(match[1] || "").trim();
           if (!instruction) continue;
           applied.push("EDIT_CANVAS");
-          shouldRefreshCanvas = true;
+          markRenderTarget(normalizeBuilderFilePath(activeBuilderFilePath || "index.html") || "index.html");
         }
         // Smart fallback: if no structured actions were returned but raw HTML is present,
         // apply directly to current file and rebuild canvas objects immediately.
         if (!applied.length && /<(?:!doctype|html|head|body|div|section|main|style|script)[\s>]/i.test(response)) {
+          const firstTagIndex = response.indexOf("<");
+          const htmlPayload = firstTagIndex >= 0 ? response.slice(firstTagIndex).trim() : response.trim();
           const activePath = normalizeBuilderFilePath(activeBuilderFilePath || "index.html") || "index.html";
-          updateBuilderFileContent(activePath, response);
+          updateBuilderFileContent(activePath, htmlPayload);
           const editor = document.getElementById("builder-code-editor");
           if (editor) {
-            editor.value = response;
+            editor.value = htmlPayload;
             handleBuilderCodeInput();
           }
           applied.push(`UPDATE_FILE ${activePath}`);
-          shouldRefreshCanvas = true;
+          markRenderTarget(activePath);
         }
         if (applied.length) {
+          if (renderTargetPath && normalizeBuilderFilePath(activeBuilderFilePath || "") !== renderTargetPath) {
+            activeBuilderFilePath = renderTargetPath;
+            selectedBuilderFilePath = renderTargetPath;
+            selectedBuilderFolderPath = getBuilderParentFolderPath(renderTargetPath);
+            loadBuilderFileIntoWorkspace(renderTargetPath);
+          }
           renderBuilderProjectExplorer();
           if (shouldRefreshCanvas) applyCodeModeToCanvas();
           const canvas = document.getElementById("web-canvas");
