@@ -17033,7 +17033,7 @@
                 </div>
                 <input type="file" id="local-img-input" accept="image/*" class="hidden" onchange="handleLocalImage(this.files[0])">
                 <input type="file" id="inspector-bg-img-input" accept="image/*" class="hidden" onchange="handleInspectorBackgroundImage(this.files[0])">
-                <input type="file" id="builder-file-input" accept=".html,.htm,.txt" class="hidden" onchange="handleBuilderFileImport(this.files[0])">
+                <input type="file" id="builder-file-input" accept=".html,.htm,.ejs,.txt" class="hidden" onchange="handleBuilderFileImport(this.files[0])">
                 <input type="file" id="builder-folder-input" webkitdirectory directory multiple class="hidden" onchange="handleBuilderFolderImport(this.files)">
             </div>
             <div id="smart-inspector" class="hidden fixed inset-0 bg-black/60 backdrop-blur-md z-[150] flex items-center justify-center p-4">
@@ -19082,7 +19082,7 @@
         return dotIndex >= 0 ? normalized.slice(dotIndex + 1).toLowerCase() : "";
       }
       function isBuilderHtmlFile(path = "") {
-        return ["html", "htm"].includes(getBuilderFileExtension(path));
+        return ["html", "htm", "ejs"].includes(getBuilderFileExtension(path));
       }
       function isBuilderCodeOnlyFile(path = "") {
         return ["css", "js"].includes(getBuilderFileExtension(path));
@@ -22314,7 +22314,7 @@ console.log("Triggered ${eventName}", { source, event });
             ensureBuilderProjectFiles();
             updateUniversalProgress(18, "Preparing project files...");
             const normalizedSource = sourceName.replace(/\\/g, "/").split("/").pop() || "page.html";
-            const hasHtmlExtension = /\.html?$/i.test(normalizedSource);
+            const hasHtmlExtension = /\.(html?|ejs)$/i.test(normalizedSource);
             const baseName = normalizedSource.replace(/\.[^.]+$/, "") || "page";
             const safeBaseName = baseName
               .replace(/[^\w\-]+/g, "-")
@@ -22482,13 +22482,13 @@ console.log("Triggered ${eventName}", { source, event });
           );
         }
         const htmlEntries = normalizedFiles.filter(({ path }) =>
-          /\.html?$/i.test(path),
+          /\.(html?|ejs)$/i.test(path),
         );
         if (!htmlEntries.length) {
           throw new Error("The selected folder does not contain an HTML entry file.");
         }
         const preferredHtml =
-          htmlEntries.find(({ path }) => /(^|\/)index\.html?$/i.test(path)) ||
+          htmlEntries.find(({ path }) => /(^|\/)index\.(html?|ejs)$/i.test(path)) ||
           htmlEntries[0];
         const rootFolder =
           preferredHtml.path.includes("/")
