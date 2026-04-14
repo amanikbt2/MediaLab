@@ -54,26 +54,34 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "spiderman";
 const ADMIN_EMAIL = String(process.env.ADMIN_EMAIL || "dev@gmail.com").trim().toLowerCase();
 const AI_MODEL_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const AI_MODEL_REGISTRY = [
-  { modelId: "llama-3.3-70b-versatile", provider: "groq", priority: 1 },
-  { modelId: "deepseek-r1-distill-llama-70b", provider: "groq", priority: 2 },
-  { modelId: "llama-3.1-8b-instant", provider: "groq", priority: 3 },
-  { modelId: "qwen-qwq-32b", provider: "groq", priority: 4 },
-  { modelId: "qwen-2.5-32b-instruct", provider: "groq", priority: 5 },
-  { modelId: "qwen-2.5-coder-32b", provider: "groq", priority: 6 },
-  { modelId: "gemma2-9b-it", provider: "groq", priority: 7 },
-  { modelId: "llama3-70b-8192", provider: "groq", priority: 8 },
-  { modelId: "llama3-8b-8192", provider: "groq", priority: 9 },
+  { modelId: "openai/gpt-oss-120b", provider: "groq", priority: 1 },
+  { modelId: "moonshotai/kimi-k2-instruct-0905", provider: "groq", priority: 2 },
+  { modelId: "meta-llama/llama-4-scout-17b-16e-instruct", provider: "groq", priority: 3 },
+  { modelId: "llama-3.3-70b-versatile", provider: "groq", priority: 4 },
+  { modelId: "qwen/qwen3-32b", provider: "groq", priority: 5 },
+  { modelId: "moonshotai/kimi-k2-instruct", provider: "groq", priority: 6 },
+  { modelId: "openai/gpt-oss-20b", provider: "groq", priority: 7 },
+  { modelId: "groq/compound", provider: "groq", priority: 8 },
+  { modelId: "groq/compound-mini", provider: "groq", priority: 9 },
+  { modelId: "llama-3.1-8b-instant", provider: "groq", priority: 10 },
+  { modelId: "canopylabs/orpheus-v1-english", provider: "groq", priority: 11 },
+  { modelId: "canopylabs/orpheus-arabic-saudi", provider: "groq", priority: 12 },
+  { modelId: "allam-2-7b", provider: "groq", priority: 13 },
 ];
 const AI_MODEL_PREFERRED_ORDER = [
+  "openai/gpt-oss-120b",
+  "moonshotai/kimi-k2-instruct-0905",
+  "meta-llama/llama-4-scout-17b-16e-instruct",
   "llama-3.3-70b-versatile",
-  "deepseek-r1-distill-llama-70b",
+  "qwen/qwen3-32b",
+  "moonshotai/kimi-k2-instruct",
+  "openai/gpt-oss-20b",
+  "groq/compound",
+  "groq/compound-mini",
   "llama-3.1-8b-instant",
-  "qwen-qwq-32b",
-  "qwen-2.5-32b-instruct",
-  "qwen-2.5-coder-32b",
-  "gemma2-9b-it",
-  "llama3-70b-8192",
-  "llama3-8b-8192",
+  "canopylabs/orpheus-v1-english",
+  "canopylabs/orpheus-arabic-saudi",
+  "allam-2-7b",
 ];
 
 app.engine("ejs", (filePath, _options, callback) => {
@@ -107,6 +115,36 @@ let virtualDbConnectionState = null;
 const GROQ_API_KEY = String(process.env.GROQ_API_KEY || process.env.grog || "").trim();
 let aiModelsLastRefreshedAt = 0;
 let aiModelsRefreshTimer = null;
+const aiModelCooldownUntil = new Map();
+
+function parseRateLimitRetryMs(errorMessage = "") {
+  const text = String(errorMessage || "");
+  const match = text.match(/try again in\s+([0-9]+(?:\.[0-9]+)?)s/i);
+  const seconds = Number(match?.[1] || 0);
+  if (!Number.isFinite(seconds) || seconds <= 0) return 45_000;
+  return Math.max(5_000, Math.min(180_000, Math.round(seconds * 1000)));
+}
+
+function buildEligibleAiModels(models = []) {
+  const now = Date.now();
+  const onlinePreferred = [];
+  const activeFallback = [];
+  for (const model of Array.isArray(models) ? models : []) {
+    const modelId = String(model?.modelId || "").trim();
+    if (!modelId) continue;
+    const coolUntil = Number(aiModelCooldownUntil.get(modelId) || 0);
+    if (coolUntil > now) continue;
+    if (String(model?.status || "").toLowerCase() === "online") {
+      onlinePreferred.push(model);
+    } else {
+      activeFallback.push(model);
+    }
+  }
+  const ordered = [...onlinePreferred, ...activeFallback];
+  if (ordered.length) return ordered;
+  // If everything is cooling down, still probe all candidates to avoid deadlock.
+  return Array.isArray(models) ? models : [];
+}
 
 function getAiContextExpiryDate() {
   return new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -192,11 +230,19 @@ function buildPriorityForModel(modelId = "") {
 function isLikelyChatModel(modelId = "") {
   const id = String(modelId || "").toLowerCase();
   if (!id) return false;
+  if (id.includes("whisper")) return false;
+  if (id.includes("prompt-guard")) return false;
+  if (id.includes("safeguard")) return false;
   return (
     id.includes("llama") ||
     id.includes("deepseek") ||
     id.includes("qwen") ||
-    id.includes("gemma")
+    id.includes("gemma") ||
+    id.includes("gpt-oss") ||
+    id.includes("kimi") ||
+    id.includes("compound") ||
+    id.includes("allam") ||
+    id.includes("orpheus")
   );
 }
 
@@ -3786,22 +3832,18 @@ app.post("/api/ai/chat-edit", async (req, res) => {
     const contextCode = currentCode || storedContextCode;
 
     let modelRecoveryUsed = false;
-    let models = await AIModel.find({ isActive: true, status: "online" })
-      .sort({ priority: 1 })
+    let models = await AIModel.find({ isActive: true })
+      .sort({ priority: 1, status: -1, modelId: 1 })
       .lean();
+    models = buildEligibleAiModels(models);
     if (!models.length) {
       // Self-heal: force a fresh model sync, then probe active models anyway.
       modelRecoveryUsed = true;
       await refreshAIModelsRegistryIfNeeded(true);
-      models = await AIModel.find({ isActive: true, status: "online" })
-        .sort({ priority: 1 })
-        .lean();
-    }
-    if (!models.length) {
-      modelRecoveryUsed = true;
       models = await AIModel.find({ isActive: true })
-        .sort({ priority: 1, lastTested: 1, modelId: 1 })
+        .sort({ priority: 1, status: -1, modelId: 1 })
         .lean();
+      models = buildEligibleAiModels(models);
     }
     if (!models.length) {
       return res.status(503).json({
@@ -3895,6 +3937,7 @@ app.post("/api/ai/chat-edit", async (req, res) => {
         if (hitRateLimit) {
           modelSwitchUsed = true;
           modelSwitchReason = "rate_limit";
+          aiModelCooldownUntil.set(model.modelId, Date.now() + parseRateLimitRetryMs(modelError?.message));
         }
         await createUsageLog({
           user,
@@ -4045,21 +4088,17 @@ app.post("/api/ai/autofix", async (req, res) => {
     }
 
     let modelRecoveryUsed = false;
-    let models = await AIModel.find({ isActive: true, status: "online" })
-      .sort({ priority: 1 })
+    let models = await AIModel.find({ isActive: true })
+      .sort({ priority: 1, status: -1, modelId: 1 })
       .lean();
+    models = buildEligibleAiModels(models);
     if (!models.length) {
       modelRecoveryUsed = true;
       await refreshAIModelsRegistryIfNeeded(true);
-      models = await AIModel.find({ isActive: true, status: "online" })
-        .sort({ priority: 1 })
-        .lean();
-    }
-    if (!models.length) {
-      modelRecoveryUsed = true;
       models = await AIModel.find({ isActive: true })
-        .sort({ priority: 1, lastTested: 1, modelId: 1 })
+        .sort({ priority: 1, status: -1, modelId: 1 })
         .lean();
+      models = buildEligibleAiModels(models);
     }
     if (!models.length) {
       return res.status(503).json({
@@ -4122,6 +4161,7 @@ app.post("/api/ai/autofix", async (req, res) => {
         if (hitRateLimit) {
           modelSwitchUsed = true;
           modelSwitchReason = "rate_limit";
+          aiModelCooldownUntil.set(model.modelId, Date.now() + parseRateLimitRetryMs(error?.message));
         }
         await createUsageLog({
           user,
