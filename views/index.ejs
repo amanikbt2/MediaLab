@@ -17129,7 +17129,10 @@
                         <p class="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-300">MediaLab AI Architect</p>
                         <p id="ai-status-indicator" class="text-[10px] text-slate-400">Model: standby</p>
                     </div>
-                    <span id="ai-credits-badge" class="rounded-full border border-cyan-400/30 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-cyan-200">Credits: --</span>
+                    <div class="flex items-center gap-2">
+                        <span id="ai-recovery-badge" class="hidden rounded-full border border-amber-400/30 bg-amber-500/10 px-2 py-1 text-[9px] font-black uppercase tracking-[0.14em] text-amber-200">Recovering model...</span>
+                        <span id="ai-credits-badge" class="rounded-full border border-cyan-400/30 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-cyan-200">Credits: --</span>
+                    </div>
                 </div>
                 <div id="ai-chat-messages" class="ai-chat-messages"></div>
                 <div class="px-3 pb-3 pt-2 border-t border-white/10">
@@ -19255,6 +19258,7 @@
       let aiLastContextFingerprint = "";
       let aiHiddenAgentContext = "";
       let aiAgentStage = "idle";
+      let aiModelRecoveryInFlight = false;
       let aiInfrastructureModels = [];
       let builderStyleSyncTimer = null;
       let builderProjectFiles = null;
@@ -27299,6 +27303,7 @@ ${interactionBlock}
         const messagesEl = document.getElementById("ai-chat-messages");
         const statusEl = document.getElementById("ai-status-indicator");
         const creditsEl = document.getElementById("ai-credits-badge");
+        const recoveryEl = document.getElementById("ai-recovery-badge");
         if (!messagesEl || !statusEl || !creditsEl) return;
         const fallback =
           '<div class="ai-chat-bubble assistant">Hi! I can chat, plan, and apply builder fixes. Tell me your goal (for example: "build a SaaS hero", "set a cat background", or just "hello").</div>';
@@ -27333,6 +27338,7 @@ ${interactionBlock}
           aiCreditsRemaining == null
             ? "Credits: Pro"
             : "Credits: " + String(Math.max(0, Number(aiCreditsRemaining || 0)));
+        if (recoveryEl) recoveryEl.classList.toggle("hidden", !aiModelRecoveryInFlight);
       }
       function setAiAgentStage(stage = "idle") {
         aiAgentStage = String(stage || "idle").trim().toLowerCase();
@@ -27494,6 +27500,16 @@ ${interactionBlock}
         while ((match = regex.exec(String(responseText || ""))) !== null) {
           const raw = String(match[1] || "").trim();
           if (!raw) continue;
+          const typedMatch = raw.match(/^\{([A-Za-z_][\w-]*)\}\s*(\{[\s\S]*\})$/);
+          if (typedMatch) {
+            const typedType = String(typedMatch[1] || "").trim().toUpperCase();
+            const typedPayload = String(typedMatch[2] || "").trim();
+            try {
+              const parsedPayload = JSON.parse(typedPayload);
+              actions.push({ type: typedType, ...(parsedPayload || {}) });
+              continue;
+            } catch {}
+          }
           try {
             const parsed = JSON.parse(raw);
             if (Array.isArray(parsed)) parsed.forEach((item) => actions.push(item));
@@ -27516,6 +27532,12 @@ ${interactionBlock}
       function inferBackgroundFromPrompt(prompt = "") {
         const text = String(prompt || "").toLowerCase();
         if (!text.includes("background")) return "";
+        if (/\b(image|photo|picture|wallpaper)\b/.test(text)) {
+          if (text.includes("bat")) {
+            return "url('https://source.unsplash.com/1600x900/?bat,dark') center / cover no-repeat";
+          }
+          return "url('https://source.unsplash.com/1600x900/?nature') center / cover no-repeat";
+        }
         const colorMatch = text.match(/\b(green|red|blue|black|white|gray|grey|yellow|purple|pink|orange|teal|cyan)\b/);
         if (!colorMatch) return "";
         const colorMap = {
@@ -27534,6 +27556,62 @@ ${interactionBlock}
           cyan: "#0891b2",
         };
         return colorMap[colorMatch[1]] || "";
+      }
+      function extractBackgroundFromCssSnippet(cssText = "") {
+        const css = String(cssText || "");
+        if (!css) return "";
+        const bodyBlock = css.match(/body\s*\{([\s\S]*?)\}/i);
+        const scope = bodyBlock?.[1] || css;
+        const backgroundMatch = scope.match(/background(?:-image)?\s*:\s*([^;]+);?/i);
+        return String(backgroundMatch?.[1] || "").trim();
+      }
+      function resolveCanvasElementBySelector(selector = "") {
+        const raw = String(selector || "").trim();
+        if (!raw) return null;
+        const canvas = document.getElementById("web-canvas");
+        if (!canvas) return null;
+        if (raw.startsWith("#")) {
+          return canvas.querySelector(raw);
+        }
+        if (/^[A-Za-z0-9_-]+$/.test(raw)) {
+          return canvas.querySelector(`#${raw}`);
+        }
+        try {
+          return canvas.querySelector(raw);
+        } catch {
+          return null;
+        }
+      }
+      function applyElementPositionMove(selector = "", x = null, y = null) {
+        const target = resolveCanvasElementBySelector(selector);
+        if (!target || !target.classList.contains("canvas-element")) return false;
+        const canvas = document.getElementById("web-canvas");
+        const width = Number.parseFloat(target.style.width || target.dataset.mlWidth || "200") || 200;
+        const height = Number.parseFloat(target.style.height || target.dataset.mlHeight || "100") || 100;
+        const canvasWidth = canvas?.clientWidth || 1280;
+        const canvasHeight = canvas?.scrollHeight || canvas?.clientHeight || 720;
+        const nextLeft = Number.isFinite(Number(x)) ? Math.max(50, Math.min(canvasWidth - width, Number(x))) : null;
+        const nextTop = Number.isFinite(Number(y)) ? Math.max(0, Math.min(canvasHeight - height, Number(y))) : null;
+        if (nextLeft == null && nextTop == null) return false;
+        if (nextLeft != null) target.style.left = `${Math.round(nextLeft)}px`;
+        if (nextTop != null) target.style.top = `${Math.round(nextTop)}px`;
+        scheduleSyncStyleTag();
+        return true;
+      }
+      function inferMoveIntent(userPrompt = "") {
+        const text = String(userPrompt || "").toLowerCase();
+        if (!/(move|position|shift)/.test(text)) return null;
+        const selectorMatch =
+          text.match(/(?:element|id)\s+([a-z0-9_-]+)/i) ||
+          text.match(/#([a-z0-9_-]+)/i);
+        const selector = selectorMatch?.[1] ? `#${selectorMatch[1]}` : "";
+        const xMatch = text.match(/\b(?:x|left)\s*[:=]?\s*(-?\d{1,5})\b/i);
+        const yMatch = text.match(/\b(?:y|top)\s*[:=]?\s*(-?\d{1,5})\b/i);
+        const pairMatch = text.match(/\bto\s+(-?\d{1,5})\s*,\s*(-?\d{1,5})\b/i);
+        const x = pairMatch ? Number(pairMatch[1]) : xMatch ? Number(xMatch[1]) : null;
+        const y = pairMatch ? Number(pairMatch[2]) : yMatch ? Number(yMatch[1]) : null;
+        if (!selector || (x == null && y == null)) return null;
+        return { selector, x, y };
       }
       function applyHtmlToActiveBuilderFile(html = "") {
         const nextHtml = String(html || "").trim();
@@ -27656,6 +27734,14 @@ ${interactionBlock}
             const targetPath = normalizeBuilderFilePath(action.path || "");
             const content = String(action.content || "");
             if (!targetPath) return;
+            if (
+              isBuilderHtmlFile(targetPath) &&
+              /\[\/?ACTION\]/i.test(content) &&
+              !/<(?:!doctype|html|head|body|div|section|main|style|script)[\s>]/i.test(content)
+            ) {
+              // Ignore malformed action text accidentally routed as file content.
+              return;
+            }
             const parentParts = splitBuilderFilePath(targetPath);
             const fileName = parentParts.pop() || "file.txt";
             const parentPath = normalizeBuilderFilePath(parentParts.join("/"));
@@ -27682,8 +27768,10 @@ ${interactionBlock}
             const bgValue = String(
               styles.background || styles.backgroundColor || styles["background-color"] || "",
             ).trim();
-            if ((selector === "body" || selector === "html" || selector === ":root") && bgValue) {
-              applyCanvasPageBackground(bgValue, true);
+            const cssSnippetBg = extractBackgroundFromCssSnippet(action.css || "");
+            const resolvedBg = bgValue || cssSnippetBg;
+            if ((selector === "body" || selector === "html" || selector === ":root" || !selector) && resolvedBg) {
+              applyCanvasPageBackground(resolvedBg, true);
               applied.push("UPDATE_CSS body");
               markRenderTarget(normalizeBuilderFilePath(activeBuilderFilePath || "index.html") || "index.html");
             }
@@ -27703,6 +27791,15 @@ ${interactionBlock}
             applied.push("EDIT_CANVAS");
             shouldRefreshCanvas = true;
             markRenderTarget(normalizeBuilderFilePath(activeBuilderFilePath || "index.html") || "index.html");
+          }
+          if (type === "MOVE_ELEMENT" || type === "UPDATE_POSITION") {
+            const selector = String(action.selector || action.id || "").trim();
+            const x = action.x ?? action.left ?? null;
+            const y = action.y ?? action.top ?? null;
+            if (applyElementPositionMove(selector, x, y)) {
+              applied.push(`MOVE_ELEMENT ${selector}`);
+              markRenderTarget(normalizeBuilderFilePath(activeBuilderFilePath || "index.html") || "index.html");
+            }
           }
         });
         const updateOrCreateRegex =
@@ -27784,6 +27881,12 @@ ${interactionBlock}
           showBuilderSnackbar(`[AI Agent]: Successfully patched ${applied.length} action(s).`, "success");
         }
         if (!applied.length && promptText) {
+          const moveIntent = inferMoveIntent(promptText);
+          if (moveIntent && applyElementPositionMove(moveIntent.selector, moveIntent.x, moveIntent.y)) {
+            showBuilderSnackbar("[AI Agent]: Element moved successfully.", "success");
+            applyCodeModeToCanvas();
+            return [`MOVE_ELEMENT ${moveIntent.selector}`];
+          }
           const fallbackActions = runIntentSafetyFallback(promptText);
           if (fallbackActions.length) {
             showBuilderSnackbar("[AI Agent]: Applied recovery patch to canvas.", "success");
@@ -27825,6 +27928,7 @@ ${interactionBlock}
             throw new Error(data.message || "AI Agent request failed.");
           }
           aiActiveModel = String(data.modelUsed || "").trim() || aiActiveModel;
+          if (data.modelRecoveryUsed) aiModelRecoveryInFlight = true;
           if (data.creditsRemaining !== undefined) aiCreditsRemaining = data.creditsRemaining;
           return String(data.assistantReply || "").trim();
         };
@@ -27897,6 +28001,7 @@ ${interactionBlock}
           `<div id="ml-root" class="ml-container"><div class="ml-content">New MediaLab template</div></div>`;
         await syncAiContextSilently();
         aiChatSending = true;
+        aiModelRecoveryInFlight = false;
         if (input) input.value = "";
         if (sendBtn) {
           sendBtn.disabled = true;
@@ -27965,6 +28070,7 @@ ${interactionBlock}
           return;
         }
         aiMagicFixRunning = true;
+        aiModelRecoveryInFlight = false;
         if (canvas) canvas.classList.add("magic-fix-active");
         if (magicBtn) magicBtn.disabled = true;
         if (magicIcon) magicIcon.classList.add("is-spinning");
@@ -27985,6 +28091,7 @@ ${interactionBlock}
             throw new Error(data.message || "Magic Auto-Fix failed.");
           }
           aiActiveModel = String(data.modelUsed || "deepseek-r1-distill-llama-70b");
+          if (data.modelRecoveryUsed) aiModelRecoveryInFlight = true;
           if (data.creditsRemaining !== undefined) aiCreditsRemaining = data.creditsRemaining;
           if (editor) {
             editor.value = String(data.updatedCode || "");

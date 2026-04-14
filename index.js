@@ -3785,13 +3785,28 @@ app.post("/api/ai/chat-edit", async (req, res) => {
     const storedContextCode = await getAIContextCode(userContextKey);
     const contextCode = currentCode || storedContextCode;
 
-    const models = await AIModel.find({ isActive: true, status: "online" })
+    let modelRecoveryUsed = false;
+    let models = await AIModel.find({ isActive: true, status: "online" })
       .sort({ priority: 1 })
       .lean();
     if (!models.length) {
+      // Self-heal: force a fresh model sync, then probe active models anyway.
+      modelRecoveryUsed = true;
+      await refreshAIModelsRegistryIfNeeded(true);
+      models = await AIModel.find({ isActive: true, status: "online" })
+        .sort({ priority: 1 })
+        .lean();
+    }
+    if (!models.length) {
+      modelRecoveryUsed = true;
+      models = await AIModel.find({ isActive: true })
+        .sort({ priority: 1, lastTested: 1, modelId: 1 })
+        .lean();
+    }
+    if (!models.length) {
       return res.status(503).json({
         success: false,
-        message: "All AI models are currently offline.",
+        message: "No active AI models are available right now.",
       });
     }
 
@@ -3918,6 +3933,7 @@ app.post("/api/ai/chat-edit", async (req, res) => {
       assistantReply,
       mode,
       modelUsed,
+      modelRecoveryUsed,
       creditsRemaining: hasUnlimitedAi
         ? null
         : Math.max(0, Number(user.aiQuota.dailyLimit || 10) - Number(user.aiQuota.usedToday || 0)),
@@ -4006,13 +4022,27 @@ app.post("/api/ai/autofix", async (req, res) => {
       });
     }
 
-    const models = await AIModel.find({ isActive: true, status: "online" })
+    let modelRecoveryUsed = false;
+    let models = await AIModel.find({ isActive: true, status: "online" })
       .sort({ priority: 1 })
       .lean();
     if (!models.length) {
+      modelRecoveryUsed = true;
+      await refreshAIModelsRegistryIfNeeded(true);
+      models = await AIModel.find({ isActive: true, status: "online" })
+        .sort({ priority: 1 })
+        .lean();
+    }
+    if (!models.length) {
+      modelRecoveryUsed = true;
+      models = await AIModel.find({ isActive: true })
+        .sort({ priority: 1, lastTested: 1, modelId: 1 })
+        .lean();
+    }
+    if (!models.length) {
       return res.status(503).json({
         success: false,
-        message: "All AI models are currently offline.",
+        message: "No active AI models are available right now.",
       });
     }
     let sanitizedContent = "";
@@ -4099,6 +4129,7 @@ app.post("/api/ai/autofix", async (req, res) => {
       success: true,
       updatedCode: sanitizedContent,
       modelUsed: selectedModel || "unknown",
+      modelRecoveryUsed,
       creditsRemaining: hasUnlimitedAi
         ? null
         : Math.max(0, Number(user.aiQuota.dailyLimit || 10) - Number(user.aiQuota.usedToday || 0)),
