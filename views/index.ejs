@@ -27232,11 +27232,10 @@ ${interactionBlock}
           showLogin();
           return;
         }
-        const currentCode = editor?.value?.trim() || buildCodeModeDocument();
-        if (!currentCode.trim()) {
-          showBuilderSnackbar("Add HTML in builder before using AI Architect.", "error");
-          return;
-        }
+        const currentCode =
+          editor?.value?.trim() ||
+          buildCodeModeDocument() ||
+          `<div id="ml-root" class="ml-container"><div class="ml-content">New MediaLab template</div></div>`;
         aiChatSending = true;
         if (input) input.value = "";
         if (sendBtn) {
