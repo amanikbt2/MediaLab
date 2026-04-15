@@ -1830,8 +1830,10 @@
         opacity: 0;
         visibility: hidden;
         pointer-events: none;
+        display: none;
       }
       .builder-section-view.is-active {
+        display: block;
         opacity: 1;
         visibility: visible;
         pointer-events: auto;
@@ -29139,6 +29141,7 @@ console.log("Triggered ${eventName}", { source, event });
         section.style.top = "0px";
         section.style.width = "100%";
         section.style.height = "100%";
+        section.style.display = "none";
         section.style.zIndex = "1";
         const body = section.querySelector(".element-body");
         if (body) body.innerHTML = "";
@@ -29158,11 +29161,13 @@ console.log("Triggered ${eventName}", { source, event });
         sections.forEach((section) => {
           const isActive = section.id === currentActiveSectionId;
           if (isActive) {
+            section.style.display = "block";
             section.style.opacity = "1";
             section.style.visibility = "visible";
             section.style.pointerEvents = "auto";
             section.style.zIndex = "100";
           } else {
+            section.style.display = "none";
             section.style.opacity = "0";
             section.style.visibility = "hidden";
             section.style.pointerEvents = "none";
@@ -29293,7 +29298,8 @@ console.log("Triggered ${eventName}", { source, event });
       function createNewBuilderSectionFromUI() {
         const name = prompt("New section name:", "New Section");
         if (!name) return;
-        createBuilderSection(name, { skipHistory: false });
+        const newSectionId = createBuilderSection(name, { skipHistory: false });
+        setActiveBuilderSection(newSectionId, { skipHistory: false });
         showBuilderSnackbar("Section created: " + name, "success");
       }
       function createBuilderSection(sectionName = "Section", options = {}) {
@@ -32874,7 +32880,7 @@ ${interactionBlock}
             throw new Error(data.message || "Magic Auto-Fix failed.");
           }
           aiActiveModel = String(
-            data.modelUsed || "deepseek-r1-distill-llama-70b",
+            data.modelUsed || "openai/gpt-oss-120b",
           );
           if (data.modelRecoveryUsed) aiModelRecoveryInFlight = true;
           if (data.modelSwitchUsed && data.modelSwitchReason === "rate_limit") {

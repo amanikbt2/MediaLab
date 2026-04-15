@@ -55,46 +55,31 @@ const ADMIN_EMAIL = String(process.env.ADMIN_EMAIL || "dev@gmail.com")
   .toLowerCase();
 const AI_MODEL_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const AI_MODEL_REGISTRY = [
+  // Production Models (100% Guaranteed) - Fastest & Most Reliable
   { modelId: "openai/gpt-oss-120b", provider: "groq", priority: 1 },
-  {
-    modelId: "moonshotai/kimi-k2-instruct-0905",
-    provider: "groq",
-    priority: 2,
-  },
+  { modelId: "openai/gpt-oss-20b", provider: "groq", priority: 2 },
+  { modelId: "llama-3.3-70b-versatile", provider: "groq", priority: 3 },
+  { modelId: "llama-3.1-8b-instant", provider: "groq", priority: 4 },
+  // Agentic Systems (Compound AI)
+  { modelId: "groq/compound", provider: "groq", priority: 5 },
+  { modelId: "groq/compound-mini", provider: "groq", priority: 6 },
+  // Preview Models (Latest with Excellent Performance)
   {
     modelId: "meta-llama/llama-4-scout-17b-16e-instruct",
     provider: "groq",
-    priority: 3,
+    priority: 7,
   },
-  { modelId: "llama-3.3-70b-versatile", provider: "groq", priority: 4 },
-  { modelId: "qwen/qwen3-32b", provider: "groq", priority: 5 },
-  { modelId: "moonshotai/kimi-k2-instruct", provider: "groq", priority: 6 },
-  { modelId: "openai/gpt-oss-20b", provider: "groq", priority: 7 },
-  { modelId: "groq/compound", provider: "groq", priority: 8 },
-  { modelId: "groq/compound-mini", provider: "groq", priority: 9 },
-  { modelId: "llama-3.1-8b-instant", provider: "groq", priority: 10 },
-  { modelId: "canopylabs/orpheus-v1-english", provider: "groq", priority: 11 },
-  {
-    modelId: "canopylabs/orpheus-arabic-saudi",
-    provider: "groq",
-    priority: 12,
-  },
-  { modelId: "allam-2-7b", provider: "groq", priority: 13 },
+  { modelId: "qwen/qwen3-32b", provider: "groq", priority: 8 },
 ];
 const AI_MODEL_PREFERRED_ORDER = [
   "openai/gpt-oss-120b",
-  "moonshotai/kimi-k2-instruct-0905",
-  "meta-llama/llama-4-scout-17b-16e-instruct",
-  "llama-3.3-70b-versatile",
-  "qwen/qwen3-32b",
-  "moonshotai/kimi-k2-instruct",
   "openai/gpt-oss-20b",
+  "llama-3.3-70b-versatile",
+  "llama-3.1-8b-instant",
   "groq/compound",
   "groq/compound-mini",
-  "llama-3.1-8b-instant",
-  "canopylabs/orpheus-v1-english",
-  "canopylabs/orpheus-arabic-saudi",
-  "allam-2-7b",
+  "meta-llama/llama-4-scout-17b-16e-instruct",
+  "qwen/qwen3-32b",
 ];
 
 app.engine("ejs", (filePath, _options, callback) => {
