@@ -47,16 +47,25 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-
 const app = express();
 const httpServer = createServer(app);
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "spiderman";
-const ADMIN_EMAIL = String(process.env.ADMIN_EMAIL || "dev@gmail.com").trim().toLowerCase();
+const ADMIN_EMAIL = String(process.env.ADMIN_EMAIL || "dev@gmail.com")
+  .trim()
+  .toLowerCase();
 const AI_MODEL_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const AI_MODEL_REGISTRY = [
   { modelId: "openai/gpt-oss-120b", provider: "groq", priority: 1 },
-  { modelId: "moonshotai/kimi-k2-instruct-0905", provider: "groq", priority: 2 },
-  { modelId: "meta-llama/llama-4-scout-17b-16e-instruct", provider: "groq", priority: 3 },
+  {
+    modelId: "moonshotai/kimi-k2-instruct-0905",
+    provider: "groq",
+    priority: 2,
+  },
+  {
+    modelId: "meta-llama/llama-4-scout-17b-16e-instruct",
+    provider: "groq",
+    priority: 3,
+  },
   { modelId: "llama-3.3-70b-versatile", provider: "groq", priority: 4 },
   { modelId: "qwen/qwen3-32b", provider: "groq", priority: 5 },
   { modelId: "moonshotai/kimi-k2-instruct", provider: "groq", priority: 6 },
@@ -65,7 +74,11 @@ const AI_MODEL_REGISTRY = [
   { modelId: "groq/compound-mini", provider: "groq", priority: 9 },
   { modelId: "llama-3.1-8b-instant", provider: "groq", priority: 10 },
   { modelId: "canopylabs/orpheus-v1-english", provider: "groq", priority: 11 },
-  { modelId: "canopylabs/orpheus-arabic-saudi", provider: "groq", priority: 12 },
+  {
+    modelId: "canopylabs/orpheus-arabic-saudi",
+    provider: "groq",
+    priority: 12,
+  },
   { modelId: "allam-2-7b", provider: "groq", priority: 13 },
 ];
 const AI_MODEL_PREFERRED_ORDER = [
@@ -112,7 +125,9 @@ const collaborationHostGraceTimers = new Map();
 const dataExplorerConnections = new Map();
 const dataExplorerWatchers = new Map();
 let virtualDbConnectionState = null;
-const GROQ_API_KEY = String(process.env.GROQ_API_KEY || process.env.grog || "").trim();
+const GROQ_API_KEY = String(
+  process.env.GROQ_API_KEY || process.env.grog || "",
+).trim();
 let aiModelsLastRefreshedAt = 0;
 let aiModelsRefreshTimer = null;
 const aiModelCooldownUntil = new Map();
@@ -188,7 +203,9 @@ function isSameCalendarDay(a = null, b = null) {
 }
 
 function isUnlimitedAiUser(user = null) {
-  const email = String(user?.email || "").trim().toLowerCase();
+  const email = String(user?.email || "")
+    .trim()
+    .toLowerCase();
   return Boolean(user?.isPro) || email === ADMIN_EMAIL;
 }
 
@@ -219,7 +236,9 @@ async function ensureAIModelsRegistry() {
 }
 
 function buildPriorityForModel(modelId = "") {
-  const normalized = String(modelId || "").trim().toLowerCase();
+  const normalized = String(modelId || "")
+    .trim()
+    .toLowerCase();
   const preferredIndex = AI_MODEL_PREFERRED_ORDER.findIndex(
     (item) => item.toLowerCase() === normalized,
   );
@@ -267,17 +286,23 @@ async function fetchAvailableGroqModels() {
       priority: buildPriorityForModel(String(row?.id || "").trim()),
     }))
     .filter((row) => row.modelId && isLikelyChatModel(row.modelId))
-    .sort((a, b) => a.priority - b.priority || a.modelId.localeCompare(b.modelId));
+    .sort(
+      (a, b) => a.priority - b.priority || a.modelId.localeCompare(b.modelId),
+    );
 }
 
 async function refreshAIModelsRegistryIfNeeded(force = false) {
   const now = Date.now();
-  if (!force && now - aiModelsLastRefreshedAt < AI_MODEL_REFRESH_INTERVAL_MS) return;
+  if (!force && now - aiModelsLastRefreshedAt < AI_MODEL_REFRESH_INTERVAL_MS)
+    return;
   let sourceModels = [];
   try {
     sourceModels = await fetchAvailableGroqModels();
   } catch (error) {
-    console.warn("Groq models refresh failed, falling back to static registry:", error.message);
+    console.warn(
+      "Groq models refresh failed, falling back to static registry:",
+      error.message,
+    );
     await createUsageLog({
       action: "ai-model-refresh-error",
       summary: `[error] AI model registry refresh failed: ${String(error?.message || "unknown")} - ${new Date().toISOString()} --source(ai-model-registry)`,
@@ -302,7 +327,9 @@ async function refreshAIModelsRegistryIfNeeded(force = false) {
         {
           $set: {
             provider: model.provider || "groq",
-            priority: Number(model.priority || buildPriorityForModel(model.modelId)),
+            priority: Number(
+              model.priority || buildPriorityForModel(model.modelId),
+            ),
             isActive: true,
           },
           $setOnInsert: {
@@ -319,11 +346,14 @@ async function refreshAIModelsRegistryIfNeeded(force = false) {
 
 function startAIModelsRefreshLoop() {
   if (aiModelsRefreshTimer) return;
-  aiModelsRefreshTimer = setInterval(() => {
-    refreshAIModelsRegistryIfNeeded(false).catch((error) => {
-      console.warn("Scheduled AI model refresh failed:", error.message);
-    });
-  }, Math.max(60_000, AI_MODEL_REFRESH_INTERVAL_MS));
+  aiModelsRefreshTimer = setInterval(
+    () => {
+      refreshAIModelsRegistryIfNeeded(false).catch((error) => {
+        console.warn("Scheduled AI model refresh failed:", error.message);
+      });
+    },
+    Math.max(60_000, AI_MODEL_REFRESH_INTERVAL_MS),
+  );
 }
 
 function getVirtualDbUri() {
@@ -357,7 +387,11 @@ async function getOrCreateVirtualDbConnection() {
     connection.model("VirtualDbModel", VirtualDbModelSchema, "virtual_models");
   const VirtualDbDocument =
     connection.models.VirtualDbDocument ||
-    connection.model("VirtualDbDocument", VirtualDbDocumentSchema, "virtual_documents");
+    connection.model(
+      "VirtualDbDocument",
+      VirtualDbDocumentSchema,
+      "virtual_documents",
+    );
   virtualDbConnectionState = {
     uri,
     uriLabel: "virtual-medialabdb",
@@ -409,10 +443,14 @@ function getDataExplorerSessionState(req) {
 
 function serializeExplorerValue(value) {
   if (value == null) return value;
-  if (Array.isArray(value)) return value.map((item) => serializeExplorerValue(item));
+  if (Array.isArray(value))
+    return value.map((item) => serializeExplorerValue(item));
   if (value instanceof Date) return value.toISOString();
   if (typeof value === "object") {
-    if (value?._bsontype === "ObjectId" || value?.constructor?.name === "ObjectId") {
+    if (
+      value?._bsontype === "ObjectId" ||
+      value?.constructor?.name === "ObjectId"
+    ) {
       return String(value);
     }
     if (value?._bsontype === "Decimal128") {
@@ -428,11 +466,17 @@ function serializeExplorerValue(value) {
 }
 
 function collectExplorerFieldPaths(value, prefix = "", bucket = new Set()) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return bucket;
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    return bucket;
   Object.entries(value).forEach(([key, inner]) => {
     const nextKey = prefix ? `${prefix}.${key}` : key;
     bucket.add(nextKey);
-    if (inner && typeof inner === "object" && !Array.isArray(inner) && !(inner instanceof Date)) {
+    if (
+      inner &&
+      typeof inner === "object" &&
+      !Array.isArray(inner) &&
+      !(inner instanceof Date)
+    ) {
       collectExplorerFieldPaths(inner, nextKey, bucket);
     }
   });
@@ -448,7 +492,10 @@ function parseExplorerInputValue(rawValue) {
   if (typeof text === "string" && /^-?\d+(\.\d+)?$/.test(text)) {
     return Number(text);
   }
-  if (typeof text === "string" && (text.startsWith("{") || text.startsWith("["))) {
+  if (
+    typeof text === "string" &&
+    (text.startsWith("{") || text.startsWith("["))
+  ) {
     try {
       return JSON.parse(text);
     } catch {
@@ -459,7 +506,10 @@ function parseExplorerInputValue(rawValue) {
 }
 
 function getDataExplorerConnectionKey(uri = "") {
-  return crypto.createHash("sha1").update(String(uri || "")).digest("hex");
+  return crypto
+    .createHash("sha1")
+    .update(String(uri || ""))
+    .digest("hex");
 }
 
 async function getOrCreateDataExplorerConnection(uri = "") {
@@ -506,7 +556,13 @@ async function ensureDataExplorerWatcher({
   channelId,
 }) {
   const roomCollection = normalizeDataExplorerCollectionName(collectionName);
-  if (!ioInstance || !connectionState?.connection || !roomCollection || !channelId) return;
+  if (
+    !ioInstance ||
+    !connectionState?.connection ||
+    !roomCollection ||
+    !channelId
+  )
+    return;
   const watcherKey = `${connectionState.key}:${roomCollection}`;
   const existing = dataExplorerWatchers.get(watcherKey);
   if (existing) {
@@ -515,11 +571,16 @@ async function ensureDataExplorerWatcher({
   }
   let changeStream = null;
   try {
-    changeStream = connectionState.connection.collection(roomCollection).watch([], {
-      fullDocument: "updateLookup",
-    });
+    changeStream = connectionState.connection
+      .collection(roomCollection)
+      .watch([], {
+        fullDocument: "updateLookup",
+      });
   } catch (error) {
-    console.warn(`Data Explorer watch unavailable for ${roomCollection}:`, error.message);
+    console.warn(
+      `Data Explorer watch unavailable for ${roomCollection}:`,
+      error.message,
+    );
     return;
   }
   const channels = new Set([channelId]);
@@ -530,14 +591,18 @@ async function ensureDataExplorerWatcher({
       documentId:
         change?.documentKey?._id != null ? String(change.documentKey._id) : "",
       fullDocument: serializeExplorerValue(change?.fullDocument || null),
-      updatedFields: serializeExplorerValue(change?.updateDescription?.updatedFields || {}),
+      updatedFields: serializeExplorerValue(
+        change?.updateDescription?.updatedFields || {},
+      ),
       removedFields: Array.isArray(change?.updateDescription?.removedFields)
         ? change.updateDescription.removedFields
         : [],
       updatedAt: Date.now(),
     };
     channels.forEach((channel) => {
-      ioInstance.to(`data-explorer:${channel}`).emit("data-explorer:change", payload);
+      ioInstance
+        .to(`data-explorer:${channel}`)
+        .emit("data-explorer:change", payload);
     });
   });
   const cleanup = () => closeDataExplorerWatcher(watcherKey);
@@ -573,14 +638,19 @@ function scheduleCollaborationHostGrace(roomId = "", delayMs = 15000) {
   const normalizedRoomId = normalizeCollaborationRoomId(roomId);
   if (!normalizedRoomId) return;
   clearCollaborationHostGrace(normalizedRoomId);
-  const timer = setTimeout(() => {
-    collaborationHostGraceTimers.delete(normalizedRoomId);
-    const room = collaborationRooms.get(normalizedRoomId);
-    if (!room) return;
-    const hasLiveHost = Boolean(room.hostSocketId && room.users.has(room.hostSocketId));
-    if (hasLiveHost) return;
-    endCollaborationRoom(normalizedRoomId, "host-exited");
-  }, Math.max(1500, Number(delayMs) || 15000));
+  const timer = setTimeout(
+    () => {
+      collaborationHostGraceTimers.delete(normalizedRoomId);
+      const room = collaborationRooms.get(normalizedRoomId);
+      if (!room) return;
+      const hasLiveHost = Boolean(
+        room.hostSocketId && room.users.has(room.hostSocketId),
+      );
+      if (hasLiveHost) return;
+      endCollaborationRoom(normalizedRoomId, "host-exited");
+    },
+    Math.max(1500, Number(delayMs) || 15000),
+  );
   collaborationHostGraceTimers.set(normalizedRoomId, timer);
 }
 
@@ -592,7 +662,8 @@ function ensureCollaborationRoom(roomId = "", options = {}) {
       id: normalizedRoomId,
       hostSocketId: "",
       hostToken:
-        normalizeCollaborationHostToken(options.hostToken) || crypto.randomUUID(),
+        normalizeCollaborationHostToken(options.hostToken) ||
+        crypto.randomUUID(),
       users: new Map(),
       latestSnapshot: null,
       createdAt: new Date(),
@@ -610,7 +681,9 @@ async function getCollaborationMeetingRecord(roomId = "") {
   const normalizedRoomId = normalizeCollaborationRoomId(roomId);
   if (!normalizedRoomId) return null;
   try {
-    return await CollaborationMeeting.findOne({ roomId: normalizedRoomId }).lean();
+    return await CollaborationMeeting.findOne({
+      roomId: normalizedRoomId,
+    }).lean();
   } catch (error) {
     console.warn("Collaboration meeting lookup failed:", error.message);
     return null;
@@ -626,7 +699,9 @@ async function ensureCollaborationMeetingRecord(
     normalizeCollaborationHostToken(hostToken) || crypto.randomUUID();
   if (!normalizedRoomId) return null;
   try {
-    const existing = await CollaborationMeeting.findOne({ roomId: normalizedRoomId });
+    const existing = await CollaborationMeeting.findOne({
+      roomId: normalizedRoomId,
+    });
     if (existing) {
       let mutated = false;
       if (!existing.hostToken) {
@@ -639,7 +714,8 @@ async function ensureCollaborationMeetingRecord(
       }
       if (
         hostDisplayName &&
-        existing.hostDisplayName !== String(hostDisplayName).trim().slice(0, 120)
+        existing.hostDisplayName !==
+          String(hostDisplayName).trim().slice(0, 120)
       ) {
         existing.hostDisplayName = String(hostDisplayName).trim().slice(0, 120);
         mutated = true;
@@ -653,7 +729,9 @@ async function ensureCollaborationMeetingRecord(
       roomId: normalizedRoomId,
       hostToken: normalizedHostToken,
       hostUserId: String(hostUserId || "").trim(),
-      hostDisplayName: String(hostDisplayName || "").trim().slice(0, 120),
+      hostDisplayName: String(hostDisplayName || "")
+        .trim()
+        .slice(0, 120),
     });
     return created.toObject();
   } catch (error) {
@@ -662,7 +740,9 @@ async function ensureCollaborationMeetingRecord(
       roomId: normalizedRoomId,
       hostToken: normalizedHostToken,
       hostUserId: String(hostUserId || "").trim(),
-      hostDisplayName: String(hostDisplayName || "").trim().slice(0, 120),
+      hostDisplayName: String(hostDisplayName || "")
+        .trim()
+        .slice(0, 120),
     };
   }
 }
@@ -670,9 +750,11 @@ async function ensureCollaborationMeetingRecord(
 function deleteCollaborationMeetingRecord(roomId = "") {
   const normalizedRoomId = normalizeCollaborationRoomId(roomId);
   if (!normalizedRoomId) return;
-  CollaborationMeeting.deleteOne({ roomId: normalizedRoomId }).catch((error) => {
-    console.warn("Collaboration meeting delete failed:", error.message);
-  });
+  CollaborationMeeting.deleteOne({ roomId: normalizedRoomId }).catch(
+    (error) => {
+      console.warn("Collaboration meeting delete failed:", error.message);
+    },
+  );
 }
 
 function markCollaborationRoomEnded(roomId = "", reason = "ended") {
@@ -710,7 +792,9 @@ function serializeCollaborationUser(user = {}) {
     canVideo: Boolean(user.canVideo),
     awaitingApproval: Boolean(user.awaitingApproval),
     pendingRequestKind:
-      String(user.pendingRequestKind || "").trim().slice(0, 40) || "",
+      String(user.pendingRequestKind || "")
+        .trim()
+        .slice(0, 40) || "",
   };
 }
 
@@ -813,12 +897,14 @@ function createMemoryRateLimiter({
 const authRateLimit = createMemoryRateLimiter({
   windowMs: 10 * 60 * 1000,
   max: 24,
-  message: "Too many authentication requests. Please wait a few minutes and try again.",
+  message:
+    "Too many authentication requests. Please wait a few minutes and try again.",
 });
 const publishRateLimit = createMemoryRateLimiter({
   windowMs: 2 * 60 * 1000,
   max: 10,
-  message: "Too many publish attempts in a short time. Please wait a moment and try again.",
+  message:
+    "Too many publish attempts in a short time. Please wait a moment and try again.",
 });
 const accountRateLimit = createMemoryRateLimiter({
   windowMs: 5 * 60 * 1000,
@@ -833,9 +919,18 @@ const adminRateLimit = createMemoryRateLimiter({
 
 function requireAdminApi(req, res, next) {
   const provided = String(req.headers["x-admin-password"] || "").trim();
-  const providedEmail = String(req.headers["x-admin-email"] || "").trim().toLowerCase();
-  if (!provided || provided !== ADMIN_PASSWORD || !providedEmail || providedEmail !== ADMIN_EMAIL) {
-    return res.status(401).json({ success: false, message: "Admin authorization failed." });
+  const providedEmail = String(req.headers["x-admin-email"] || "")
+    .trim()
+    .toLowerCase();
+  if (
+    !provided ||
+    provided !== ADMIN_PASSWORD ||
+    !providedEmail ||
+    providedEmail !== ADMIN_EMAIL
+  ) {
+    return res
+      .status(401)
+      .json({ success: false, message: "Admin authorization failed." });
   }
   return next();
 }
@@ -866,7 +961,9 @@ async function createUsageLog({
       source: String(source || "web").trim(),
       kind,
       metadata: {
-        ...(usageMetadata && typeof usageMetadata === "object" ? usageMetadata : {}),
+        ...(usageMetadata && typeof usageMetadata === "object"
+          ? usageMetadata
+          : {}),
         ...(metadata && typeof metadata === "object" ? metadata : {}),
       },
     });
@@ -911,17 +1008,25 @@ async function createUserNotification({
 } = {}) {
   if (!userId || !String(title || "").trim()) return null;
   try {
-    let recipientEmail = String(toEmail || "").trim().toLowerCase();
+    let recipientEmail = String(toEmail || "")
+      .trim()
+      .toLowerCase();
     if (!recipientEmail) {
       const recipientUser = await User.findById(userId).select("email").lean();
-      recipientEmail = String(recipientUser?.email || "").trim().toLowerCase();
+      recipientEmail = String(recipientUser?.email || "")
+        .trim()
+        .toLowerCase();
     }
     const notification = await Notification.create({
       userId,
       recipientEmail,
       senderName: String(fromName || "MediaLab").trim(),
-      senderEmail: String(fromEmail || "").trim().toLowerCase(),
-      deliveryScope: String(deliveryScope || "system").trim().toLowerCase(),
+      senderEmail: String(fromEmail || "")
+        .trim()
+        .toLowerCase(),
+      deliveryScope: String(deliveryScope || "system")
+        .trim()
+        .toLowerCase(),
       type: String(type || "general").trim(),
       title: String(title || "").trim(),
       message: String(message || "").trim(),
@@ -931,10 +1036,9 @@ async function createUserNotification({
       isRead: false,
     });
     const payload = serializeNotification(notification);
-    io.to(`${USER_NOTIFICATION_ROOM_PREFIX}${String(notification.userId)}`).emit(
-      "user:notification",
-      payload,
-    );
+    io.to(
+      `${USER_NOTIFICATION_ROOM_PREFIX}${String(notification.userId)}`,
+    ).emit("user:notification", payload);
     await trimUserNotifications(notification.userId);
     return notification;
   } catch (error) {
@@ -947,9 +1051,13 @@ function serializeNotification(notification = {}) {
   return {
     _id: String(notification?._id || ""),
     userId: String(notification?.userId || ""),
-    recipientEmail: String(notification?.recipientEmail || "").trim().toLowerCase(),
+    recipientEmail: String(notification?.recipientEmail || "")
+      .trim()
+      .toLowerCase(),
     senderName: String(notification?.senderName || "MediaLab").trim(),
-    senderEmail: String(notification?.senderEmail || "").trim().toLowerCase(),
+    senderEmail: String(notification?.senderEmail || "")
+      .trim()
+      .toLowerCase(),
     deliveryScope: String(notification?.deliveryScope || "system").trim(),
     type: String(notification?.type || "general").trim(),
     title: String(notification?.title || "").trim(),
@@ -970,22 +1078,25 @@ async function listUserNotifications(userId, limit = 10) {
   if (!userId) return [];
   const safeLimit = Math.max(1, Math.min(10, Number(limit || 10)));
   const [unreadNotifications, readNotifications] = await Promise.all([
-    Notification.find({ userId, isRead: false })
-      .sort({ createdAt: -1 })
-      .lean(),
+    Notification.find({ userId, isRead: false }).sort({ createdAt: -1 }).lean(),
     Notification.find({ userId, isRead: true })
       .sort({ createdAt: -1 })
       .limit(safeLimit)
       .lean(),
   ]);
-  const notifications = [...unreadNotifications, ...readNotifications]
-    .sort((left, right) => new Date(right.createdAt || 0) - new Date(left.createdAt || 0));
+  const notifications = [...unreadNotifications, ...readNotifications].sort(
+    (left, right) =>
+      new Date(right.createdAt || 0) - new Date(left.createdAt || 0),
+  );
   return notifications.map((item) => serializeNotification(item));
 }
 
 async function trimUserNotifications(userId) {
   if (!userId) return;
-  const staleReadNotifications = await Notification.find({ userId, isRead: true })
+  const staleReadNotifications = await Notification.find({
+    userId,
+    isRead: true,
+  })
     .sort({ createdAt: -1 })
     .skip(10)
     .lean();
@@ -997,36 +1108,59 @@ async function trimUserNotifications(userId) {
 }
 
 async function createBulkNotifications(userIds = [], payload = {}) {
-  const uniqueIds = [...new Set((Array.isArray(userIds) ? userIds : []).map((id) => String(id || "").trim()).filter(Boolean))];
+  const uniqueIds = [
+    ...new Set(
+      (Array.isArray(userIds) ? userIds : [])
+        .map((id) => String(id || "").trim())
+        .filter(Boolean),
+    ),
+  ];
   if (!uniqueIds.length || !String(payload?.title || "").trim()) return [];
-  const recipientUsers = await User.find({ _id: { $in: uniqueIds } }).select("_id email").lean();
+  const recipientUsers = await User.find({ _id: { $in: uniqueIds } })
+    .select("_id email")
+    .lean();
   const recipientEmailMap = new Map(
-    recipientUsers.map((user) => [String(user?._id || ""), String(user?.email || "").trim().toLowerCase()]),
+    recipientUsers.map((user) => [
+      String(user?._id || ""),
+      String(user?.email || "")
+        .trim()
+        .toLowerCase(),
+    ]),
   );
   const docs = uniqueIds.map((userId) => ({
     userId,
     recipientEmail: recipientEmailMap.get(String(userId)) || "",
     senderName: String(payload.fromName || "ML Community").trim(),
-    senderEmail: String(payload.fromEmail || "dev@gmail.com").trim().toLowerCase(),
-    deliveryScope: String(payload.deliveryScope || "all").trim().toLowerCase(),
+    senderEmail: String(payload.fromEmail || "dev@gmail.com")
+      .trim()
+      .toLowerCase(),
+    deliveryScope: String(payload.deliveryScope || "all")
+      .trim()
+      .toLowerCase(),
     type: String(payload.type || "general").trim(),
     title: String(payload.title || "").trim(),
     message: String(payload.message || "").trim(),
     targetType: String(payload.targetType || "").trim(),
     targetId: String(payload.targetId || "").trim(),
-    metadata: payload.metadata && typeof payload.metadata === "object" ? payload.metadata : {},
+    metadata:
+      payload.metadata && typeof payload.metadata === "object"
+        ? payload.metadata
+        : {},
     isRead: false,
   }));
   try {
-    const notifications = await Notification.insertMany(docs, { ordered: false });
+    const notifications = await Notification.insertMany(docs, {
+      ordered: false,
+    });
     notifications.forEach((notification) => {
-      io.to(`${USER_NOTIFICATION_ROOM_PREFIX}${String(notification.userId)}`).emit(
-        "user:notification",
-        serializeNotification(notification),
-      );
+      io.to(
+        `${USER_NOTIFICATION_ROOM_PREFIX}${String(notification.userId)}`,
+      ).emit("user:notification", serializeNotification(notification));
     });
     await Promise.all(
-      notifications.map((notification) => trimUserNotifications(notification.userId)),
+      notifications.map((notification) =>
+        trimUserNotifications(notification.userId),
+      ),
     );
     return notifications;
   } catch (error) {
@@ -1044,7 +1178,10 @@ async function createBulkNotifications(userIds = [], payload = {}) {
           message: payload.message || "",
           targetType: payload.targetType || "",
           targetId: payload.targetId || "",
-          metadata: payload.metadata && typeof payload.metadata === "object" ? payload.metadata : {},
+          metadata:
+            payload.metadata && typeof payload.metadata === "object"
+              ? payload.metadata
+              : {},
         }),
       ),
     );
@@ -1053,16 +1190,14 @@ async function createBulkNotifications(userIds = [], payload = {}) {
 }
 
 function extractUserProjectNames(user = {}) {
-  const liveProjects = Array.isArray(user?.liveProjects) ? user.liveProjects : [];
+  const liveProjects = Array.isArray(user?.liveProjects)
+    ? user.liveProjects
+    : [];
   const historyProjects = Array.isArray(user?.projects) ? user.projects : [];
   const names = [...liveProjects, ...historyProjects]
     .map((item) =>
       String(
-        item?.name ||
-          item?.fileName ||
-          item?.filename ||
-          item?.title ||
-          "",
+        item?.name || item?.fileName || item?.filename || item?.title || "",
       ).trim(),
     )
     .filter(Boolean);
@@ -1070,16 +1205,23 @@ function extractUserProjectNames(user = {}) {
 }
 
 function resolveProjectTokenValue(projectNames = [], tokenArg = "") {
-  const safeProjects = Array.isArray(projectNames) ? projectNames.filter(Boolean) : [];
+  const safeProjects = Array.isArray(projectNames)
+    ? projectNames.filter(Boolean)
+    : [];
   if (!safeProjects.length) return "your latest project";
-  const raw = String(tokenArg || "").trim().toLowerCase();
+  const raw = String(tokenArg || "")
+    .trim()
+    .toLowerCase();
   if (!raw) return safeProjects[0];
   if (raw === "nth") return safeProjects[safeProjects.length - 1];
   const numeric = Number.parseInt(raw, 10);
   if (!Number.isFinite(numeric) || numeric <= 0) {
     return safeProjects[safeProjects.length - 1];
   }
-  return safeProjects[Math.min(numeric - 1, safeProjects.length - 1)] || safeProjects[safeProjects.length - 1];
+  return (
+    safeProjects[Math.min(numeric - 1, safeProjects.length - 1)] ||
+    safeProjects[safeProjects.length - 1]
+  );
 }
 
 function renderAdminNotificationTemplate(template = "", user = {}) {
@@ -1087,7 +1229,9 @@ function renderAdminNotificationTemplate(template = "", user = {}) {
   if (!safeTemplate) return "";
   const projectNames = extractUserProjectNames(user);
   return safeTemplate.replace(/\{([a-z0-9_-]+)\}/gi, (_match, rawToken) => {
-    const token = String(rawToken || "").trim().toLowerCase();
+    const token = String(rawToken || "")
+      .trim()
+      .toLowerCase();
     if (token === "username") {
       return String(user?.name || "Creator").trim() || "Creator";
     }
@@ -1098,7 +1242,10 @@ function renderAdminNotificationTemplate(template = "", user = {}) {
       return resolveProjectTokenValue(projectNames);
     }
     if (token.startsWith("projectname-")) {
-      return resolveProjectTokenValue(projectNames, token.slice("projectname-".length));
+      return resolveProjectTokenValue(
+        projectNames,
+        token.slice("projectname-".length),
+      );
     }
     if (token === "projectcount" || token === "publishedprojectcount") {
       return String(projectNames.length);
@@ -1115,7 +1262,9 @@ function computeSellerRatingMeta(user = {}) {
     : 0;
   return {
     sellerRatingCount: count,
-    sellerRatingPercent: count ? Number((((average / 5) * 100) || 0).toFixed(1)) : 0,
+    sellerRatingPercent: count
+      ? Number(((average / 5) * 100 || 0).toFixed(1))
+      : 0,
   };
 }
 
@@ -1142,10 +1291,12 @@ function scoreUsageLogWeight(log = {}) {
   let weight = 1;
   if (action.includes("login")) weight += 2;
   if (action.includes("tool-open")) weight += 1;
-  if (action.includes("builder-save") || action.includes("builder-autosave")) weight += 2;
+  if (action.includes("builder-save") || action.includes("builder-autosave"))
+    weight += 2;
   if (action.includes("github-publish")) weight += 8;
   if (action.includes("github-publish-folder")) weight += 12;
-  if (action.includes("render-hosting") || action.includes("render-deploy")) weight += 5;
+  if (action.includes("render-hosting") || action.includes("render-deploy"))
+    weight += 5;
   if (action.includes("withdrawal-request")) weight += 1;
   if (action.includes("adsense")) weight += 2;
   if (source.includes("web-builder")) weight += 2;
@@ -1183,7 +1334,8 @@ async function syncUserActivityWeights() {
     entry.weight += scoreUsageLogWeight(log);
     if (action.includes("login")) entry.stats.logins += 1;
     if (action.includes("tool-open")) entry.stats.toolOpens += 1;
-    if (action.includes("builder-save") || action.includes("builder-autosave")) entry.stats.projects += 1;
+    if (action.includes("builder-save") || action.includes("builder-autosave"))
+      entry.stats.projects += 1;
     if (action.includes("github-publish")) entry.stats.publishes += 1;
     entry.ids.push(log._id);
     entry.lastAt = log.createdAt || entry.lastAt;
@@ -1194,12 +1346,19 @@ async function syncUserActivityWeights() {
     const user = await User.findById(userId);
     if (!user) continue;
     const previousStats = user.activityStats || {};
-    user.activityWeight = Number(user.activityWeight || 0) + Number(entry.weight || 0);
+    user.activityWeight =
+      Number(user.activityWeight || 0) + Number(entry.weight || 0);
     user.activityStats = {
-      logins: Number(previousStats.logins || 0) + Number(entry.stats.logins || 0),
-      toolOpens: Number(previousStats.toolOpens || 0) + Number(entry.stats.toolOpens || 0),
-      projects: Number(previousStats.projects || 0) + Number(entry.stats.projects || 0),
-      publishes: Number(previousStats.publishes || 0) + Number(entry.stats.publishes || 0),
+      logins:
+        Number(previousStats.logins || 0) + Number(entry.stats.logins || 0),
+      toolOpens:
+        Number(previousStats.toolOpens || 0) +
+        Number(entry.stats.toolOpens || 0),
+      projects:
+        Number(previousStats.projects || 0) + Number(entry.stats.projects || 0),
+      publishes:
+        Number(previousStats.publishes || 0) +
+        Number(entry.stats.publishes || 0),
     };
     user.lastActivityWeightCalculatedAt = entry.lastAt || new Date();
     await user.save();
@@ -1234,16 +1393,15 @@ function streamMediaLabReleasePdf(res) {
   });
 
   res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", 'inline; filename="MediaLab-Release.pdf"');
+  res.setHeader(
+    "Content-Disposition",
+    'inline; filename="MediaLab-Release.pdf"',
+  );
   doc.pipe(res);
 
   const drawSection = (title, lines = []) => {
     doc.moveDown(0.9);
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(14)
-      .fillColor("#0891b2")
-      .text(title);
+    doc.font("Helvetica-Bold").fontSize(14).fillColor("#0891b2").text(title);
     doc.moveDown(0.35);
     doc.font("Helvetica").fontSize(10.5).fillColor("#1f2937");
     lines.forEach((line) => {
@@ -1380,11 +1538,15 @@ function normalizeImportedEntryPath(value = "index.html") {
 }
 
 function prepareGitHubPush(projectName = "", filesArray = []) {
-  const folderSlug = slugifyProjectFolderName(projectName || "medialab-project");
+  const folderSlug = slugifyProjectFolderName(
+    projectName || "medialab-project",
+  );
   const items = Array.isArray(filesArray) ? filesArray : [];
   if (items.length === 1) {
     const single = items[0] || {};
-    const normalizedSinglePath = normalizeRepoFilePath(single.path || single.name || "index.html");
+    const normalizedSinglePath = normalizeRepoFilePath(
+      single.path || single.name || "index.html",
+    );
     const isHtmlFile = /\.html?$/i.test(normalizedSinglePath || "");
     if (isHtmlFile) {
       return {
@@ -1407,7 +1569,8 @@ function prepareGitHubPush(projectName = "", filesArray = []) {
   return {
     folderSlug,
     entryPath: normalizeImportedEntryPath(
-      normalizedFiles.find((file) => /(^|\/)index\.html?$/i.test(file.path))?.path || "index.html",
+      normalizedFiles.find((file) => /(^|\/)index\.html?$/i.test(file.path))
+        ?.path || "index.html",
     ),
     projectType: "folder",
     files: normalizedFiles,
@@ -1420,9 +1583,13 @@ function stripPublicRootFromUrlPath(value = "") {
 
 function buildProjectRoutePath(project = {}) {
   const repoPath = stripPublicRootFromUrlPath(project?.repoPath || "");
-  const entryPath = normalizeImportedEntryPath(project?.entryPath || "index.html");
+  const entryPath = normalizeImportedEntryPath(
+    project?.entryPath || "index.html",
+  );
   if (!repoPath) {
-    const filename = stripPublicRootFromUrlPath(project?.fileName || project?.filename || "");
+    const filename = stripPublicRootFromUrlPath(
+      project?.fileName || project?.filename || "",
+    );
     if (!filename) return "";
     return /\/index\.html?$/i.test(filename)
       ? filename.replace(/\/index\.html?$/i, "/")
@@ -1448,13 +1615,20 @@ function buildFolderProjectLiveUrl(owner, repo, folderPath, entryPath) {
   if (!cleanFolder) {
     return `https://${owner}.github.io/${repo}/${cleanEntry}`;
   }
-  if (/\/index\.html?$/i.test(`${cleanFolder}/${cleanEntry}`) || /^index\.html?$/i.test(cleanEntry)) {
+  if (
+    /\/index\.html?$/i.test(`${cleanFolder}/${cleanEntry}`) ||
+    /^index\.html?$/i.test(cleanEntry)
+  ) {
     return `https://${owner}.github.io/${repo}/${cleanFolder}/`;
   }
   return `https://${owner}.github.io/${repo}/${cleanFolder}/${cleanEntry}`;
 }
 
-function buildGithubRepoScaffold(owner = "user", repoName = "medialab", displayName = owner) {
+function buildGithubRepoScaffold(
+  owner = "user",
+  repoName = "medialab",
+  displayName = owner,
+) {
   const packageJson = JSON.stringify(
     {
       name: repoName,
@@ -1606,7 +1780,12 @@ npm-debug.log*
   ];
 }
 
-async function ensureGithubRepoScaffold(octokit, owner, repo, displayName = owner) {
+async function ensureGithubRepoScaffold(
+  octokit,
+  owner,
+  repo,
+  displayName = owner,
+) {
   const scaffoldFiles = buildGithubRepoScaffold(owner, repo, displayName);
   for (const file of scaffoldFiles) {
     await upsertGithubFile({
@@ -1632,7 +1811,9 @@ function getUserGithubRepoName(user = {}) {
   const saved = String(user?.githubRepoName || "").trim();
   if (saved) return saved;
   const displayName = String(user?.name || "").trim();
-  const emailLocal = String(user?.email || "").split("@")[0].trim();
+  const emailLocal = String(user?.email || "")
+    .split("@")[0]
+    .trim();
   const firstNameSource =
     displayName.split(/\s+/).find(Boolean) ||
     emailLocal.split(/[._-]+/).find(Boolean) ||
@@ -1676,20 +1857,23 @@ function buildPublishedHtmlFromSource({
       includeRepoFavicon,
     });
   }
-  const safeTitle = String(projectName || "MediaLab Project").trim() || "MediaLab Project";
+  const safeTitle =
+    String(projectName || "MediaLab Project").trim() || "MediaLab Project";
   const safeDescription = escapeMetaContent(
     description || `${safeTitle} published with MediaLab.`,
   );
-  const safeKeywords = escapeMetaContent(keywords || "MediaLab, website, publish");
+  const safeKeywords = escapeMetaContent(
+    keywords || "MediaLab, website, publish",
+  );
   const trimmedAdCode = String(adsenseAdCode || "").trim();
   const adsenseTag =
     trimmedAdCode && /pagead2\.googlesyndication\.com/i.test(trimmedAdCode)
       ? trimmedAdCode
       : adsenseId && /^ca-pub-/i.test(String(adsenseId).trim())
-      ? `<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${String(
-          adsenseId,
-        ).trim()}" crossorigin="anonymous"></script>`
-      : "";
+        ? `<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${String(
+            adsenseId,
+          ).trim()}" crossorigin="anonymous"></script>`
+        : "";
   const faviconTag = includeRepoFavicon
     ? `<link rel="icon" href="/favicon.ico" type="image/x-icon" />`
     : "";
@@ -1706,7 +1890,10 @@ function buildPublishedHtmlFromSource({
     .join("\n    ");
   let nextHtml = source;
   if (/<title>[\s\S]*?<\/title>/i.test(nextHtml)) {
-    nextHtml = nextHtml.replace(/<title>[\s\S]*?<\/title>/i, `<title>${safeTitle.replace(/[<>&"]/g, "")}</title>`);
+    nextHtml = nextHtml.replace(
+      /<title>[\s\S]*?<\/title>/i,
+      `<title>${safeTitle.replace(/[<>&"]/g, "")}</title>`,
+    );
   }
   nextHtml = injectIntoHead(nextHtml, `    ${metaBundle}`);
   return nextHtml;
@@ -1719,7 +1906,10 @@ function stripAdsenseFromHtml(html = "") {
       "",
     )
     .replace(/<script[^>]*>[\s\S]*?adsbygoogle[\s\S]*?<\/script>\s*/gi, "")
-    .replace(/<ins[^>]*class=["'][^"']*adsbygoogle[^"']*["'][^>]*>[\s\S]*?<\/ins>\s*/gi, "");
+    .replace(
+      /<ins[^>]*class=["'][^"']*adsbygoogle[^"']*["'][^>]*>[\s\S]*?<\/ins>\s*/gi,
+      "",
+    );
 }
 
 async function getGithubFileSha(octokit, owner, repo, path) {
@@ -1801,23 +1991,26 @@ function buildPublishedHtmlDocument({
   keywords = "",
   includeRepoFavicon = true,
 } = {}) {
-  const safeTitle = String(projectName || "MediaLab Project").trim() || "MediaLab Project";
+  const safeTitle =
+    String(projectName || "MediaLab Project").trim() || "MediaLab Project";
   const styleBlock = String(cssContent || "").trim();
   const bodyMarkup = String(htmlContent || "").trim();
   const interactionBlock = String(interactionScript || "").trim();
   const safeDescription = escapeMetaContent(
     description || `${safeTitle} published with MediaLab.`,
   );
-  const safeKeywords = escapeMetaContent(keywords || "MediaLab, website, publish");
+  const safeKeywords = escapeMetaContent(
+    keywords || "MediaLab, website, publish",
+  );
   const trimmedAdCode = String(adsenseAdCode || "").trim();
   const adsenseTag =
     trimmedAdCode && /pagead2\.googlesyndication\.com/i.test(trimmedAdCode)
       ? `\n    ${trimmedAdCode}`
       : adsenseId && /^ca-pub-/i.test(String(adsenseId).trim())
-      ? `\n    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${String(
-          adsenseId,
-        ).trim()}" crossorigin="anonymous"></script>`
-      : "";
+        ? `\n    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${String(
+            adsenseId,
+          ).trim()}" crossorigin="anonymous"></script>`
+        : "";
   const faviconTag = includeRepoFavicon
     ? `\n    <link rel="icon" href="favicon.ico" type="image/x-icon" />`
     : "";
@@ -1904,11 +2097,12 @@ function buildProjectLiveUrl(user, project = {}) {
 function getUserPrimaryRenderBaseUrl(user) {
   const projects = Array.isArray(user?.liveProjects) ? user.liveProjects : [];
   const hosted = projects.find(
-    (project) => project?.renderUrl && (project?.renderHostedConfirmed || project?.renderDeployStatus),
+    (project) =>
+      project?.renderUrl &&
+      (project?.renderHostedConfirmed || project?.renderDeployStatus),
   );
   return hosted?.renderUrl ? normalizeRenderUrl(hosted.renderUrl) : "";
 }
-
 
 function buildAdsTxtCandidateUrls(user) {
   if (!user?.githubUsername) return [];
@@ -1942,12 +2136,18 @@ function findLiveProject(user, filename = "") {
 }
 
 function getMarketplacePreviewImage(project = {}) {
-  const url = String(project?.renderUrl || project?.liveUrl || project?.url || "").trim();
-  return url || "https://via.placeholder.com/1200x720/0f172a/e2e8f0?text=MediaLab";
+  const url = String(
+    project?.renderUrl || project?.liveUrl || project?.url || "",
+  ).trim();
+  return (
+    url || "https://via.placeholder.com/1200x720/0f172a/e2e8f0?text=MediaLab"
+  );
 }
 
 function sanitizeMarketplaceText(value = "", maxLength = 5000) {
-  return String(value || "").trim().slice(0, maxLength);
+  return String(value || "")
+    .trim()
+    .slice(0, maxLength);
 }
 
 function normalizeMarketplacePrice(value) {
@@ -1978,17 +2178,22 @@ async function uploadImageToImageKit({
     form.append("tags", tags.filter(Boolean).join(","));
   }
   form.append("useUniqueFileName", "true");
-  const response = await fetch("https://upload.imagekit.io/api/v1/files/upload", {
-    method: "POST",
-    headers: {
-      Authorization: `Basic ${Buffer.from(`${privateKey}:`).toString("base64")}`,
+  const response = await fetch(
+    "https://upload.imagekit.io/api/v1/files/upload",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${privateKey}:`).toString("base64")}`,
+      },
+      body: form,
     },
-    body: form,
-  });
+  );
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || !payload?.url) {
     throw new Error(
-      payload?.message || payload?.error?.message || "Could not upload this image to ImageKit.",
+      payload?.message ||
+        payload?.error?.message ||
+        "Could not upload this image to ImageKit.",
     );
   }
   return {
@@ -2021,17 +2226,22 @@ async function uploadFileToImageKit({
     form.append("tags", tags.filter(Boolean).join(","));
   }
   form.append("useUniqueFileName", "false");
-  const response = await fetch("https://upload.imagekit.io/api/v1/files/upload", {
-    method: "POST",
-    headers: {
-      Authorization: `Basic ${Buffer.from(`${privateKey}:`).toString("base64")}`,
+  const response = await fetch(
+    "https://upload.imagekit.io/api/v1/files/upload",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${privateKey}:`).toString("base64")}`,
+      },
+      body: form,
     },
-    body: form,
-  });
+  );
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || !payload?.url) {
     throw new Error(
-      payload?.message || payload?.error?.message || "Could not upload this file to ImageKit.",
+      payload?.message ||
+        payload?.error?.message ||
+        "Could not upload this file to ImageKit.",
     );
   }
   return {
@@ -2048,12 +2258,15 @@ async function deleteImageKitFileById(fileId = "") {
   if (!privateKey) {
     throw new Error("ImageKit private key is not configured yet.");
   }
-  const response = await fetch(`https://api.imagekit.io/v1/files/${encodeURIComponent(targetFileId)}`, {
-    method: "DELETE",
-    headers: {
-      Authorization: `Basic ${Buffer.from(`${privateKey}:`).toString("base64")}`,
+  const response = await fetch(
+    `https://api.imagekit.io/v1/files/${encodeURIComponent(targetFileId)}`,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${privateKey}:`).toString("base64")}`,
+      },
     },
-  });
+  );
   if (response.status === 404) return false;
   if (!response.ok) {
     const payload = await response.text().catch(() => "");
@@ -2066,7 +2279,9 @@ async function cleanupMarketplaceStorageArtifacts(item = null) {
   if (!item) return;
   const templateRecords = await BuilderTemplate.find({
     sourceMarketplaceItemId: item._id,
-  }).select("_id htmlFileId").lean();
+  })
+    .select("_id htmlFileId")
+    .lean();
   for (const template of templateRecords) {
     const htmlFileId = String(template?.htmlFileId || "").trim();
     if (!htmlFileId) continue;
@@ -2079,7 +2294,9 @@ async function cleanupMarketplaceStorageArtifacts(item = null) {
       }
     }
   }
-  const screenshotAssets = Array.isArray(item?.screenshotAssets) ? item.screenshotAssets : [];
+  const screenshotAssets = Array.isArray(item?.screenshotAssets)
+    ? item.screenshotAssets
+    : [];
   for (const asset of screenshotAssets) {
     const fileId = String(asset?.fileId || "").trim();
     if (!fileId) continue;
@@ -2098,7 +2315,9 @@ async function cleanupMarketplaceTemplateArtifacts(item = null) {
   if (!item) return;
   const templateRecords = await BuilderTemplate.find({
     sourceMarketplaceItemId: item._id,
-  }).select("_id htmlFileId").lean();
+  })
+    .select("_id htmlFileId")
+    .lean();
   for (const template of templateRecords) {
     const htmlFileId = String(template?.htmlFileId || "").trim();
     if (!htmlFileId) continue;
@@ -2173,17 +2392,20 @@ async function removeUserParticipationFromMarketplace(userId) {
     item.comments = (Array.isArray(item.comments) ? item.comments : [])
       .filter((comment) => String(comment?.userId || "") !== String(userId))
       .map((comment) => ({
-        ...(typeof comment?.toObject === "function" ? comment.toObject() : comment),
-        replies: (Array.isArray(comment?.replies) ? comment.replies : []).filter(
-          (reply) => String(reply?.userId || "") !== String(userId),
-        ),
+        ...(typeof comment?.toObject === "function"
+          ? comment.toObject()
+          : comment),
+        replies: (Array.isArray(comment?.replies)
+          ? comment.replies
+          : []
+        ).filter((reply) => String(reply?.userId || "") !== String(userId)),
       }));
     item.ratings = (Array.isArray(item.ratings) ? item.ratings : []).filter(
       (rating) => String(rating?.userId || "") !== String(userId),
     );
-    item.purchases = (Array.isArray(item.purchases) ? item.purchases : []).filter(
-      (purchase) => String(purchase?.buyerId || "") !== String(userId),
-    );
+    item.purchases = (
+      Array.isArray(item.purchases) ? item.purchases : []
+    ).filter((purchase) => String(purchase?.buyerId || "") !== String(userId));
     item.updatedAt = new Date();
     await item.save();
   }
@@ -2196,21 +2418,26 @@ function buildMarketplacePublicItem(item = {}, viewerId = "") {
   const averageRating = ratings.length
     ? Number(
         (
-          ratings.reduce((sum, rating) => sum + Number(rating.value || 0), 0) / ratings.length
+          ratings.reduce((sum, rating) => sum + Number(rating.value || 0), 0) /
+          ratings.length
         ).toFixed(1),
       )
     : 0;
   const ratingPercent = ratings.length
-    ? Number((((averageRating / 5) * 100) || 0).toFixed(1))
+    ? Number(((averageRating / 5) * 100 || 0).toFixed(1))
     : 0;
   const normalizedViewerId = String(viewerId || "").trim();
   const viewerRatingEntry = normalizedViewerId
-    ? ratings.find((rating) => String(rating?.userId || "") === normalizedViewerId)
+    ? ratings.find(
+        (rating) => String(rating?.userId || "") === normalizedViewerId,
+      )
     : null;
   const viewerIsOwner =
     normalizedViewerId && String(item.authorId || "") === normalizedViewerId;
   const viewerPurchase = normalizedViewerId
-    ? purchases.find((purchase) => String(purchase?.buyerId || "") === normalizedViewerId)
+    ? purchases.find(
+        (purchase) => String(purchase?.buyerId || "") === normalizedViewerId,
+      )
     : null;
   return {
     _id: item._id,
@@ -2220,8 +2447,12 @@ function buildMarketplacePublicItem(item = {}, viewerId = "") {
     description: item.description || "",
     price: Number(item.price || 0),
     category: item.category || "General",
-    screenshots: Array.isArray(item.screenshots) ? item.screenshots.slice(0, 4) : [],
-    screenshotAssets: Array.isArray(item.screenshotAssets) ? item.screenshotAssets.slice(0, 4) : [],
+    screenshots: Array.isArray(item.screenshots)
+      ? item.screenshots.slice(0, 4)
+      : [],
+    screenshotAssets: Array.isArray(item.screenshotAssets)
+      ? item.screenshotAssets.slice(0, 4)
+      : [],
     allowTest: Boolean(item.allowTest),
     purpose: item.purpose || "",
     sourceType: item.sourceType || "draft",
@@ -2249,13 +2480,15 @@ function buildMarketplacePublicItem(item = {}, viewerId = "") {
       text: comment.text || "",
       rating: Number(comment.rating || 5),
       date: comment.date || null,
-      replies: (Array.isArray(comment.replies) ? comment.replies : []).map((reply) => ({
-        _id: reply._id,
-        userId: reply.userId || "",
-        name: reply.name || "MediaLab user",
-        text: reply.text || "",
-        date: reply.date || null,
-      })),
+      replies: (Array.isArray(comment.replies) ? comment.replies : []).map(
+        (reply) => ({
+          _id: reply._id,
+          userId: reply.userId || "",
+          name: reply.name || "MediaLab user",
+          text: reply.text || "",
+          date: reply.date || null,
+        }),
+      ),
     })),
     commentsCount: comments.length,
     averageRating,
@@ -2265,7 +2498,9 @@ function buildMarketplacePublicItem(item = {}, viewerId = "") {
     viewerHasRated: Boolean(viewerRatingEntry),
     viewerRatingValue: Number(viewerRatingEntry?.value || 0),
     purchaseCount: purchases.length,
-    pendingPurchases: purchases.filter((purchase) => purchase.status === "pending").length,
+    pendingPurchases: purchases.filter(
+      (purchase) => purchase.status === "pending",
+    ).length,
     viewerPurchaseStatus: viewerPurchase?.status || "",
     viewerPurchaseMessage: viewerPurchase?.message || "",
     viewerPurchaseApprovedUntil: viewerPurchase?.approvedUntil || null,
@@ -2275,8 +2510,12 @@ function buildMarketplacePublicItem(item = {}, viewerId = "") {
 }
 
 function shouldKeepMarketplaceListingAvailable(item = {}) {
-  const authorEmail = String(item?.authorEmail || "").trim().toLowerCase();
-  const authorName = String(item?.authorName || "").trim().toLowerCase();
+  const authorEmail = String(item?.authorEmail || "")
+    .trim()
+    .toLowerCase();
+  const authorName = String(item?.authorName || "")
+    .trim()
+    .toLowerCase();
   return (
     Boolean(item?.keepListedAfterPurchase) ||
     authorEmail === ADMIN_EMAIL ||
@@ -2303,12 +2542,19 @@ function stripMarketplaceRootFolder(files = []) {
   });
 }
 
-function resolveMarketplaceSourceHtmlFromFiles(sourceFiles = [], sourceEntryPath = "index.html") {
+function resolveMarketplaceSourceHtmlFromFiles(
+  sourceFiles = [],
+  sourceEntryPath = "index.html",
+) {
   const files = Array.isArray(sourceFiles) ? sourceFiles : [];
   if (!files.length) return "";
-  const cleanEntryPath = normalizeImportedEntryPath(sourceEntryPath || "index.html");
+  const cleanEntryPath = normalizeImportedEntryPath(
+    sourceEntryPath || "index.html",
+  );
   const exactEntry = files.find(
-    (file) => normalizeImportedEntryPath(file?.path || file?.name || "") === cleanEntryPath,
+    (file) =>
+      normalizeImportedEntryPath(file?.path || file?.name || "") ===
+      cleanEntryPath,
   );
   if (exactEntry?.content) {
     return String(exactEntry.content || "").trim();
@@ -2336,16 +2582,22 @@ function buildMarketplaceSourcePackage({
         path: normalizeRepoFilePath(file?.path || file?.name || ""),
         name: String(file?.name || "").trim(),
         content: typeof file?.content === "string" ? file.content : "",
-        contentBase64: typeof file?.contentBase64 === "string" ? file.contentBase64 : "",
+        contentBase64:
+          typeof file?.contentBase64 === "string" ? file.contentBase64 : "",
         mimeType: String(file?.mimeType || "").trim(),
       }))
       .filter((file) => file.path),
   );
   const prepared = prepareGitHubPush(title || folderSlug, rawFiles);
   const hasFileContents = prepared.files.some(
-    (file) => String(file?.content || "").length || String(file?.contentBase64 || "").length,
+    (file) =>
+      String(file?.content || "").length ||
+      String(file?.contentBase64 || "").length,
   );
-  if (prepared.projectType === "single" || (!hasFileContents && String(sourceHtml || "").trim())) {
+  if (
+    prepared.projectType === "single" ||
+    (!hasFileContents && String(sourceHtml || "").trim())
+  ) {
     return {
       folderSlug,
       entryPath: "index.html",
@@ -2361,18 +2613,26 @@ function buildMarketplaceSourcePackage({
   }
   return {
     folderSlug,
-    entryPath: normalizeImportedEntryPath(prepared.entryPath || sourceEntryPath || "index.html"),
+    entryPath: normalizeImportedEntryPath(
+      prepared.entryPath || sourceEntryPath || "index.html",
+    ),
     files: prepared.files,
   };
 }
 
-function normalizeMarketplaceTemplateHtml(sourceHtml = "", fallbackTitle = "MediaLab Template") {
+function normalizeMarketplaceTemplateHtml(
+  sourceHtml = "",
+  fallbackTitle = "MediaLab Template",
+) {
   const raw = String(sourceHtml || "").trim();
   if (!raw) return "";
   if (/<html[\s>]|<body[\s>]|<!doctype/i.test(raw)) return raw;
   const safeTitle =
-    sanitizeMarketplaceText(fallbackTitle || "MediaLab Template", 120) || "MediaLab Template";
-  const wrappedContent = /^<div[\s>]/i.test(raw) ? raw : `<div class="medialab-template-root">\n${raw}\n</div>`;
+    sanitizeMarketplaceText(fallbackTitle || "MediaLab Template", 120) ||
+    "MediaLab Template";
+  const wrappedContent = /^<div[\s>]/i.test(raw)
+    ? raw
+    : `<div class="medialab-template-root">\n${raw}\n</div>`;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -2388,17 +2648,29 @@ ${wrappedContent}
 
 function buildPurchasedTemplateSnapshotFromMarketplaceItem(item = {}) {
   const safeTitle =
-    sanitizeMarketplaceText(item?.title || "Marketplace Template", 160) || "Marketplace Template";
+    sanitizeMarketplaceText(item?.title || "Marketplace Template", 160) ||
+    "Marketplace Template";
   return {
     marketplaceItemId: item?._id || null,
     slug: `marketplace-template-${String(item?._id || "").trim()}`,
     title: safeTitle,
-    description: sanitizeMarketplaceText(item?.description || item?.purpose || "", 2000),
-    category: sanitizeMarketplaceText(item?.category || "General", 120) || "General",
-    sourceHtml: normalizeMarketplaceTemplateHtml(item?.sourceHtml || "", safeTitle),
+    description: sanitizeMarketplaceText(
+      item?.description || item?.purpose || "",
+      2000,
+    ),
+    category:
+      sanitizeMarketplaceText(item?.category || "General", 120) || "General",
+    sourceHtml: normalizeMarketplaceTemplateHtml(
+      item?.sourceHtml || "",
+      safeTitle,
+    ),
     previewImage: getMarketplacePreviewImage(item),
-    screenshots: Array.isArray(item?.screenshots) ? item.screenshots.slice(0, 4) : [],
-    screenshotAssets: Array.isArray(item?.screenshotAssets) ? item.screenshotAssets.slice(0, 4) : [],
+    screenshots: Array.isArray(item?.screenshots)
+      ? item.screenshots.slice(0, 4)
+      : [],
+    screenshotAssets: Array.isArray(item?.screenshotAssets)
+      ? item.screenshotAssets.slice(0, 4)
+      : [],
     sellerId: item?.authorId || null,
     sellerName: sanitizeMarketplaceText(item?.authorName || "", 120),
     purchasedAt: new Date(),
@@ -2408,16 +2680,21 @@ function buildPurchasedTemplateSnapshotFromMarketplaceItem(item = {}) {
 
 async function grantMarketplaceTemplateToBuyer(listing, buyer) {
   if (!listing?._id || !buyer?._id) return null;
-  buyer.purchasedTemplates = Array.isArray(buyer.purchasedTemplates) ? buyer.purchasedTemplates : [];
+  buyer.purchasedTemplates = Array.isArray(buyer.purchasedTemplates)
+    ? buyer.purchasedTemplates
+    : [];
   const snapshot = buildPurchasedTemplateSnapshotFromMarketplaceItem(listing);
   const existingIndex = buyer.purchasedTemplates.findIndex(
-    (entry) => String(entry?.marketplaceItemId || "") === String(listing._id || ""),
+    (entry) =>
+      String(entry?.marketplaceItemId || "") === String(listing._id || ""),
   );
   if (existingIndex >= 0) {
     buyer.purchasedTemplates.splice(existingIndex, 1, {
       ...buyer.purchasedTemplates[existingIndex],
       ...snapshot,
-      purchasedAt: buyer.purchasedTemplates[existingIndex]?.purchasedAt || snapshot.purchasedAt,
+      purchasedAt:
+        buyer.purchasedTemplates[existingIndex]?.purchasedAt ||
+        snapshot.purchasedAt,
       updatedAt: new Date(),
     });
   } else {
@@ -2475,7 +2752,12 @@ async function syncMarketplaceListingToGithub(user, item) {
   });
   const repoFolderPath = normalizeRepoFilePath(packageData.folderSlug);
   try {
-    await deleteGithubPathRecursive(octokit, user.githubUsername, repo, repoFolderPath);
+    await deleteGithubPathRecursive(
+      octokit,
+      user.githubUsername,
+      repo,
+      repoFolderPath,
+    );
   } catch (error) {
     const status = error?.status || error?.response?.status;
     if (status !== 404) throw error;
@@ -2507,7 +2789,12 @@ async function syncMarketplaceItemAsBuilderTemplate(item) {
   const slugBase = slugifyProjectFolderName(item?.title || "official-template");
   let slug = slugBase;
   let suffix = 2;
-  while (await BuilderTemplate.exists({ slug, _id: { $ne: item?.builderTemplateId || null } })) {
+  while (
+    await BuilderTemplate.exists({
+      slug,
+      _id: { $ne: item?.builderTemplateId || null },
+    })
+  ) {
     slug = `${slugBase}-${suffix}`;
     suffix += 1;
   }
@@ -2536,7 +2823,10 @@ async function syncMarketplaceItemAsBuilderTemplate(item) {
       $set: {
         slug,
         title: item.title || "Official Template",
-        description: item.description || item.purpose || "Official MediaLab builder template.",
+        description:
+          item.description ||
+          item.purpose ||
+          "Official MediaLab builder template.",
         category: item.category || "General",
         html: templateHtml,
         htmlUrl,
@@ -2560,7 +2850,11 @@ async function syncMarketplaceItemAsBuilderTemplate(item) {
 
 async function fetchMarketplaceSourceHtml(author, projectId = "") {
   const sourceProject = findLiveProject(author, projectId);
-  if (!sourceProject?.fileName || !author?.githubUsername || !author?.githubToken) {
+  if (
+    !sourceProject?.fileName ||
+    !author?.githubUsername ||
+    !author?.githubToken
+  ) {
     return { sourceProject: sourceProject || null, html: "" };
   }
   const octokit = buildGithubClient(author);
@@ -2573,11 +2867,17 @@ async function fetchMarketplaceSourceHtml(author, projectId = "") {
   if (!data || Array.isArray(data) || !data.content) {
     return { sourceProject, html: "" };
   }
-  const html = Buffer.from(String(data.content || ""), "base64").toString("utf8");
+  const html = Buffer.from(String(data.content || ""), "base64").toString(
+    "utf8",
+  );
   return { sourceProject, html };
 }
 
-function buildMarketplaceProjectId(sourceType = "draft", projectId = "", title = "") {
+function buildMarketplaceProjectId(
+  sourceType = "draft",
+  projectId = "",
+  title = "",
+) {
   const raw = String(projectId || "").trim();
   if (raw) return raw;
   const seed = sanitizeMarketplaceText(title || "marketplace-project", 80)
@@ -2597,11 +2897,16 @@ async function transferMarketplaceProjectToBuyer(listing, buyer) {
     ? { sourceProject: null, html: inlineHtml }
     : await fetchMarketplaceSourceHtml(author, listing.projectId);
   const draftName = `${sanitizeMarketplaceText(listing.title || sourceProject?.name || "Marketplace Project", 80)} Purchase`;
-  buyer.builderDrafts = Array.isArray(buyer.builderDrafts) ? buyer.builderDrafts : [];
-  buyer.builderDrafts = buyer.builderDrafts.filter((draft) => String(draft?.name || "").trim() !== draftName);
+  buyer.builderDrafts = Array.isArray(buyer.builderDrafts)
+    ? buyer.builderDrafts
+    : [];
+  buyer.builderDrafts = buyer.builderDrafts.filter(
+    (draft) => String(draft?.name || "").trim() !== draftName,
+  );
   buyer.builderDrafts.unshift({
     name: draftName,
-    canvasHtml: html || `<!-- Imported from MediaLab Marketplace: ${draftName} -->`,
+    canvasHtml:
+      html || `<!-- Imported from MediaLab Marketplace: ${draftName} -->`,
     pageBackground: "#ffffff",
     isAutoSave: false,
     savedAt: new Date(),
@@ -2613,14 +2918,22 @@ async function transferMarketplaceProjectToBuyer(listing, buyer) {
   return {
     name: draftName,
     sourceProjectName: sourceProject?.name || listing.title || "",
-    liveUrl: sourceProject?.renderUrl || sourceProject?.liveUrl || listing.liveUrl || "",
+    liveUrl:
+      sourceProject?.renderUrl ||
+      sourceProject?.liveUrl ||
+      listing.liveUrl ||
+      "",
   };
 }
 
 function getAdsenseOAuthClient(user) {
-  const refreshToken = decryptGoogleRefreshToken(user?.googleRefreshToken || "");
+  const refreshToken = decryptGoogleRefreshToken(
+    user?.googleRefreshToken || "",
+  );
   if (!refreshToken) {
-    throw new Error("Connect AdSense with Google first to load real-time stats.");
+    throw new Error(
+      "Connect AdSense with Google first to load real-time stats.",
+    );
   }
   const client = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
@@ -2632,7 +2945,9 @@ function getAdsenseOAuthClient(user) {
 }
 
 function normalizeAdsenseReviewState(status = "") {
-  const raw = String(status || "").trim().toUpperCase();
+  const raw = String(status || "")
+    .trim()
+    .toUpperCase();
   if (!raw) return "disconnected";
   if (
     [
@@ -2650,7 +2965,11 @@ function normalizeAdsenseReviewState(status = "") {
 }
 
 async function refreshAdsenseSiteStatusIfNeeded(user, { force = false } = {}) {
-  if (!user?.googleRefreshToken || !user?.adsenseAccountName || !user?.adsenseSiteUrl) {
+  if (
+    !user?.googleRefreshToken ||
+    !user?.adsenseAccountName ||
+    !user?.adsenseSiteUrl
+  ) {
     return {
       siteStatus: String(user?.adsenseSiteStatus || "").trim(),
       reviewState: normalizeAdsenseReviewState(user?.adsenseSiteStatus || ""),
@@ -2664,7 +2983,9 @@ async function refreshAdsenseSiteStatusIfNeeded(user, { force = false } = {}) {
   const lastCheckedAt = user?.adsenseLastCheckedAt
     ? new Date(user.adsenseLastCheckedAt)
     : null;
-  const checkAgeMs = lastCheckedAt ? Date.now() - lastCheckedAt.getTime() : Number.POSITIVE_INFINITY;
+  const checkAgeMs = lastCheckedAt
+    ? Date.now() - lastCheckedAt.getTime()
+    : Number.POSITIVE_INFINITY;
   const sixHoursMs = 6 * 60 * 60 * 1000;
   if (!force && reviewState !== "pending" && checkAgeMs < sixHoursMs) {
     return {
@@ -2689,22 +3010,33 @@ async function refreshAdsenseSiteStatusIfNeeded(user, { force = false } = {}) {
   const adsense = google.adsense({ version: "v2", auth });
   const targetDomain =
     extractDomainNameFromUrl(user.adsenseSiteUrl) ||
-    String(user.adsenseSiteUrl || "").trim().toLowerCase();
+    String(user.adsenseSiteUrl || "")
+      .trim()
+      .toLowerCase();
   const sitesResponse = await adsense.accounts.sites.list({
     parent: user.adsenseAccountName,
     pageSize: 200,
   });
   const sites = sitesResponse.data?.sites || [];
   const matchedSite = sites.find((site) => {
-    const siteUrl = site.siteUrl || site.url || site.domain || site.reportingDimensionId || "";
-    const siteDomain = extractDomainNameFromUrl(siteUrl) || String(siteUrl).trim().toLowerCase();
+    const siteUrl =
+      site.siteUrl ||
+      site.url ||
+      site.domain ||
+      site.reportingDimensionId ||
+      "";
+    const siteDomain =
+      extractDomainNameFromUrl(siteUrl) || String(siteUrl).trim().toLowerCase();
     return siteDomain === targetDomain;
   });
 
   const previousStatus = String(user.adsenseSiteStatus || "").trim();
   const previousReviewState = normalizeAdsenseReviewState(previousStatus);
   const nextStatus = String(
-    matchedSite?.state || matchedSite?.status || matchedSite?.platformType || previousStatus,
+    matchedSite?.state ||
+      matchedSite?.status ||
+      matchedSite?.platformType ||
+      previousStatus,
   ).trim();
   const nextReviewState = normalizeAdsenseReviewState(nextStatus);
 
@@ -2730,7 +3062,8 @@ async function refreshAdsenseSiteStatusIfNeeded(user, { force = false } = {}) {
         userId: user._id,
         type: "adsense-approved",
         title: "AdSense approved",
-        message: "Your AdSense account is approved. You can now monetize eligible MediaLab projects.",
+        message:
+          "Your AdSense account is approved. You can now monetize eligible MediaLab projects.",
         targetType: "console",
         metadata: {
           siteStatus: nextStatus,
@@ -2745,7 +3078,8 @@ async function refreshAdsenseSiteStatusIfNeeded(user, { force = false } = {}) {
         userId: user._id,
         type: "adsense-review",
         title: "AdSense verification started",
-        message: "Google has started reviewing your AdSense site. MediaLab will keep checking the status for you.",
+        message:
+          "Google has started reviewing your AdSense site. MediaLab will keep checking the status for you.",
         targetType: "console",
         metadata: {
           siteStatus: nextStatus,
@@ -2769,21 +3103,25 @@ function collectHostedDomains(projects = []) {
     project?.renderUrl || "",
     project?.liveUrl || project?.url || "",
   ]);
-  return [...new Set(
-    urls
-      .map((url) => {
-        try {
-          return new URL(url).hostname;
-        } catch {
-          return "";
-        }
-      })
-      .filter(Boolean),
-  )];
+  return [
+    ...new Set(
+      urls
+        .map((url) => {
+          try {
+            return new URL(url).hostname;
+          } catch {
+            return "";
+          }
+        })
+        .filter(Boolean),
+    ),
+  ];
 }
 
 function collectHostedProjectDomains(user) {
-  return collectHostedDomains(Array.isArray(user?.liveProjects) ? user.liveProjects : []);
+  return collectHostedDomains(
+    Array.isArray(user?.liveProjects) ? user.liveProjects : [],
+  );
 }
 
 async function getAdsenseDomainStats(user, targetUrl = "") {
@@ -2810,7 +3148,12 @@ async function getAdsenseDomainStats(user, targetUrl = "") {
       ctr: 0,
     };
   }
-  const metrics = ["ESTIMATED_EARNINGS", "IMPRESSIONS", "PAGE_VIEWS_RPM", "CLICKS"];
+  const metrics = [
+    "ESTIMATED_EARNINGS",
+    "IMPRESSIONS",
+    "PAGE_VIEWS_RPM",
+    "CLICKS",
+  ];
   const report = await adsense.accounts.reports.generate({
     account: accountName,
     dateRange: "LAST_7_DAYS",
@@ -2820,7 +3163,8 @@ async function getAdsenseDomainStats(user, targetUrl = "") {
     languageCode: "en",
     limit: 1,
   });
-  const totals = report.data?.totals?.cells || report.data?.rows?.[0]?.cells || [];
+  const totals =
+    report.data?.totals?.cells || report.data?.rows?.[0]?.cells || [];
   const metricCells = totals.slice(-metrics.length);
   const impressions = Number(metricCells[1]?.value || 0);
   const clicks = Number(metricCells[3]?.value || 0);
@@ -2870,7 +3214,10 @@ function extractDomainNameFromUrl(url = "") {
 function detectAdsenseScript(html = "", adsenseId = "") {
   const source = String(html || "");
   if (!source) return false;
-  const hasScript = /pagead2\.googlesyndication\.com\/pagead\/js\/adsbygoogle\.js/i.test(source);
+  const hasScript =
+    /pagead2\.googlesyndication\.com\/pagead\/js\/adsbygoogle\.js/i.test(
+      source,
+    );
   if (!hasScript) return false;
   if (!adsenseId) return true;
   return source.includes(String(adsenseId).trim());
@@ -2879,30 +3226,28 @@ function detectAdsenseScript(html = "", adsenseId = "") {
 function detectDeviceLabel(userAgent = "") {
   const ua = String(userAgent || "").toLowerCase();
   if (!ua) return "Unknown Device";
-  const device =
-    /android/.test(ua)
-      ? "Android"
-      : /(iphone|ipad|ipod)/.test(ua)
-        ? "iPhone"
-        : /windows/.test(ua)
-          ? "Windows"
-          : /macintosh|mac os x/.test(ua)
-            ? "Mac"
-            : /linux/.test(ua)
-              ? "Linux"
-              : "Web";
-  const browser =
-    /edg\//.test(ua)
-      ? "Edge"
-      : /chrome\//.test(ua)
-        ? "Chrome"
-        : /safari\//.test(ua) && !/chrome\//.test(ua)
-          ? "Safari"
-          : /firefox\//.test(ua)
-            ? "Firefox"
-            : /opr\//.test(ua) || /opera/.test(ua)
-              ? "Opera"
-              : "Browser";
+  const device = /android/.test(ua)
+    ? "Android"
+    : /(iphone|ipad|ipod)/.test(ua)
+      ? "iPhone"
+      : /windows/.test(ua)
+        ? "Windows"
+        : /macintosh|mac os x/.test(ua)
+          ? "Mac"
+          : /linux/.test(ua)
+            ? "Linux"
+            : "Web";
+  const browser = /edg\//.test(ua)
+    ? "Edge"
+    : /chrome\//.test(ua)
+      ? "Chrome"
+      : /safari\//.test(ua) && !/chrome\//.test(ua)
+        ? "Safari"
+        : /firefox\//.test(ua)
+          ? "Firefox"
+          : /opr\//.test(ua) || /opera/.test(ua)
+            ? "Opera"
+            : "Browser";
   return `${device} • ${browser}`;
 }
 
@@ -2959,14 +3304,18 @@ function detectBrowserLabel(userAgent = "") {
 function detectDeviceClass(userAgent = "", metadata = {}) {
   const ua = String(userAgent || "").toLowerCase();
   const width = Number(metadata?.screenWidth || metadata?.viewportWidth || 0);
-  const height = Number(metadata?.screenHeight || metadata?.viewportHeight || 0);
+  const height = Number(
+    metadata?.screenHeight || metadata?.viewportHeight || 0,
+  );
   const shortestSide = Math.min(width || 0, height || 0);
   const longestSide = Math.max(width || 0, height || 0);
   const platform = String(metadata?.platform || "").toLowerCase();
   const maxTouchPoints = Number(metadata?.maxTouchPoints || 0);
   const coarsePointer = Boolean(metadata?.coarsePointer);
   const hoverCapable =
-    metadata?.hoverCapable === undefined ? false : Boolean(metadata.hoverCapable);
+    metadata?.hoverCapable === undefined
+      ? false
+      : Boolean(metadata.hoverCapable);
   const mobileHint = Boolean(metadata?.mobileHint);
   const clientDeviceClass = String(metadata?.clientDeviceClass || "").trim();
   if (["Phone", "Tablet", "Laptop"].includes(clientDeviceClass)) {
@@ -2978,17 +3327,26 @@ function detectDeviceClass(userAgent = "", metadata = {}) {
     /iphone|ipod|mobile/.test(ua) || (/android/.test(ua) && /mobile/.test(ua));
   const desktopPlatform = /win|mac|linux|x11|cros/.test(platform);
   const appleTabletLike =
-    /ipad/.test(ua) || (platform.includes("mac") && maxTouchPoints > 1 && coarsePointer);
+    /ipad/.test(ua) ||
+    (platform.includes("mac") && maxTouchPoints > 1 && coarsePointer);
   if (appleTabletLike || uaSuggestsTablet) {
     return "Tablet";
   }
   if (uaSuggestsPhone || (mobileHint && !desktopPlatform)) {
     return "Phone";
   }
-  if (desktopPlatform && (!coarsePointer || hoverCapable || maxTouchPoints === 0)) {
+  if (
+    desktopPlatform &&
+    (!coarsePointer || hoverCapable || maxTouchPoints === 0)
+  ) {
     return "Laptop";
   }
-  if (coarsePointer && maxTouchPoints > 0 && shortestSide > 0 && shortestSide < 600) {
+  if (
+    coarsePointer &&
+    maxTouchPoints > 0 &&
+    shortestSide > 0 &&
+    shortestSide < 600
+  ) {
     return "Phone";
   }
   if (
@@ -3007,7 +3365,8 @@ function detectDeviceClass(userAgent = "", metadata = {}) {
 }
 
 function enrichUsageMetadata(rawMetadata = {}, userAgent = "", req = null) {
-  const metadata = rawMetadata && typeof rawMetadata === "object" ? { ...rawMetadata } : {};
+  const metadata =
+    rawMetadata && typeof rawMetadata === "object" ? { ...rawMetadata } : {};
   metadata.userAgent = String(metadata.userAgent || userAgent || "").trim();
   metadata.ip = String(metadata.ip || extractClientIp(req) || "").trim();
   const viewportWidth = Number(metadata.viewportWidth || 0);
@@ -3036,9 +3395,15 @@ function buildReferralFingerprintSeed(metadata = {}, userAgent = "") {
   ).trim();
   if (explicitFingerprint) return explicitFingerprint;
   return [
-    String(metadata?.platform || "").trim().toLowerCase(),
-    String(metadata?.browser || "").trim().toLowerCase(),
-    String(metadata?.device || metadata?.clientDeviceClass || "").trim().toLowerCase(),
+    String(metadata?.platform || "")
+      .trim()
+      .toLowerCase(),
+    String(metadata?.browser || "")
+      .trim()
+      .toLowerCase(),
+    String(metadata?.device || metadata?.clientDeviceClass || "")
+      .trim()
+      .toLowerCase(),
     String(metadata?.screenWidth || metadata?.viewportWidth || "").trim(),
     String(metadata?.screenHeight || metadata?.viewportHeight || "").trim(),
     String(metadata?.devicePixelRatio || "").trim(),
@@ -3046,11 +3411,17 @@ function buildReferralFingerprintSeed(metadata = {}, userAgent = "") {
     metadata?.coarsePointer ? "1" : "0",
     metadata?.hoverCapable ? "1" : "0",
     metadata?.mobileHint ? "1" : "0",
-    String(metadata?.timezone || "").trim().toLowerCase(),
-    String(metadata?.language || "").trim().toLowerCase(),
+    String(metadata?.timezone || "")
+      .trim()
+      .toLowerCase(),
+    String(metadata?.language || "")
+      .trim()
+      .toLowerCase(),
     String(metadata?.hardwareConcurrency || "").trim(),
     String(metadata?.deviceMemory || "").trim(),
-    String(userAgent || "").trim().toLowerCase(),
+    String(userAgent || "")
+      .trim()
+      .toLowerCase(),
   ]
     .filter(Boolean)
     .join("|");
@@ -3058,7 +3429,10 @@ function buildReferralFingerprintSeed(metadata = {}, userAgent = "") {
 
 function extractReferralSignals(rawMetadata = {}, userAgent = "", req = null) {
   const metadata = enrichUsageMetadata(rawMetadata, userAgent, req);
-  const fingerprintSeed = buildReferralFingerprintSeed(metadata, metadata.userAgent || userAgent);
+  const fingerprintSeed = buildReferralFingerprintSeed(
+    metadata,
+    metadata.userAgent || userAgent,
+  );
   return {
     metadata,
     fingerprintHash: hashReferralSignal(fingerprintSeed),
@@ -3091,15 +3465,22 @@ async function upsertReferralLedgerEntry({
   const normalizedReferralCode = String(referralCode || "").trim();
   const query = normalizedFingerprintHash
     ? { fingerprintHash: normalizedFingerprintHash }
-    : { claimantUserId: user?._id || null, referralCode: normalizedReferralCode };
+    : {
+        claimantUserId: user?._id || null,
+        referralCode: normalizedReferralCode,
+      };
   await ReferralLedger.findOneAndUpdate(
     query,
     {
       $set: {
-        ...(normalizedFingerprintHash ? { fingerprintHash: normalizedFingerprintHash } : {}),
+        ...(normalizedFingerprintHash
+          ? { fingerprintHash: normalizedFingerprintHash }
+          : {}),
         ipHash: String(ipHash || "").trim(),
         claimantUserId: user?._id || null,
-        claimantEmail: String(user?.email || "").trim().toLowerCase(),
+        claimantEmail: String(user?.email || "")
+          .trim()
+          .toLowerCase(),
         referrerUserId: referrer?._id || null,
         referralCode: normalizedReferralCode,
         rewardDownloadId: rewardDownloadId || null,
@@ -3107,7 +3488,9 @@ async function upsertReferralLedgerEntry({
         installRewardedAt: installRewardedAt || null,
         status: String(status || "seen").trim(),
         reason: String(reason || "").trim(),
-        device: String(metadata?.device || metadata?.clientDeviceClass || "").trim(),
+        device: String(
+          metadata?.device || metadata?.clientDeviceClass || "",
+        ).trim(),
         platform: String(metadata?.platform || "").trim(),
         browser: String(metadata?.browser || "").trim(),
         userAgent: String(metadata?.userAgent || "").trim(),
@@ -3139,7 +3522,9 @@ async function ensureUserReferralCode(user) {
   if (String(user.referralCode || "").trim()) return user;
   for (let attempt = 0; attempt < 32; attempt += 1) {
     const candidate = generateReferralCode(user);
-    const existing = await User.findOne({ referralCode: candidate }).select("_id").lean();
+    const existing = await User.findOne({ referralCode: candidate })
+      .select("_id")
+      .lean();
     if (existing) continue;
     user.referralCode = candidate;
     await user.save();
@@ -3177,8 +3562,7 @@ app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 function shouldApplyWebContainerIsolation(req) {
   if (req.method === "OPTIONS") return false;
   return (
-    req.path === "/studio-terminal" ||
-    req.path.startsWith("/studio-terminal/")
+    req.path === "/studio-terminal" || req.path.startsWith("/studio-terminal/")
   );
 }
 
@@ -3197,7 +3581,10 @@ app.use((req, res, next) => {
     req.path === "/sw.js" ||
     req.path === "/manifest.json"
   ) {
-    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.set(
+      "Cache-Control",
+      "no-store, no-cache, must-revalidate, proxy-revalidate",
+    );
     res.set("Pragma", "no-cache");
     res.set("Expires", "0");
     res.set("Surrogate-Control", "no-store");
@@ -3213,7 +3600,9 @@ app.post("/api/usage-log", async (req, res) => {
         .status(400)
         .json({ success: false, message: "Action and summary are required." });
     }
-    const fallbackEmail = String(req.body?.email || "").trim().toLowerCase();
+    const fallbackEmail = String(req.body?.email || "")
+      .trim()
+      .toLowerCase();
     const fallbackName = String(req.body?.name || "").trim();
     const fallbackIsPro = Boolean(req.body?.isPro);
     const hasFallbackIdentity = Boolean(fallbackEmail && fallbackName);
@@ -3248,13 +3637,17 @@ app.post("/api/downloads", async (req, res) => {
     const type = String(req.body?.type || "pwa").trim() || "pwa";
     const source = String(req.body?.source || "web").trim() || "web";
     const platform = String(req.body?.platform || "").trim();
-    const installState = String(req.body?.metadata?.installState || "").trim().toLowerCase();
+    const installState = String(req.body?.metadata?.installState || "")
+      .trim()
+      .toLowerCase();
     const referralSignals = extractReferralSignals(
       req.body?.metadata || {},
       String(req.headers["user-agent"] || "").trim(),
       req,
     );
-    const fallbackEmail = String(req.body?.email || "").trim().toLowerCase();
+    const fallbackEmail = String(req.body?.email || "")
+      .trim()
+      .toLowerCase();
     const fallbackName = String(req.body?.name || "").trim();
     const fallbackIsPro = Boolean(req.body?.isPro);
     const hasFallbackIdentity = Boolean(fallbackEmail && fallbackName);
@@ -3273,10 +3666,13 @@ app.post("/api/downloads", async (req, res) => {
       const installedUser = await User.findById(req.user._id);
       if (installedUser) {
         await ensureUserReferralCode(installedUser);
-        const referredByCode = String(installedUser.referredByCode || "").trim();
+        const referredByCode = String(
+          installedUser.referredByCode || "",
+        ).trim();
         const alreadyRewarded = Array.isArray(installedUser.referralRewards)
           ? installedUser.referralRewards.some(
-              (entry) => String(entry?.downloadId || "") === String(record._id || ""),
+              (entry) =>
+                String(entry?.downloadId || "") === String(record._id || ""),
             )
           : false;
         if (referredByCode && !alreadyRewarded) {
@@ -3287,13 +3683,15 @@ app.post("/api/downloads", async (req, res) => {
             );
             const deviceAlreadyUsedByAnotherUser = Boolean(
               priorDeviceEntry &&
-                priorDeviceEntry.claimantUserId &&
-                String(priorDeviceEntry.claimantUserId) !== String(installedUser._id),
+              priorDeviceEntry.claimantUserId &&
+              String(priorDeviceEntry.claimantUserId) !==
+                String(installedUser._id),
             );
             const deviceAlreadyRewarded = Boolean(
               priorDeviceEntry &&
-                priorDeviceEntry.installRewardedAt &&
-                String(priorDeviceEntry.claimantUserId || "") !== String(installedUser._id),
+              priorDeviceEntry.installRewardedAt &&
+              String(priorDeviceEntry.claimantUserId || "") !==
+                String(installedUser._id),
             );
             if (deviceAlreadyUsedByAnotherUser || deviceAlreadyRewarded) {
               await upsertReferralLedgerEntry({
@@ -3317,7 +3715,8 @@ app.post("/api/downloads", async (req, res) => {
                 isAnonymous: false,
                 isPro: Boolean(installedUser.isPro),
                 action: "referral-install-blocked",
-                summary: "referral reward blocked because this device was already used",
+                summary:
+                  "referral reward blocked because this device was already used",
                 source: "referral",
                 metadata: {
                   reason: "device-reused",
@@ -3326,67 +3725,80 @@ app.post("/api/downloads", async (req, res) => {
                 },
               });
             } else {
-            const priorReward = Array.isArray(referrer.referralRewards)
-              ? referrer.referralRewards.some(
-                  (entry) => String(entry?.referredUserId || "") === String(installedUser._id || ""),
-                )
-              : false;
-            if (!priorReward) {
-              referrer.accountBalance = Number((Number(referrer.accountBalance || 0) + 0.01).toFixed(2));
-              referrer.referralInstallCount = Number(referrer.referralInstallCount || 0) + 1;
-              referrer.referralEarnings = Number((Number(referrer.referralEarnings || 0) + 0.01).toFixed(2));
-              referrer.referralRewards = [
-                ...(Array.isArray(referrer.referralRewards) ? referrer.referralRewards : []),
-                {
-                  referredUserId: installedUser._id,
-                  referredEmail: installedUser.email || "",
-                  downloadId: record._id,
-                  amount: 0.01,
-                  rewardedAt: new Date(),
-                },
-              ].slice(-500);
-              await referrer.save();
+              const priorReward = Array.isArray(referrer.referralRewards)
+                ? referrer.referralRewards.some(
+                    (entry) =>
+                      String(entry?.referredUserId || "") ===
+                      String(installedUser._id || ""),
+                  )
+                : false;
+              if (!priorReward) {
+                referrer.accountBalance = Number(
+                  (Number(referrer.accountBalance || 0) + 0.01).toFixed(2),
+                );
+                referrer.referralInstallCount =
+                  Number(referrer.referralInstallCount || 0) + 1;
+                referrer.referralEarnings = Number(
+                  (Number(referrer.referralEarnings || 0) + 0.01).toFixed(2),
+                );
+                referrer.referralRewards = [
+                  ...(Array.isArray(referrer.referralRewards)
+                    ? referrer.referralRewards
+                    : []),
+                  {
+                    referredUserId: installedUser._id,
+                    referredEmail: installedUser.email || "",
+                    downloadId: record._id,
+                    amount: 0.01,
+                    rewardedAt: new Date(),
+                  },
+                ].slice(-500);
+                await referrer.save();
 
-              await createUsageLog({
-                user: referrer,
-                email: referrer.email,
-                name: referrer.name,
-                isAnonymous: false,
-                isPro: Boolean(referrer.isPro),
-                action: "referral-install-reward",
-                summary: `earned 0.01 from referral install by ${installedUser.email || "a new user"}`,
-                source: "referral",
-                metadata: { referredUserId: installedUser._id, downloadId: record._id, amount: 0.01 },
-              });
-              await createUserNotification({
-                userId: referrer._id,
-                type: "wallet-credit",
-                title: "You have received $0.01 from MediaLab",
-                message: `${installedUser.email || "A new user"} installed MediaLab with your referral link.`,
-                targetType: "wallet",
-                metadata: {
-                  amount: 0.01,
-                  reason: "referral-install",
-                  referredUserId: installedUser._id,
-                },
-              });
-              await upsertReferralLedgerEntry({
-                fingerprintHash: referralSignals.fingerprintHash,
-                ipHash: referralSignals.ipHash,
-                user: installedUser,
-                referrer,
-                referralCode: referredByCode,
-                status: "rewarded",
-                reason: "first-install",
-                rewardDownloadId: record._id,
-                rewardAmount: 0.01,
-                installRewardedAt: new Date(),
-                metadata: {
-                  ...referralSignals.metadata,
-                  downloadId: record._id,
-                },
-              });
-            }
+                await createUsageLog({
+                  user: referrer,
+                  email: referrer.email,
+                  name: referrer.name,
+                  isAnonymous: false,
+                  isPro: Boolean(referrer.isPro),
+                  action: "referral-install-reward",
+                  summary: `earned 0.01 from referral install by ${installedUser.email || "a new user"}`,
+                  source: "referral",
+                  metadata: {
+                    referredUserId: installedUser._id,
+                    downloadId: record._id,
+                    amount: 0.01,
+                  },
+                });
+                await createUserNotification({
+                  userId: referrer._id,
+                  type: "wallet-credit",
+                  title: "You have received $0.01 from MediaLab",
+                  message: `${installedUser.email || "A new user"} installed MediaLab with your referral link.`,
+                  targetType: "wallet",
+                  metadata: {
+                    amount: 0.01,
+                    reason: "referral-install",
+                    referredUserId: installedUser._id,
+                  },
+                });
+                await upsertReferralLedgerEntry({
+                  fingerprintHash: referralSignals.fingerprintHash,
+                  ipHash: referralSignals.ipHash,
+                  user: installedUser,
+                  referrer,
+                  referralCode: referredByCode,
+                  status: "rewarded",
+                  reason: "first-install",
+                  rewardDownloadId: record._id,
+                  rewardAmount: 0.01,
+                  installRewardedAt: new Date(),
+                  metadata: {
+                    ...referralSignals.metadata,
+                    downloadId: record._id,
+                  },
+                });
+              }
             }
           }
         }
@@ -3410,18 +3822,24 @@ app.post("/api/downloads", async (req, res) => {
     res.json({ success: true, download: record });
   } catch (error) {
     console.error("Download record endpoint failed:", error);
-    res.status(500).json({ success: false, message: "Could not save download." });
+    res
+      .status(500)
+      .json({ success: false, message: "Could not save download." });
   }
 });
 
 app.get("/api/referrals/status", async (req, res) => {
   try {
     if (!req.user?._id) {
-      return res.status(401).json({ success: false, message: "Login required." });
+      return res
+        .status(401)
+        .json({ success: false, message: "Login required." });
     }
     const user = await User.findById(req.user._id);
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found." });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found." });
     }
     await ensureUserReferralCode(user);
     return res.json({
@@ -3435,26 +3853,42 @@ app.get("/api/referrals/status", async (req, res) => {
     });
   } catch (error) {
     console.error("Referral status failed:", error);
-    return res.status(500).json({ success: false, message: "Could not load referral info right now." });
+    return res
+      .status(500)
+      .json({
+        success: false,
+        message: "Could not load referral info right now.",
+      });
   }
 });
 
 app.post("/api/referrals/claim", async (req, res) => {
   try {
     if (!req.user?._id) {
-      return res.status(401).json({ success: false, message: "Login required." });
+      return res
+        .status(401)
+        .json({ success: false, message: "Login required." });
     }
     const referralCode = String(req.body?.referralCode || "").trim();
     if (!referralCode) {
-      return res.status(400).json({ success: false, message: "Referral code is required." });
+      return res
+        .status(400)
+        .json({ success: false, message: "Referral code is required." });
     }
     const user = await User.findById(req.user._id);
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found." });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found." });
     }
     await ensureUserReferralCode(user);
     if (String(user.referralCode || "") === referralCode) {
-      return res.status(400).json({ success: false, message: "You cannot use your own referral link." });
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "You cannot use your own referral link.",
+        });
     }
     if (String(user.referredByCode || "").trim()) {
       return res.json({
@@ -3466,23 +3900,27 @@ app.post("/api/referrals/claim", async (req, res) => {
     }
     const referrer = await User.findOne({ referralCode });
     if (!referrer) {
-      return res.status(404).json({ success: false, message: "Referral code was not found." });
+      return res
+        .status(404)
+        .json({ success: false, message: "Referral code was not found." });
     }
     const referralSignals = extractReferralSignals(
       req.body?.metadata || {},
       String(req.headers["user-agent"] || "").trim(),
       req,
     );
-    const priorDeviceEntry = await findReferralLedgerForFingerprint(referralSignals.fingerprintHash);
+    const priorDeviceEntry = await findReferralLedgerForFingerprint(
+      referralSignals.fingerprintHash,
+    );
     const deviceClaimedByAnotherUser = Boolean(
       priorDeviceEntry &&
-        priorDeviceEntry.claimantUserId &&
-        String(priorDeviceEntry.claimantUserId) !== String(user._id),
+      priorDeviceEntry.claimantUserId &&
+      String(priorDeviceEntry.claimantUserId) !== String(user._id),
     );
     const deviceAlreadyRewarded = Boolean(
       priorDeviceEntry &&
-        priorDeviceEntry.installRewardedAt &&
-        String(priorDeviceEntry.claimantUserId || "") !== String(user._id),
+      priorDeviceEntry.installRewardedAt &&
+      String(priorDeviceEntry.claimantUserId || "") !== String(user._id),
     );
     if (deviceClaimedByAnotherUser || deviceAlreadyRewarded) {
       await upsertReferralLedgerEntry({
@@ -3534,14 +3972,21 @@ app.post("/api/referrals/claim", async (req, res) => {
     });
   } catch (error) {
     console.error("Referral claim failed:", error);
-    return res.status(500).json({ success: false, message: "Could not save referral link right now." });
+    return res
+      .status(500)
+      .json({
+        success: false,
+        message: "Could not save referral link right now.",
+      });
   }
 });
 
 app.get("/api/notifications", accountRateLimit, async (req, res) => {
   try {
     if (!req.user?._id) {
-      return res.status(401).json({ success: false, message: "Login required." });
+      return res
+        .status(401)
+        .json({ success: false, message: "Login required." });
     }
     await trimUserNotifications(req.user._id);
     const notifications = await listUserNotifications(req.user._id, 10);
@@ -3563,114 +4008,170 @@ app.get("/api/notifications", accountRateLimit, async (req, res) => {
   }
 });
 
-app.post("/api/notifications/read", accountRateLimit, express.json(), async (req, res) => {
-  try {
-    if (!req.user?._id) {
-      return res.status(401).json({ success: false, message: "Login required." });
-    }
-    const notificationId = String(req.body?.notificationId || "").trim();
-    if (notificationId) {
-      await Notification.updateOne(
-        { _id: notificationId, userId: req.user._id },
-        { $set: { isRead: true, readAt: new Date() } },
-      );
-    } else {
-      await Notification.updateMany(
-        { userId: req.user._id, isRead: false },
-        { $set: { isRead: true, readAt: new Date() } },
-      );
-    }
-    const unreadCount = await Notification.countDocuments({
-      userId: req.user._id,
-      isRead: false,
-    });
-    return res.json({ success: true, unreadCount });
-  } catch (error) {
-    console.error("Notification read failed:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Could not update notifications right now.",
-    });
-  }
-});
-
-app.get("/api/admin/notifications", adminRateLimit, requireAdminApi, async (_req, res) => {
-  try {
-    const recent = await Notification.find({})
-      .sort({ createdAt: -1 })
-      .limit(20)
-      .lean();
-    return res.json({
-      success: true,
-      notifications: recent.map((item) => serializeNotification(item)),
-    });
-  } catch (error) {
-    console.error("Admin notifications fetch failed:", error);
-    return res.status(500).json({ success: false, message: "Could not load notifications." });
-  }
-});
-
-app.post("/api/admin/notifications", adminRateLimit, requireAdminApi, express.json(), async (req, res) => {
-  try {
-    const mode = String(req.body?.mode || "all").trim().toLowerCase();
-    const message = String(req.body?.message || "").trim();
-    const email = String(req.body?.email || "").trim().toLowerCase();
-    if (!message) {
-      return res.status(400).json({ success: false, message: "Notification message is required." });
-    }
-    if (mode === "individual") {
-      if (!email) {
-        return res.status(400).json({ success: false, message: "Enter the user email first." });
+app.post(
+  "/api/notifications/read",
+  accountRateLimit,
+  express.json(),
+  async (req, res) => {
+    try {
+      if (!req.user?._id) {
+        return res
+          .status(401)
+          .json({ success: false, message: "Login required." });
       }
-      const user = await User.findOne({ email });
-      if (!user) {
-        return res.status(404).json({ success: false, message: "User not found for that email." });
+      const notificationId = String(req.body?.notificationId || "").trim();
+      if (notificationId) {
+        await Notification.updateOne(
+          { _id: notificationId, userId: req.user._id },
+          { $set: { isRead: true, readAt: new Date() } },
+        );
+      } else {
+        await Notification.updateMany(
+          { userId: req.user._id, isRead: false },
+          { $set: { isRead: true, readAt: new Date() } },
+        );
       }
-      const renderedMessage = renderAdminNotificationTemplate(message, user);
-      const notification = await createUserNotification({
-        userId: user._id,
-        toEmail: user.email || "",
-        fromEmail: "dev@gmail.com",
-        fromName: "ML Community",
-        deliveryScope: "individual",
-        type: "admin",
-        title: "New admin message",
-        message: renderedMessage,
-        targetType: "console",
-        metadata: { scope: "individual", email, templateSource: message },
+      const unreadCount = await Notification.countDocuments({
+        userId: req.user._id,
+        isRead: false,
       });
-      if (!notification) {
-        return res.status(500).json({ success: false, message: "Could not send this notification right now." });
-      }
-      return res.json({ success: true, message: "Notification sent to the selected user." });
-    }
-    const users = await User.find({}).select("_id email name liveProjects projects").lean();
-    const notifications = [];
-    for (const user of users) {
-      const renderedMessage = renderAdminNotificationTemplate(message, user);
-      const notification = await createUserNotification({
-        userId: user._id,
-        toEmail: user.email || "",
-        fromEmail: "dev@gmail.com",
-        fromName: "ML Community",
-        deliveryScope: "all",
-        type: "admin",
-        title: "New admin announcement",
-        message: renderedMessage,
-        targetType: "console",
-        metadata: { scope: "all", templateSource: message },
+      return res.json({ success: true, unreadCount });
+    } catch (error) {
+      console.error("Notification read failed:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Could not update notifications right now.",
       });
-      if (notification) notifications.push(notification);
     }
-    if (!notifications.length) {
-      return res.status(500).json({ success: false, message: "Could not send notifications right now." });
+  },
+);
+
+app.get(
+  "/api/admin/notifications",
+  adminRateLimit,
+  requireAdminApi,
+  async (_req, res) => {
+    try {
+      const recent = await Notification.find({})
+        .sort({ createdAt: -1 })
+        .limit(20)
+        .lean();
+      return res.json({
+        success: true,
+        notifications: recent.map((item) => serializeNotification(item)),
+      });
+    } catch (error) {
+      console.error("Admin notifications fetch failed:", error);
+      return res
+        .status(500)
+        .json({ success: false, message: "Could not load notifications." });
     }
-    return res.json({ success: true, message: "Notification sent to all users." });
-  } catch (error) {
-    console.error("Admin notification send failed:", error);
-    return res.status(500).json({ success: false, message: "Could not send notifications." });
-  }
-});
+  },
+);
+
+app.post(
+  "/api/admin/notifications",
+  adminRateLimit,
+  requireAdminApi,
+  express.json(),
+  async (req, res) => {
+    try {
+      const mode = String(req.body?.mode || "all")
+        .trim()
+        .toLowerCase();
+      const message = String(req.body?.message || "").trim();
+      const email = String(req.body?.email || "")
+        .trim()
+        .toLowerCase();
+      if (!message) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+            message: "Notification message is required.",
+          });
+      }
+      if (mode === "individual") {
+        if (!email) {
+          return res
+            .status(400)
+            .json({ success: false, message: "Enter the user email first." });
+        }
+        const user = await User.findOne({ email });
+        if (!user) {
+          return res
+            .status(404)
+            .json({
+              success: false,
+              message: "User not found for that email.",
+            });
+        }
+        const renderedMessage = renderAdminNotificationTemplate(message, user);
+        const notification = await createUserNotification({
+          userId: user._id,
+          toEmail: user.email || "",
+          fromEmail: "dev@gmail.com",
+          fromName: "ML Community",
+          deliveryScope: "individual",
+          type: "admin",
+          title: "New admin message",
+          message: renderedMessage,
+          targetType: "console",
+          metadata: { scope: "individual", email, templateSource: message },
+        });
+        if (!notification) {
+          return res
+            .status(500)
+            .json({
+              success: false,
+              message: "Could not send this notification right now.",
+            });
+        }
+        return res.json({
+          success: true,
+          message: "Notification sent to the selected user.",
+        });
+      }
+      const users = await User.find({})
+        .select("_id email name liveProjects projects")
+        .lean();
+      const notifications = [];
+      for (const user of users) {
+        const renderedMessage = renderAdminNotificationTemplate(message, user);
+        const notification = await createUserNotification({
+          userId: user._id,
+          toEmail: user.email || "",
+          fromEmail: "dev@gmail.com",
+          fromName: "ML Community",
+          deliveryScope: "all",
+          type: "admin",
+          title: "New admin announcement",
+          message: renderedMessage,
+          targetType: "console",
+          metadata: { scope: "all", templateSource: message },
+        });
+        if (notification) notifications.push(notification);
+      }
+      if (!notifications.length) {
+        return res
+          .status(500)
+          .json({
+            success: false,
+            message: "Could not send notifications right now.",
+          });
+      }
+      return res.json({
+        success: true,
+        message: "Notification sent to all users.",
+      });
+    } catch (error) {
+      console.error("Admin notification send failed:", error);
+      return res
+        .status(500)
+        .json({ success: false, message: "Could not send notifications." });
+    }
+  },
+);
 
 app.post("/api/history-projects", async (req, res) => {
   try {
@@ -3693,9 +4194,13 @@ app.post("/api/history-projects", async (req, res) => {
       });
     }
 
-    const user = await User.findById(req.user._id).select("+googleRefreshToken");
+    const user = await User.findById(req.user._id).select(
+      "+googleRefreshToken",
+    );
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found." });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found." });
     }
 
     user.projects = user.projects.filter((item) => item.fileUrl !== fileUrl);
@@ -3714,7 +4219,9 @@ app.post("/api/history-projects", async (req, res) => {
     res.json({ success: true, projects: user.projects });
   } catch (error) {
     console.error("History project save failed:", error);
-    res.status(500).json({ success: false, message: "Could not save project history." });
+    res
+      .status(500)
+      .json({ success: false, message: "Could not save project history." });
   }
 });
 
@@ -3773,7 +4280,9 @@ app.post("/api/ai/chat-edit", async (req, res) => {
   try {
     await refreshAIModelsRegistryIfNeeded(false);
     if (!req.isAuthenticated?.() || !req.user?._id) {
-      return res.status(401).json({ success: false, message: "Login required." });
+      return res
+        .status(401)
+        .json({ success: false, message: "Login required." });
     }
     if (!GROQ_API_KEY) {
       return res.status(500).json({
@@ -3782,23 +4291,35 @@ app.post("/api/ai/chat-edit", async (req, res) => {
       });
     }
     const prompt = String(req.body?.prompt || "").trim();
-    const mode = String(req.body?.mode || "edit").trim().toLowerCase();
+    const mode = String(req.body?.mode || "edit")
+      .trim()
+      .toLowerCase();
     const currentCode = String(req.body?.currentCode || "").trim();
     const activeFileName = String(req.body?.activeFileName || "").trim();
     const activeFileContent = String(req.body?.activeFileContent || "").trim();
-    const workspaceIndex = Array.isArray(req.body?.workspaceIndex) ? req.body.workspaceIndex : [];
+    const workspaceIndex = Array.isArray(req.body?.workspaceIndex)
+      ? req.body.workspaceIndex
+      : [];
     const agentContext = String(req.body?.agentContext || "").trim();
-    const agentPhase = String(req.body?.agentPhase || "execute").trim().toLowerCase();
+    const agentPhase = String(req.body?.agentPhase || "execute")
+      .trim()
+      .toLowerCase();
     if (!prompt && mode !== "context") {
-      return res.status(400).json({ success: false, message: "Prompt is required." });
+      return res
+        .status(400)
+        .json({ success: false, message: "Prompt is required." });
     }
     if (!currentCode && mode !== "chat" && mode !== "context") {
-      return res.status(400).json({ success: false, message: "Current code is required." });
+      return res
+        .status(400)
+        .json({ success: false, message: "Current code is required." });
     }
 
     const user = await User.findById(req.user._id);
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found." });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found." });
     }
 
     if (!user.aiQuota) {
@@ -3860,53 +4381,60 @@ app.post("/api/ai/chat-edit", async (req, res) => {
     let modelSwitchReason = "";
     for (const model of models) {
       try {
-        const groqResponse = await nodeFetch("https://api.groq.com/openai/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${GROQ_API_KEY}`,
+        const groqResponse = await nodeFetch(
+          "https://api.groq.com/openai/v1/chat/completions",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${GROQ_API_KEY}`,
+            },
+            body: JSON.stringify({
+              model: model.modelId,
+              temperature: 0.2,
+              messages: [
+                {
+                  role: "system",
+                  content:
+                    mode === "chat"
+                      ? "You are the MediaLab AI Copilot, like a friendly mini Cursor assistant. Be concise, warm, and practical. Return plain text only. Do NOT perform, imply, or apply code changes unless the user explicitly asks for implementation/fixes. If user greets you (e.g. hello), reply naturally and briefly."
+                      : mode === "agent"
+                        ? agentPhase === "search"
+                          ? "You are the MediaLab Agent in SEARCH phase. Return only one line in this exact format: SEARCH_FILES: path/a.js, path/b.css. Select the minimum file set needed to implement the request. Use only files present in WorkspaceIndex."
+                          : agentPhase === "plan"
+                            ? "You are the MediaLab Agent in PLAN phase. Return only a concise proposal in plain text, prefixed with 'Proposal:'. Explain which files you will change and why. No code blocks."
+                            : "You are the MediaLab System Agent in EXECUTION phase. Your response must have: (1) a short, friendly user-facing line, and (2) one or more hidden machine blocks in this exact wrapper: [ACTION]{...}[/ACTION]. Never expose raw code outside [ACTION]. Allowed actions: UPDATE_FILE, CREATE_FILE, CREATE_FOLDER, EDIT_CANVAS, UPDATE_CSS. For targeted style changes (e.g. body background), prefer surgical UPDATE_CSS over full-file replacement. You may request more context with REQUEST_FILE: [path]."
+                        : "You are the MediaLab AI Architect. Return ONLY raw HTML and CSS/Tailwind code. No markdown, no backticks. You can refactor code, generate full templates, and apply design updates like online background images via valid image URLs. Always return valid, renderable HTML that works immediately in MediaLab. Preserve existing element IDs whenever possible. Preserve and/or produce 'ml-container' and 'ml-content' class structure so the visual builder can map objects accurately. If user asks to change page/body background, set it with explicit CSS that does not depend on external frameworks (inline body style or <style> body { background: ... }).",
+                },
+                {
+                  role: "user",
+                  content:
+                    mode === "chat"
+                      ? prompt
+                      : mode === "agent"
+                        ? [
+                            `WorkspaceIndex: ${JSON.stringify(workspaceIndex)}`,
+                            `AgentPhase: ${agentPhase}`,
+                            `activeFileName: ${activeFileName || "index.html"}`,
+                            `activeFileContent:\n${activeFileContent || currentCode}`,
+                            agentContext
+                              ? `AdditionalContext:\n${agentContext}`
+                              : "",
+                            `UserRequest:\n${prompt}`,
+                          ]
+                            .filter(Boolean)
+                            .join("\n\n")
+                        : `Current HTML:\n${contextCode}\n\nInstruction:\n${prompt}`,
+                },
+              ],
+            }),
           },
-          body: JSON.stringify({
-            model: model.modelId,
-            temperature: 0.2,
-            messages: [
-              {
-                role: "system",
-                content:
-                  mode === "chat"
-                    ? "You are the MediaLab AI Copilot, like a friendly mini Cursor assistant. Be concise, warm, and practical. Return plain text only. Do NOT perform, imply, or apply code changes unless the user explicitly asks for implementation/fixes. If user greets you (e.g. hello), reply naturally and briefly."
-                    : mode === "agent"
-                      ? agentPhase === "search"
-                        ? "You are the MediaLab Agent in SEARCH phase. Return only one line in this exact format: SEARCH_FILES: path/a.js, path/b.css. Select the minimum file set needed to implement the request. Use only files present in WorkspaceIndex."
-                        : agentPhase === "plan"
-                          ? "You are the MediaLab Agent in PLAN phase. Return only a concise proposal in plain text, prefixed with 'Proposal:'. Explain which files you will change and why. No code blocks."
-                          : "You are the MediaLab System Agent in EXECUTION phase. Your response must have: (1) a short, friendly user-facing line, and (2) one or more hidden machine blocks in this exact wrapper: [ACTION]{...}[/ACTION]. Never expose raw code outside [ACTION]. Allowed actions: UPDATE_FILE, CREATE_FILE, CREATE_FOLDER, EDIT_CANVAS, UPDATE_CSS. For targeted style changes (e.g. body background), prefer surgical UPDATE_CSS over full-file replacement. You may request more context with REQUEST_FILE: [path]."
-                    : "You are the MediaLab AI Architect. Return ONLY raw HTML and CSS/Tailwind code. No markdown, no backticks. You can refactor code, generate full templates, and apply design updates like online background images via valid image URLs. Always return valid, renderable HTML that works immediately in MediaLab. Preserve existing element IDs whenever possible. Preserve and/or produce 'ml-container' and 'ml-content' class structure so the visual builder can map objects accurately. If user asks to change page/body background, set it with explicit CSS that does not depend on external frameworks (inline body style or <style> body { background: ... }).",
-              },
-              {
-                role: "user",
-                content:
-                  mode === "chat"
-                    ? prompt
-                    : mode === "agent"
-                      ? [
-                          `WorkspaceIndex: ${JSON.stringify(workspaceIndex)}`,
-                          `AgentPhase: ${agentPhase}`,
-                          `activeFileName: ${activeFileName || "index.html"}`,
-                          `activeFileContent:\n${activeFileContent || currentCode}`,
-                          agentContext ? `AdditionalContext:\n${agentContext}` : "",
-                          `UserRequest:\n${prompt}`,
-                        ]
-                          .filter(Boolean)
-                          .join("\n\n")
-                    : `Current HTML:\n${contextCode}\n\nInstruction:\n${prompt}`,
-              },
-            ],
-          }),
-        });
+        );
         if (!groqResponse.ok) {
           const errText = await groqResponse.text();
-          throw new Error(errText || `Groq request failed for ${model.modelId}`);
+          throw new Error(
+            errText || `Groq request failed for ${model.modelId}`,
+          );
         }
         const payload = await groqResponse.json();
         const content = String(payload?.choices?.[0]?.message?.content || "")
@@ -3933,11 +4461,14 @@ app.post("/api/ai/chat-edit", async (req, res) => {
           errorText.includes("rate_limit_exceeded") ||
           errorText.includes("rate limit reached") ||
           errorText.includes("tokens per minute") ||
-          errorText.includes("\"type\":\"tokens\"");
+          errorText.includes('"type":"tokens"');
         if (hitRateLimit) {
           modelSwitchUsed = true;
           modelSwitchReason = "rate_limit";
-          aiModelCooldownUntil.set(model.modelId, Date.now() + parseRateLimitRetryMs(modelError?.message));
+          aiModelCooldownUntil.set(
+            model.modelId,
+            Date.now() + parseRateLimitRetryMs(modelError?.message),
+          );
         }
         await createUsageLog({
           user,
@@ -3966,7 +4497,11 @@ app.post("/api/ai/chat-edit", async (req, res) => {
       }
     }
 
-    if ((!updatedCode && !["chat", "agent"].includes(mode)) || (!assistantReply && ["chat", "agent"].includes(mode)) || !modelUsed) {
+    if (
+      (!updatedCode && !["chat", "agent"].includes(mode)) ||
+      (!assistantReply && ["chat", "agent"].includes(mode)) ||
+      !modelUsed
+    ) {
       return res.status(503).json({
         success: false,
         message: lastError?.message || "No AI model could process the request.",
@@ -4001,7 +4536,11 @@ app.post("/api/ai/chat-edit", async (req, res) => {
       modelSwitchReason,
       creditsRemaining: hasUnlimitedAi
         ? null
-        : Math.max(0, Number(user.aiQuota.dailyLimit || 10) - Number(user.aiQuota.usedToday || 0)),
+        : Math.max(
+            0,
+            Number(user.aiQuota.dailyLimit || 10) -
+              Number(user.aiQuota.usedToday || 0),
+          ),
     });
   } catch (error) {
     await createUsageLog({
@@ -4026,54 +4565,146 @@ app.post("/api/ai/chat-edit", async (req, res) => {
 app.post("/api/ai/workspace-fetch", async (req, res) => {
   try {
     if (!req.isAuthenticated?.() || !req.user?._id) {
-      return res.status(401).json({ success: false, message: "Login required." });
+      return res
+        .status(401)
+        .json({ success: false, message: "Login required." });
     }
     const path = String(req.body?.path || "").trim();
-    const snapshot = req.body?.workspaceSnapshot && typeof req.body.workspaceSnapshot === "object"
-      ? req.body.workspaceSnapshot
-      : {};
+    const snapshot =
+      req.body?.workspaceSnapshot &&
+      typeof req.body.workspaceSnapshot === "object"
+        ? req.body.workspaceSnapshot
+        : {};
     const hasPath = Object.prototype.hasOwnProperty.call(snapshot, path);
     const content = hasPath ? String(snapshot[path] ?? "") : "";
     if (!path) {
-      return res.status(400).json({ success: false, message: "Path is required." });
+      return res
+        .status(400)
+        .json({ success: false, message: "Path is required." });
     }
     if (!hasPath) {
-      return res.status(404).json({ success: false, message: "File not found in current workspace snapshot." });
+      return res
+        .status(404)
+        .json({
+          success: false,
+          message: "File not found in current workspace snapshot.",
+        });
     }
     return res.json({ success: true, path, content });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message || "Could not fetch workspace file." });
+    return res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Could not fetch workspace file.",
+      });
   }
 });
 
 app.post("/api/ai/manager", async (req, res) => {
   try {
     if (!req.isAuthenticated?.() || !req.user?._id) {
-      return res.status(401).json({ success: false, message: "Login required." });
+      return res
+        .status(401)
+        .json({ success: false, message: "Login required." });
     }
 
-    const userInput = String(req.body?.userInput || "").trim().toLowerCase();
+    const userInput = String(req.body?.userInput || "")
+      .trim()
+      .toLowerCase();
     const currentCanvasCode = String(req.body?.currentCanvasCode || "").trim();
 
     if (!userInput) {
-      return res.status(400).json({ success: false, message: "User input is required." });
+      return res
+        .status(400)
+        .json({ success: false, message: "User input is required." });
     }
 
     // Manager AI Agent - determines intent type
     const actionKeywords = [
-      "change", "set", "add", "modify", "update", "remove", "delete", "create", "make",
-      "fix", "apply", "style", "edit", "background", "color", "font", "size", "position",
-      "layout", "align", "border", "shadow", "gradient", "image", "button", "input",
-      "text", "hover", "animation", "transform", "opacity", "width", "height", "padding",
-      "margin", "display", "flex", "grid", "rotate", "scale", "transition", "build",
-      "replace", "swap", "insert", "reorder", "align", "center", "move", "copy",
-      "duplicate", "layer", "section", "component", "template", "design", "format"
+      "change",
+      "set",
+      "add",
+      "modify",
+      "update",
+      "remove",
+      "delete",
+      "create",
+      "make",
+      "fix",
+      "apply",
+      "style",
+      "edit",
+      "background",
+      "color",
+      "font",
+      "size",
+      "position",
+      "layout",
+      "align",
+      "border",
+      "shadow",
+      "gradient",
+      "image",
+      "button",
+      "input",
+      "text",
+      "hover",
+      "animation",
+      "transform",
+      "opacity",
+      "width",
+      "height",
+      "padding",
+      "margin",
+      "display",
+      "flex",
+      "grid",
+      "rotate",
+      "scale",
+      "transition",
+      "build",
+      "replace",
+      "swap",
+      "insert",
+      "reorder",
+      "align",
+      "center",
+      "move",
+      "copy",
+      "duplicate",
+      "layer",
+      "section",
+      "component",
+      "template",
+      "design",
+      "format",
     ];
 
     const negativeKeywords = [
-      "hello", "hi", "hey", "how are you", "thanks", "thank you", "okay", "ok",
-      "sure", "yes", "no", "maybe", "perhaps", "question", "ask", "tell me", "what is",
-      "explain", "describe", "help", "guide", "tutorial", "example"
+      "hello",
+      "hi",
+      "hey",
+      "how are you",
+      "thanks",
+      "thank you",
+      "okay",
+      "ok",
+      "sure",
+      "yes",
+      "no",
+      "maybe",
+      "perhaps",
+      "question",
+      "ask",
+      "tell me",
+      "what is",
+      "explain",
+      "describe",
+      "help",
+      "guide",
+      "tutorial",
+      "example",
     ];
 
     const elementPatterns = [
@@ -4083,7 +4714,7 @@ app.post("/api/ai/manager", async (req, res) => {
       /font|text|size|weight|style|decoration|uppercase|lowercase|capitalize/i,
       /position|top|left|right|bottom|absolute|relative|fixed|sticky|z-index/i,
       /animation|transition|duration|timing|keyframe|hover|active|focus|disabled/i,
-      /click|submit|reset|scroll|swipe|drag|drop|select|focus|blur/i
+      /click|submit|reset|scroll|swipe|drag|drop|select|focus|blur/i,
     ];
 
     // Scoring system
@@ -4091,25 +4722,37 @@ app.post("/api/ai/manager", async (req, res) => {
     const inputWords = userInput.split(/\s+/);
 
     // Check action keywords
-    const hasActionKeyword = actionKeywords.some(kw => userInput.includes(kw));
+    const hasActionKeyword = actionKeywords.some((kw) =>
+      userInput.includes(kw),
+    );
     if (hasActionKeyword) actionScore += 40;
 
     // Check for element/property references
-    const hasElementPattern = elementPatterns.some(pattern => pattern.test(userInput));
+    const hasElementPattern = elementPatterns.some((pattern) =>
+      pattern.test(userInput),
+    );
     if (hasElementPattern) actionScore += 30;
 
     // Check for negative indicators
-    const hasNegativeKeyword = negativeKeywords.some(kw => userInput.includes(kw));
+    const hasNegativeKeyword = negativeKeywords.some((kw) =>
+      userInput.includes(kw),
+    );
     if (hasNegativeKeyword) actionScore -= 50;
 
     // Check for specific UI change indicators
-    if (/\b(?:to|into|as|like|similar to|matching)\b/i.test(userInput)) actionScore += 15;
+    if (/\b(?:to|into|as|like|similar to|matching)\b/i.test(userInput))
+      actionScore += 15;
 
     // Check if input mentions URLs, colors, measurements
-    if (/(http|https|url|#[0-9a-f]{6}|rgb|px|em|rem|%|url\()/i.test(userInput)) actionScore += 20;
+    if (/(http|https|url|#[0-9a-f]{6}|rgb|px|em|rem|%|url\()/i.test(userInput))
+      actionScore += 20;
 
     // Check for imperative/command tone
-    if (/(^|\s)(?:please\s)?(?:can you|could you|would you|make|set|change|create|add|remove)\b/i.test(userInput)) {
+    if (
+      /(^|\s)(?:please\s)?(?:can you|could you|would you|make|set|change|create|add|remove)\b/i.test(
+        userInput,
+      )
+    ) {
       actionScore += 25;
     }
 
@@ -4125,13 +4768,13 @@ app.post("/api/ai/manager", async (req, res) => {
       userInput,
       reasoning: isAction
         ? "Input appears to be a code/design change command"
-        : "Input appears to be a general chat query"
+        : "Input appears to be a general chat query",
     });
   } catch (error) {
     console.error("Manager AI error:", error);
     return res.status(500).json({
       success: false,
-      message: error.message || "Manager AI analysis failed."
+      message: error.message || "Manager AI analysis failed.",
     });
   }
 });
@@ -4140,7 +4783,9 @@ app.post("/api/ai/autofix", async (req, res) => {
   try {
     await refreshAIModelsRegistryIfNeeded(false);
     if (!req.isAuthenticated?.() || !req.user?._id) {
-      return res.status(401).json({ success: false, message: "Login required." });
+      return res
+        .status(401)
+        .json({ success: false, message: "Login required." });
     }
     if (!GROQ_API_KEY) {
       return res.status(500).json({
@@ -4150,19 +4795,25 @@ app.post("/api/ai/autofix", async (req, res) => {
     }
     const currentCode = String(req.body?.currentCode || "").trim();
     if (!currentCode) {
-      return res.status(400).json({ success: false, message: "Current code is required." });
+      return res
+        .status(400)
+        .json({ success: false, message: "Current code is required." });
     }
 
     const user = await User.findById(req.user._id);
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found." });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found." });
     }
     if (!user.aiQuota) {
       user.aiQuota = { dailyLimit: 10, usedToday: 0, lastUsed: null };
     }
     const now = new Date();
     const today = now.toDateString();
-    const lastUsedDay = user.aiQuota.lastUsed ? new Date(user.aiQuota.lastUsed).toDateString() : "";
+    const lastUsedDay = user.aiQuota.lastUsed
+      ? new Date(user.aiQuota.lastUsed).toDateString()
+      : "";
     if (today !== lastUsedDay) {
       user.aiQuota.usedToday = 0;
     }
@@ -4203,36 +4854,48 @@ app.post("/api/ai/autofix", async (req, res) => {
     let modelSwitchReason = "";
     for (const model of models) {
       try {
-        const groqResponse = await nodeFetch("https://api.groq.com/openai/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${GROQ_API_KEY}`,
+        const groqResponse = await nodeFetch(
+          "https://api.groq.com/openai/v1/chat/completions",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${GROQ_API_KEY}`,
+            },
+            body: JSON.stringify({
+              model: model.modelId,
+              temperature: 0.15,
+              messages: [
+                {
+                  role: "system",
+                  content:
+                    "You are the MediaLab UI Surgeon. Your task is to refactor the user's code to be modern, scalable, and professional. Fix overlapping elements and CSS layout conflicts. Optimize Tailwind CSS classes for responsiveness. Return ONLY raw HTML and Tailwind code. Do NOT use markdown backticks or triple quotes. Preserve all 'ml-container' and 'ml-content' IDs so the visual builder can re-map the objects.",
+                },
+                {
+                  role: "user",
+                  content: `Refactor and auto-fix this canvas code:\n${currentCode}`,
+                },
+              ],
+            }),
           },
-          body: JSON.stringify({
-            model: model.modelId,
-            temperature: 0.15,
-            messages: [
-              {
-                role: "system",
-                content:
-                  "You are the MediaLab UI Surgeon. Your task is to refactor the user's code to be modern, scalable, and professional. Fix overlapping elements and CSS layout conflicts. Optimize Tailwind CSS classes for responsiveness. Return ONLY raw HTML and Tailwind code. Do NOT use markdown backticks or triple quotes. Preserve all 'ml-container' and 'ml-content' IDs so the visual builder can re-map the objects.",
-              },
-              {
-                role: "user",
-                content: `Refactor and auto-fix this canvas code:\n${currentCode}`,
-              },
-            ],
-          }),
-        });
+        );
         if (!groqResponse.ok) {
           const errText = await groqResponse.text();
-          throw new Error(errText || `Groq Auto-Fix request failed for ${model.modelId}.`);
+          throw new Error(
+            errText || `Groq Auto-Fix request failed for ${model.modelId}.`,
+          );
         }
         const payload = await groqResponse.json();
-        const rawContent = String(payload?.choices?.[0]?.message?.content || "");
-        const candidate = rawContent.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
-        if (!candidate) throw new Error(`Auto-Fix returned empty content for ${model.modelId}.`);
+        const rawContent = String(
+          payload?.choices?.[0]?.message?.content || "",
+        );
+        const candidate = rawContent
+          .replace(/<think>[\s\S]*?<\/think>/g, "")
+          .trim();
+        if (!candidate)
+          throw new Error(
+            `Auto-Fix returned empty content for ${model.modelId}.`,
+          );
         sanitizedContent = candidate;
         selectedModel = model.modelId;
         await AIModel.updateOne(
@@ -4247,11 +4910,14 @@ app.post("/api/ai/autofix", async (req, res) => {
           errorText.includes("rate_limit_exceeded") ||
           errorText.includes("rate limit reached") ||
           errorText.includes("tokens per minute") ||
-          errorText.includes("\"type\":\"tokens\"");
+          errorText.includes('"type":"tokens"');
         if (hitRateLimit) {
           modelSwitchUsed = true;
           modelSwitchReason = "rate_limit";
-          aiModelCooldownUntil.set(model.modelId, Date.now() + parseRateLimitRetryMs(error?.message));
+          aiModelCooldownUntil.set(
+            model.modelId,
+            Date.now() + parseRateLimitRetryMs(error?.message),
+          );
         }
         await createUsageLog({
           user,
@@ -4278,7 +4944,9 @@ app.post("/api/ai/autofix", async (req, res) => {
       }
     }
     if (!sanitizedContent) {
-      throw new Error(lastError?.message || "Auto-Fix failed for all active models.");
+      throw new Error(
+        lastError?.message || "Auto-Fix failed for all active models.",
+      );
     }
 
     user.aiQuota.usedToday = Number(user.aiQuota.usedToday || 0) + 1;
@@ -4305,7 +4973,11 @@ app.post("/api/ai/autofix", async (req, res) => {
       modelSwitchReason,
       creditsRemaining: hasUnlimitedAi
         ? null
-        : Math.max(0, Number(user.aiQuota.dailyLimit || 10) - Number(user.aiQuota.usedToday || 0)),
+        : Math.max(
+            0,
+            Number(user.aiQuota.dailyLimit || 10) -
+              Number(user.aiQuota.usedToday || 0),
+          ),
     });
   } catch (error) {
     await createUsageLog({
@@ -4340,7 +5012,12 @@ app.get("/api/data-explorer/status", async (req, res) => {
       collections: Array.isArray(state?.collections) ? state.collections : [],
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message || "Could not read explorer state." });
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Could not read explorer state.",
+      });
   }
 });
 
@@ -4351,7 +5028,12 @@ app.post("/api/data-explorer/disconnect", async (req, res) => {
     }
     res.json({ success: true, disconnected: true });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message || "Could not disconnect." });
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Could not disconnect.",
+      });
   }
 });
 
@@ -4359,7 +5041,9 @@ app.post("/api/data-explorer/connect", async (req, res) => {
   try {
     const uri = String(req.body?.uri || "").trim();
     if (!uri) {
-      return res.status(400).json({ success: false, message: "MongoDB URI is required." });
+      return res
+        .status(400)
+        .json({ success: false, message: "MongoDB URI is required." });
     }
     const connectionState = await getOrCreateDataExplorerConnection(uri);
     const collections = await connectionState.connection.db
@@ -4420,7 +5104,12 @@ app.post("/api/virtualdb/connect", async (req, res) => {
       collections: ["virtual_models"],
     });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message || "Could not connect VirtualDB." });
+    res
+      .status(400)
+      .json({
+        success: false,
+        message: error.message || "Could not connect VirtualDB.",
+      });
   }
 });
 
@@ -4448,7 +5137,12 @@ app.get("/api/virtualdb/models", async (req, res) => {
       limit: 200,
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message || "Could not load virtual models." });
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Could not load virtual models.",
+      });
   }
 });
 
@@ -4458,7 +5152,9 @@ app.get("/api/virtualdb/model/:name", async (req, res) => {
     const state = await getOrCreateVirtualDbConnection();
     const name = normalizeVirtualModelName(req.params?.name || "");
     if (!name) {
-      return res.status(400).json({ success: false, message: "Model name is required." });
+      return res
+        .status(400)
+        .json({ success: false, message: "Model name is required." });
     }
     const now = new Date();
     const model = await state.VirtualDbModel.findOne({
@@ -4479,10 +5175,14 @@ app.get("/api/virtualdb/model/:name", async (req, res) => {
       .lean();
     const viewDocuments = docs.map((doc) => ({
       _id: String(doc?._id || ""),
-      ...(doc?.data && typeof doc.data === "object" ? serializeExplorerValue(doc.data) : {}),
+      ...(doc?.data && typeof doc.data === "object"
+        ? serializeExplorerValue(doc.data)
+        : {}),
     }));
     const dataFieldSet = new Set();
-    viewDocuments.forEach((doc) => collectExplorerFieldPaths(doc, "", dataFieldSet));
+    viewDocuments.forEach((doc) =>
+      collectExplorerFieldPaths(doc, "", dataFieldSet),
+    );
     const fields = Array.from(dataFieldSet).sort((a, b) => a.localeCompare(b));
     res.json({
       success: true,
@@ -4491,7 +5191,12 @@ app.get("/api/virtualdb/model/:name", async (req, res) => {
       fields,
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message || "Could not load that model." });
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Could not load that model.",
+      });
   }
 });
 
@@ -4501,7 +5206,9 @@ app.post("/api/virtualdb/document", async (req, res) => {
     const state = await getOrCreateVirtualDbConnection();
     const modelName = normalizeVirtualModelName(req.body?.modelName || "");
     if (!modelName) {
-      return res.status(400).json({ success: false, message: "modelName is required." });
+      return res
+        .status(400)
+        .json({ success: false, message: "modelName is required." });
     }
     const exists = await state.VirtualDbModel.findOne({
       userId: req.user._id,
@@ -4511,7 +5218,9 @@ app.post("/api/virtualdb/document", async (req, res) => {
       .select("_id")
       .lean();
     if (!exists) {
-      return res.status(404).json({ success: false, message: "Virtual model not found." });
+      return res
+        .status(404)
+        .json({ success: false, message: "Virtual model not found." });
     }
     const rawData = req.body?.data;
     const data =
@@ -4534,10 +5243,18 @@ app.post("/api/virtualdb/document", async (req, res) => {
     });
     res.json({
       success: true,
-      document: { _id: String(created?._id || ""), ...(serializeExplorerValue(created?.data || {}) || {}) },
+      document: {
+        _id: String(created?._id || ""),
+        ...(serializeExplorerValue(created?.data || {}) || {}),
+      },
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message || "Could not insert document." });
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Could not insert document.",
+      });
   }
 });
 
@@ -4549,18 +5266,37 @@ app.patch("/api/virtualdb/document", async (req, res) => {
     const documentId = String(req.body?.documentId || "").trim();
     const fieldPath = String(req.body?.fieldPath || "").trim();
     if (!modelName || !documentId || !fieldPath) {
-      return res.status(400).json({ success: false, message: "modelName, documentId, and fieldPath are required." });
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "modelName, documentId, and fieldPath are required.",
+        });
     }
-    const filter = { _id: new mongoose.Types.ObjectId(documentId), userId: req.user._id, modelName };
+    const filter = {
+      _id: new mongoose.Types.ObjectId(documentId),
+      userId: req.user._id,
+      modelName,
+    };
     const value = parseExplorerInputValue(req.body?.value);
-    await state.VirtualDbDocument.updateOne(filter, { $set: { [`data.${fieldPath}`]: value } });
+    await state.VirtualDbDocument.updateOne(filter, {
+      $set: { [`data.${fieldPath}`]: value },
+    });
     const updated = await state.VirtualDbDocument.findOne(filter).lean();
     const view = updated
-      ? { _id: String(updated?._id || ""), ...(serializeExplorerValue(updated?.data || {}) || {}) }
+      ? {
+          _id: String(updated?._id || ""),
+          ...(serializeExplorerValue(updated?.data || {}) || {}),
+        }
       : null;
     res.json({ success: true, document: view });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message || "Could not update document." });
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Could not update document.",
+      });
   }
 });
 
@@ -4570,7 +5306,9 @@ app.post("/api/virtualdb/model", async (req, res) => {
     const state = await getOrCreateVirtualDbConnection();
     const name = normalizeVirtualModelName(req.body?.name || "");
     if (!name) {
-      return res.status(400).json({ success: false, message: "Model name is required." });
+      return res
+        .status(400)
+        .json({ success: false, message: "Model name is required." });
     }
     const rawSchema = req.body?.schema;
     const schema =
@@ -4591,9 +5329,17 @@ app.post("/api/virtualdb/model", async (req, res) => {
       schema,
       expiresAt: null,
     });
-    res.json({ success: true, model: serializeExplorerValue(created.toObject()) });
+    res.json({
+      success: true,
+      model: serializeExplorerValue(created.toObject()),
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message || "Could not create model." });
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Could not create model.",
+      });
   }
 });
 
@@ -4603,7 +5349,9 @@ app.post("/api/virtualdb/disconnect", async (req, res) => {
     const state = await getOrCreateVirtualDbConnection();
     const retentionHoursRaw = Number(req.body?.retentionHours ?? 0);
     const allowed = new Set([0, 4, 8, 12, 20, 24]);
-    const retentionHours = allowed.has(retentionHoursRaw) ? retentionHoursRaw : 0;
+    const retentionHours = allowed.has(retentionHoursRaw)
+      ? retentionHoursRaw
+      : 0;
     const filter = { userId: req.user._id };
     let action = "cleared";
     if (retentionHours <= 0) {
@@ -4620,7 +5368,12 @@ app.post("/api/virtualdb/disconnect", async (req, res) => {
     }
     res.json({ success: true, action, retentionHours });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message || "Could not disconnect VirtualDB." });
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Could not disconnect VirtualDB.",
+      });
   }
 });
 
@@ -4628,10 +5381,16 @@ app.get("/api/data-explorer/collections", async (req, res) => {
   try {
     const state = getDataExplorerSessionState(req);
     if (!state?.uri) {
-      return res.status(400).json({ success: false, message: "Connect a MongoDB database first." });
+      return res
+        .status(400)
+        .json({ success: false, message: "Connect a MongoDB database first." });
     }
     if (state?.engine === "virtual-medialabdb") {
-      return res.json({ success: true, collections: ["virtual_models"], dbName: state?.dbName || "virtualdb" });
+      return res.json({
+        success: true,
+        collections: ["virtual_models"],
+        dbName: state?.dbName || "virtualdb",
+      });
     }
     const connectionState = await getOrCreateDataExplorerConnection(state.uri);
     const collections = await connectionState.connection.db
@@ -4646,9 +5405,18 @@ app.get("/api/data-explorer/collections", async (req, res) => {
       collections: collectionNames,
       dbName: connectionState.dbName,
     };
-    res.json({ success: true, collections: collectionNames, dbName: connectionState.dbName });
+    res.json({
+      success: true,
+      collections: collectionNames,
+      dbName: connectionState.dbName,
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message || "Could not list collections." });
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Could not list collections.",
+      });
   }
 });
 
@@ -4656,17 +5424,31 @@ app.get("/api/data-explorer/collection/:name", async (req, res) => {
   try {
     const state = getDataExplorerSessionState(req);
     if (!state?.uri) {
-      return res.status(400).json({ success: false, message: "Connect a MongoDB database first." });
+      return res
+        .status(400)
+        .json({ success: false, message: "Connect a MongoDB database first." });
     }
-    const collectionName = normalizeDataExplorerCollectionName(req.params?.name || "");
+    const collectionName = normalizeDataExplorerCollectionName(
+      req.params?.name || "",
+    );
     if (!collectionName) {
-      return res.status(400).json({ success: false, message: "Collection name is required." });
+      return res
+        .status(400)
+        .json({ success: false, message: "Collection name is required." });
     }
-    const limit = Math.max(1, Math.min(200, Number(req.query?.limit || 50) || 50));
+    const limit = Math.max(
+      1,
+      Math.min(200, Number(req.query?.limit || 50) || 50),
+    );
     if (state?.engine === "virtual-medialabdb") {
       if (!requireAuth(req, res)) return;
       if (collectionName !== "virtual_models") {
-        return res.status(400).json({ success: false, message: "Only virtual_models is available in VirtualDB." });
+        return res
+          .status(400)
+          .json({
+            success: false,
+            message: "Only virtual_models is available in VirtualDB.",
+          });
       }
       const vstate = await getOrCreateVirtualDbConnection();
       const now = new Date();
@@ -4677,9 +5459,13 @@ app.get("/api/data-explorer/collection/:name", async (req, res) => {
         .sort({ createdAt: -1 })
         .limit(limit)
         .lean();
-      const serializedDocuments = docs.map((doc) => serializeExplorerValue(doc));
+      const serializedDocuments = docs.map((doc) =>
+        serializeExplorerValue(doc),
+      );
       const fieldSet = new Set();
-      serializedDocuments.forEach((doc) => collectExplorerFieldPaths(doc, "", fieldSet));
+      serializedDocuments.forEach((doc) =>
+        collectExplorerFieldPaths(doc, "", fieldSet),
+      );
       const fields = Array.from(fieldSet).sort((a, b) => a.localeCompare(b));
       return res.json({
         success: true,
@@ -4696,13 +5482,18 @@ app.get("/api/data-explorer/collection/:name", async (req, res) => {
       collectionName,
       channelId: getDataExplorerChannelId(req),
     });
-    const documents = await connectionState.connection.collection(collectionName)
+    const documents = await connectionState.connection
+      .collection(collectionName)
       .find({})
       .limit(limit)
       .toArray();
-    const serializedDocuments = documents.map((doc) => serializeExplorerValue(doc));
+    const serializedDocuments = documents.map((doc) =>
+      serializeExplorerValue(doc),
+    );
     const fieldSet = new Set();
-    serializedDocuments.forEach((doc) => collectExplorerFieldPaths(doc, "", fieldSet));
+    serializedDocuments.forEach((doc) =>
+      collectExplorerFieldPaths(doc, "", fieldSet),
+    );
     const fields = Array.from(fieldSet).sort((a, b) => a.localeCompare(b));
     res.json({
       success: true,
@@ -4712,7 +5503,12 @@ app.get("/api/data-explorer/collection/:name", async (req, res) => {
       limit,
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message || "Could not load collection data." });
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Could not load collection data.",
+      });
   }
 });
 
@@ -4720,23 +5516,42 @@ app.patch("/api/data-explorer/document", async (req, res) => {
   try {
     const state = getDataExplorerSessionState(req);
     if (!state?.uri) {
-      return res.status(400).json({ success: false, message: "Connect a MongoDB database first." });
+      return res
+        .status(400)
+        .json({ success: false, message: "Connect a MongoDB database first." });
     }
-    const collectionName = normalizeDataExplorerCollectionName(req.body?.collection || "");
+    const collectionName = normalizeDataExplorerCollectionName(
+      req.body?.collection || "",
+    );
     const documentId = String(req.body?.documentId || "").trim();
     const fieldPath = String(req.body?.fieldPath || "").trim();
     if (!collectionName || !documentId || !fieldPath) {
-      return res.status(400).json({ success: false, message: "Collection, document, and field are required." });
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "Collection, document, and field are required.",
+        });
     }
     if (state?.engine === "virtual-medialabdb") {
       if (!requireAuth(req, res)) return;
       if (collectionName !== "virtual_models") {
-        return res.status(400).json({ success: false, message: "Only virtual_models is editable in VirtualDB." });
+        return res
+          .status(400)
+          .json({
+            success: false,
+            message: "Only virtual_models is editable in VirtualDB.",
+          });
       }
       const vstate = await getOrCreateVirtualDbConnection();
-      const filter = { _id: new mongoose.Types.ObjectId(documentId), userId: req.user._id };
+      const filter = {
+        _id: new mongoose.Types.ObjectId(documentId),
+        userId: req.user._id,
+      };
       const value = parseExplorerInputValue(req.body?.value);
-      await vstate.VirtualDbModel.updateOne(filter, { $set: { [fieldPath]: value } });
+      await vstate.VirtualDbModel.updateOne(filter, {
+        $set: { [fieldPath]: value },
+      });
       const updated = await vstate.VirtualDbModel.findOne(filter).lean();
       const serialized = serializeExplorerValue(updated || null);
       return res.json({ success: true, document: serialized });
@@ -4744,23 +5559,35 @@ app.patch("/api/data-explorer/document", async (req, res) => {
     const connectionState = await getOrCreateDataExplorerConnection(state.uri);
     const filter = { _id: new mongoose.Types.ObjectId(documentId) };
     const value = parseExplorerInputValue(req.body?.value);
-    await connectionState.connection.collection(collectionName).updateOne(filter, {
-      $set: { [fieldPath]: value },
-    });
-    const updated = await connectionState.connection.collection(collectionName).findOne(filter);
+    await connectionState.connection
+      .collection(collectionName)
+      .updateOne(filter, {
+        $set: { [fieldPath]: value },
+      });
+    const updated = await connectionState.connection
+      .collection(collectionName)
+      .findOne(filter);
     const serialized = serializeExplorerValue(updated || null);
-    io.to(`data-explorer:${getDataExplorerChannelId(req)}`).emit("data-explorer:change", {
-      collection: collectionName,
-      operationType: "update",
-      documentId,
-      fullDocument: serialized,
-      updatedFields: serializeExplorerValue({ [fieldPath]: value }),
-      removedFields: [],
-      updatedAt: Date.now(),
-    });
+    io.to(`data-explorer:${getDataExplorerChannelId(req)}`).emit(
+      "data-explorer:change",
+      {
+        collection: collectionName,
+        operationType: "update",
+        documentId,
+        fullDocument: serialized,
+        updatedFields: serializeExplorerValue({ [fieldPath]: value }),
+        removedFields: [],
+        updatedAt: Date.now(),
+      },
+    );
     res.json({ success: true, document: serialized });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message || "Could not update that field." });
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Could not update that field.",
+      });
   }
 });
 
@@ -4826,13 +5653,12 @@ app.get("/api/builder/templates", async (req, res) => {
       marketplaceItemId: "",
     }));
     const purchasedTemplates = req.user?._id
-      ? (
-          await User.findById(req.user._id)
-            .select("purchasedTemplates")
-            .lean()
-        )?.purchasedTemplates || []
+      ? (await User.findById(req.user._id).select("purchasedTemplates").lean())
+          ?.purchasedTemplates || []
       : [];
-    const purchasedTemplateList = Array.isArray(purchasedTemplates) ? purchasedTemplates : [];
+    const purchasedTemplateList = Array.isArray(purchasedTemplates)
+      ? purchasedTemplates
+      : [];
     const purchasedMarketplaceIds = purchasedTemplateList
       .map((entry) => String(entry?.marketplaceItemId || "").trim())
       .filter(Boolean);
@@ -4842,55 +5668,81 @@ app.get("/api/builder/templates", async (req, res) => {
           .lean()
       : [];
     const purchasedSourceById = new Map(
-      (Array.isArray(purchasedSourceItems) ? purchasedSourceItems : []).map((entry) => [
-        String(entry?._id || ""),
-        entry,
-      ]),
+      (Array.isArray(purchasedSourceItems) ? purchasedSourceItems : []).map(
+        (entry) => [String(entry?._id || ""), entry],
+      ),
     );
     const purchasedItems = purchasedTemplateList.map((item) => {
-      const sourceItem = purchasedSourceById.get(String(item?.marketplaceItemId || "").trim());
-      const fallbackPreviewFromAssets = (Array.isArray(item?.screenshotAssets) ? item.screenshotAssets : [])
+      const sourceItem = purchasedSourceById.get(
+        String(item?.marketplaceItemId || "").trim(),
+      );
+      const fallbackPreviewFromAssets = (
+        Array.isArray(item?.screenshotAssets) ? item.screenshotAssets : []
+      )
         .map((asset) => String(asset?.thumbnailUrl || asset?.url || "").trim())
         .find(Boolean);
-      const fallbackPreviewFromShots = (Array.isArray(item?.screenshots) ? item.screenshots : [])
+      const fallbackPreviewFromShots = (
+        Array.isArray(item?.screenshots) ? item.screenshots : []
+      )
         .map((url) => String(url || "").trim())
         .find(Boolean);
-      const sourceAssets = Array.isArray(sourceItem?.screenshotAssets) ? sourceItem.screenshotAssets : [];
-      const sourceScreens = Array.isArray(sourceItem?.screenshots) ? sourceItem.screenshots : [];
+      const sourceAssets = Array.isArray(sourceItem?.screenshotAssets)
+        ? sourceItem.screenshotAssets
+        : [];
+      const sourceScreens = Array.isArray(sourceItem?.screenshots)
+        ? sourceItem.screenshots
+        : [];
       const fallbackSourcePreview =
-        sourceAssets.map((asset) => String(asset?.thumbnailUrl || asset?.url || "").trim()).find(Boolean) ||
-        sourceScreens.map((url) => String(url || "").trim())
+        sourceAssets
+          .map((asset) =>
+            String(asset?.thumbnailUrl || asset?.url || "").trim(),
+          )
           .find(Boolean) ||
+        sourceScreens.map((url) => String(url || "").trim()).find(Boolean) ||
         "";
-      return ({
-      slug:
-        String(item?.slug || "").trim() ||
-        `marketplace-template-${String(item?.marketplaceItemId || "").trim()}`,
-      title: item?.title || "Purchased Template",
-      description: item?.description || "Purchased marketplace template.",
-      category: item?.category || "General",
-      authorName: item?.sellerName || "Marketplace Creator",
-      createdAt: item?.purchasedAt || item?.updatedAt || null,
-      origin: "purchased",
-      kind: "template",
-      isPurchased: true,
-      marketplaceItemId: String(item?.marketplaceItemId || ""),
-      sourceHtml: String(item?.sourceHtml || ""),
-      screenshots: (Array.isArray(item?.screenshots) ? item.screenshots : sourceScreens)
-        .map((url) => String(url || "").trim())
-        .filter(Boolean)
-        .slice(0, 4),
-      screenshotAssets: (Array.isArray(item?.screenshotAssets) ? item.screenshotAssets : sourceAssets)
-        .map((asset) => ({
-          url: String(asset?.url || "").trim(),
-          thumbnailUrl: String(asset?.thumbnailUrl || asset?.url || "").trim(),
-          fileId: String(asset?.fileId || "").trim(),
-          name: String(asset?.name || "").trim(),
-        }))
-        .filter((asset) => asset.url || asset.thumbnailUrl)
-        .slice(0, 4),
-      previewImage: String(item?.previewImage || fallbackPreviewFromAssets || fallbackPreviewFromShots || fallbackSourcePreview || ""),
-    });
+      return {
+        slug:
+          String(item?.slug || "").trim() ||
+          `marketplace-template-${String(item?.marketplaceItemId || "").trim()}`,
+        title: item?.title || "Purchased Template",
+        description: item?.description || "Purchased marketplace template.",
+        category: item?.category || "General",
+        authorName: item?.sellerName || "Marketplace Creator",
+        createdAt: item?.purchasedAt || item?.updatedAt || null,
+        origin: "purchased",
+        kind: "template",
+        isPurchased: true,
+        marketplaceItemId: String(item?.marketplaceItemId || ""),
+        sourceHtml: String(item?.sourceHtml || ""),
+        screenshots: (Array.isArray(item?.screenshots)
+          ? item.screenshots
+          : sourceScreens
+        )
+          .map((url) => String(url || "").trim())
+          .filter(Boolean)
+          .slice(0, 4),
+        screenshotAssets: (Array.isArray(item?.screenshotAssets)
+          ? item.screenshotAssets
+          : sourceAssets
+        )
+          .map((asset) => ({
+            url: String(asset?.url || "").trim(),
+            thumbnailUrl: String(
+              asset?.thumbnailUrl || asset?.url || "",
+            ).trim(),
+            fileId: String(asset?.fileId || "").trim(),
+            name: String(asset?.name || "").trim(),
+          }))
+          .filter((asset) => asset.url || asset.thumbnailUrl)
+          .slice(0, 4),
+        previewImage: String(
+          item?.previewImage ||
+            fallbackPreviewFromAssets ||
+            fallbackPreviewFromShots ||
+            fallbackSourcePreview ||
+            "",
+        ),
+      };
     });
     return res.json({
       success: true,
@@ -4898,43 +5750,71 @@ app.get("/api/builder/templates", async (req, res) => {
     });
   } catch (error) {
     console.error("Builder templates fetch failed:", error);
-    return res.status(500).json({ success: false, message: "Could not load builder templates." });
+    return res
+      .status(500)
+      .json({ success: false, message: "Could not load builder templates." });
   }
 });
-app.post("/api/builder/templates/:marketplaceItemId/remove", publishRateLimit, async (req, res) => {
-  if (!req.isAuthenticated() || !req.user) {
-    return res.status(401).json({ success: false, message: "Sign in first to remove templates." });
-  }
-  try {
-    const marketplaceItemId = String(req.params.marketplaceItemId || "").trim();
-    if (!marketplaceItemId) {
-      return res.status(400).json({ success: false, message: "Template identifier is required." });
+app.post(
+  "/api/builder/templates/:marketplaceItemId/remove",
+  publishRateLimit,
+  async (req, res) => {
+    if (!req.isAuthenticated() || !req.user) {
+      return res
+        .status(401)
+        .json({
+          success: false,
+          message: "Sign in first to remove templates.",
+        });
     }
-    const user = await User.findById(req.user._id);
-    if (!user) {
-      return res.status(404).json({ success: false, message: "User account not found." });
-    }
-    user.purchasedTemplates = (Array.isArray(user.purchasedTemplates) ? user.purchasedTemplates : []).filter(
-      (entry) => String(entry?.marketplaceItemId || "") !== marketplaceItemId,
-    );
-    await user.save();
-    const sourceItem = await MarketplaceItem.findById(marketplaceItemId);
-    if (sourceItem) {
-      sourceItem.purchases = (Array.isArray(sourceItem.purchases) ? sourceItem.purchases : []).filter(
-        (purchase) => String(purchase?.buyerId || "") !== String(req.user._id || ""),
+    try {
+      const marketplaceItemId = String(
+        req.params.marketplaceItemId || "",
+      ).trim();
+      if (!marketplaceItemId) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+            message: "Template identifier is required.",
+          });
+      }
+      const user = await User.findById(req.user._id);
+      if (!user) {
+        return res
+          .status(404)
+          .json({ success: false, message: "User account not found." });
+      }
+      user.purchasedTemplates = (
+        Array.isArray(user.purchasedTemplates) ? user.purchasedTemplates : []
+      ).filter(
+        (entry) => String(entry?.marketplaceItemId || "") !== marketplaceItemId,
       );
-      sourceItem.updatedAt = new Date();
-      await sourceItem.save();
+      await user.save();
+      const sourceItem = await MarketplaceItem.findById(marketplaceItemId);
+      if (sourceItem) {
+        sourceItem.purchases = (
+          Array.isArray(sourceItem.purchases) ? sourceItem.purchases : []
+        ).filter(
+          (purchase) =>
+            String(purchase?.buyerId || "") !== String(req.user._id || ""),
+        );
+        sourceItem.updatedAt = new Date();
+        await sourceItem.save();
+      }
+      return res.json({
+        success: true,
+        message: "Template removed from workspace.",
+      });
+    } catch (error) {
+      console.error("Builder template removal failed:", error);
+      return res.status(500).json({
+        success: false,
+        message: error?.message || "Could not remove template from workspace.",
+      });
     }
-    return res.json({ success: true, message: "Template removed from workspace." });
-  } catch (error) {
-    console.error("Builder template removal failed:", error);
-    return res.status(500).json({
-      success: false,
-      message: error?.message || "Could not remove template from workspace.",
-    });
-  }
-});
+  },
+);
 app.get("/templates/:slug", async (req, res) => {
   const dynamicTemplate = await BuilderTemplate.findOne({
     slug: String(req.params.slug || "").trim(),
@@ -4942,7 +5822,9 @@ app.get("/templates/:slug", async (req, res) => {
   }).lean();
   if (dynamicTemplate?.htmlUrl) {
     try {
-      const response = await fetch(String(dynamicTemplate.htmlUrl || "").trim());
+      const response = await fetch(
+        String(dynamicTemplate.htmlUrl || "").trim(),
+      );
       if (response.ok) {
         const templateHtml = await response.text();
         if (templateHtml) {
@@ -5011,7 +5893,9 @@ app.post("/api/github/setup-repository", publishRateLimit, async (req, res) => {
   }
 
   try {
-    const user = await User.findById(req.user._id).select("+githubToken +adsenseAdCode");
+    const user = await User.findById(req.user._id).select(
+      "+githubToken +adsenseAdCode",
+    );
     if (!user) {
       return res
         .status(404)
@@ -5035,7 +5919,10 @@ app.post("/api/github/setup-repository", publishRateLimit, async (req, res) => {
       title: "Cloud storage is online",
       message: `MediaLab created the ${user.githubRepoName || "GitHub"} repository and activated hosting for your projects.`,
       targetType: "console",
-      metadata: { repo: user.githubRepoName || "", pagesUrl: storage?.pagesUrl || "" },
+      metadata: {
+        repo: user.githubRepoName || "",
+        pagesUrl: storage?.pagesUrl || "",
+      },
     });
 
     return res.json({
@@ -5043,7 +5930,9 @@ app.post("/api/github/setup-repository", publishRateLimit, async (req, res) => {
       message: "GitHub hosting is now active.",
       storage,
       user: {
-        ...(typeof user.toObject === "function" ? user.toObject() : { ...user }),
+        ...(typeof user.toObject === "function"
+          ? user.toObject()
+          : { ...user }),
         password: undefined,
         githubToken: undefined,
         githubConnected: Boolean(user.githubUsername),
@@ -5071,388 +5960,457 @@ app.post("/api/github/setup-repository", publishRateLimit, async (req, res) => {
   }
 });
 
-app.post("/api/github/publish", publishRateLimit, express.json({ limit: "10mb" }), async (req, res) => {
-  if (!req.isAuthenticated() || !req.user) {
-    return res
-      .status(401)
-      .json({ success: false, message: "You need to sign in first." });
-  }
-
-  try {
-    const user = await User.findById(req.user._id).select("+githubToken");
-    if (!user) {
+app.post(
+  "/api/github/publish",
+  publishRateLimit,
+  express.json({ limit: "10mb" }),
+  async (req, res) => {
+    if (!req.isAuthenticated() || !req.user) {
       return res
-        .status(404)
-        .json({ success: false, message: "User not found." });
-    }
-    if (!user.githubUsername || !user.githubToken) {
-      return res.status(400).json({
-        success: false,
-        message: "Connect GitHub first before publishing to the web.",
-      });
-    }
-    if (!user.githubRepoCreated) {
-      return res.status(400).json({
-        success: false,
-        message: "Set up GitHub hosting first before publishing.",
-      });
+        .status(401)
+        .json({ success: false, message: "You need to sign in first." });
     }
 
-    const projectName = String(req.body?.projectName || "").trim();
-    const htmlContent = String(req.body?.htmlContent || "").trim();
-    const cssContent = String(req.body?.cssContent || "").trim();
-    const interactionScript = String(req.body?.interactionScript || "").trim();
-    const documentHtml = String(req.body?.documentHtml || "").trim();
-    const description = String(req.body?.description || "").trim();
-    const keywords = String(req.body?.keywords || "").trim();
-
-    if (!projectName) {
-      return res.status(400).json({
-        success: false,
-        message: "Enter a project name before publishing.",
-      });
-    }
-    if (!htmlContent && !documentHtml) {
-      return res.status(400).json({
-        success: false,
-        message: "This builder project is empty. Add some content before publishing.",
-      });
-    }
-
-    const octokit = buildGithubClient(user);
-    const owner = user.githubUsername;
-    const repo = getUserGithubRepoName(user);
-    const filename = slugifyProjectName(projectName);
-    const folderSlug = filename.replace(/\.html$/i, "") || "medialab-page";
-    const repoFolderPath = normalizeRepoFilePath(`${GITHUB_PUBLIC_ROOT}/${folderSlug}`);
-    const repoFilePath = normalizeRepoFilePath(`${repoFolderPath}/index.html`);
-    const inheritedRenderBaseUrl = getUserPrimaryRenderBaseUrl(user);
-    user.liveProjects = Array.isArray(user.liveProjects) ? user.liveProjects : [];
-    const existingProject = user.liveProjects.find(
-      (project) => String(project?.fileName || project?.filename || "") === repoFilePath,
-    );
-    await ensureGithubRepoScaffold(octokit, owner, repo, user.name || owner);
-    const fullHtml = documentHtml
-      ? buildPublishedHtmlFromSource({
-          documentHtml,
-          projectName,
-          adsenseId:
-            existingProject?.monetizationEnabled && existingProject?.isMonetized
-              ? user.adsenseId || ""
-              : "",
-          adsenseAdCode:
-            existingProject?.monetizationEnabled && existingProject?.isMonetized
-              ? user.adsenseAdCode || ""
-              : "",
-          description,
-          keywords,
-        })
-      : buildPublishedHtmlDocument({
-          projectName,
-          htmlContent,
-          cssContent,
-          interactionScript,
-          adsenseId:
-            existingProject?.monetizationEnabled && existingProject?.isMonetized
-              ? user.adsenseId || ""
-              : "",
-          adsenseAdCode:
-            existingProject?.monetizationEnabled && existingProject?.isMonetized
-              ? user.adsenseAdCode || ""
-              : "",
-          description,
-          keywords,
+    try {
+      const user = await User.findById(req.user._id).select("+githubToken");
+      if (!user) {
+        return res
+          .status(404)
+          .json({ success: false, message: "User not found." });
+      }
+      if (!user.githubUsername || !user.githubToken) {
+        return res.status(400).json({
+          success: false,
+          message: "Connect GitHub first before publishing to the web.",
         });
-    const htmlSizeBytes = Buffer.byteLength(fullHtml, "utf8");
-    const containsBase64Images = /data:image\/[a-zA-Z0-9.+-]+;base64,/i.test(fullHtml);
-    const warnings = [];
-    if (containsBase64Images && htmlSizeBytes > 2 * 1024 * 1024) {
-      warnings.push(
-        "Large file warning: this single HTML export is over 2MB because it contains embedded base64 images. Upgrade to Pro image hosting for a lighter /assets-based publish flow.",
+      }
+      if (!user.githubRepoCreated) {
+        return res.status(400).json({
+          success: false,
+          message: "Set up GitHub hosting first before publishing.",
+        });
+      }
+
+      const projectName = String(req.body?.projectName || "").trim();
+      const htmlContent = String(req.body?.htmlContent || "").trim();
+      const cssContent = String(req.body?.cssContent || "").trim();
+      const interactionScript = String(
+        req.body?.interactionScript || "",
+      ).trim();
+      const documentHtml = String(req.body?.documentHtml || "").trim();
+      const description = String(req.body?.description || "").trim();
+      const keywords = String(req.body?.keywords || "").trim();
+
+      if (!projectName) {
+        return res.status(400).json({
+          success: false,
+          message: "Enter a project name before publishing.",
+        });
+      }
+      if (!htmlContent && !documentHtml) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "This builder project is empty. Add some content before publishing.",
+        });
+      }
+
+      const octokit = buildGithubClient(user);
+      const owner = user.githubUsername;
+      const repo = getUserGithubRepoName(user);
+      const filename = slugifyProjectName(projectName);
+      const folderSlug = filename.replace(/\.html$/i, "") || "medialab-page";
+      const repoFolderPath = normalizeRepoFilePath(
+        `${GITHUB_PUBLIC_ROOT}/${folderSlug}`,
       );
-    }
+      const repoFilePath = normalizeRepoFilePath(
+        `${repoFolderPath}/index.html`,
+      );
+      const inheritedRenderBaseUrl = getUserPrimaryRenderBaseUrl(user);
+      user.liveProjects = Array.isArray(user.liveProjects)
+        ? user.liveProjects
+        : [];
+      const existingProject = user.liveProjects.find(
+        (project) =>
+          String(project?.fileName || project?.filename || "") === repoFilePath,
+      );
+      await ensureGithubRepoScaffold(octokit, owner, repo, user.name || owner);
+      const fullHtml = documentHtml
+        ? buildPublishedHtmlFromSource({
+            documentHtml,
+            projectName,
+            adsenseId:
+              existingProject?.monetizationEnabled &&
+              existingProject?.isMonetized
+                ? user.adsenseId || ""
+                : "",
+            adsenseAdCode:
+              existingProject?.monetizationEnabled &&
+              existingProject?.isMonetized
+                ? user.adsenseAdCode || ""
+                : "",
+            description,
+            keywords,
+          })
+        : buildPublishedHtmlDocument({
+            projectName,
+            htmlContent,
+            cssContent,
+            interactionScript,
+            adsenseId:
+              existingProject?.monetizationEnabled &&
+              existingProject?.isMonetized
+                ? user.adsenseId || ""
+                : "",
+            adsenseAdCode:
+              existingProject?.monetizationEnabled &&
+              existingProject?.isMonetized
+                ? user.adsenseAdCode || ""
+                : "",
+            description,
+            keywords,
+          });
+      const htmlSizeBytes = Buffer.byteLength(fullHtml, "utf8");
+      const containsBase64Images = /data:image\/[a-zA-Z0-9.+-]+;base64,/i.test(
+        fullHtml,
+      );
+      const warnings = [];
+      if (containsBase64Images && htmlSizeBytes > 2 * 1024 * 1024) {
+        warnings.push(
+          "Large file warning: this single HTML export is over 2MB because it contains embedded base64 images. Upgrade to Pro image hosting for a lighter /assets-based publish flow.",
+        );
+      }
 
-    const existingSha = await getGithubFileSha(octokit, owner, repo, repoFilePath);
-    await upsertGithubFile({
-      octokit,
-      owner,
-      repo,
-      path: repoFilePath,
-      message: `${existingSha ? "Update" : "Publish"} ${repoFilePath} from MediaLab`,
-      contentBase64: Buffer.from(fullHtml).toString("base64"),
-    });
-
-    const liveUrl = `https://${owner}.github.io/${repo}/${folderSlug}/`;
-    const nextProject = {
-      name: projectName,
-      fileName: repoFilePath,
-      filename: repoFilePath,
-      entryPath: "index.html",
-      repoPath: repoFolderPath,
-      projectType: "single",
-      repo,
-      url: liveUrl,
-      liveUrl,
-      status: "live",
-      renderRepoUrl: buildGithubRepoUrl(owner, repo),
-      renderServiceName:
-        existingProject?.renderServiceName || buildDefaultRenderServiceName(user.name || owner),
-      renderUrl: existingProject?.renderUrl || inheritedRenderBaseUrl || "",
-      renderHostedConfirmed: Boolean(existingProject?.renderHostedConfirmed),
-      renderVerifiedAt: existingProject?.renderVerifiedAt || null,
-      renderDeployStatus:
-        existingProject?.renderDeployStatus ||
-        (user.confirmedFirstHosting && inheritedRenderBaseUrl ? "deploying" : ""),
-      adsensePublisherId:
-        existingProject?.monetizationEnabled && existingProject?.isMonetized
-          ? user.adsenseId || ""
-          : "",
-      monetizationEnabled: Boolean(existingProject?.monetizationEnabled),
-      isMonetized: Boolean(existingProject?.isMonetized),
-      adDisabledPages: Array.isArray(existingProject?.adDisabledPages)
-        ? existingProject.adDisabledPages
-        : [],
-      monetizationDisabledAt: existingProject?.monetizationDisabledAt || null,
-      monetizationVerifiedAt: existingProject?.monetizationVerifiedAt || null,
-      lastSyncedAt: new Date(),
-      updatedAt: new Date(),
-      createdAt: existingProject?.createdAt || new Date(),
-    };
-
-    user.liveProjects = user.liveProjects.filter(
-      (project) => String(project?.fileName || project?.filename || "") !== repoFilePath,
-    );
-    user.liveProjects.push(nextProject);
-    await user.save();
-
-    req.user.liveProjects = user.liveProjects;
-
-    await createUsageLog({
-      user,
-      email: user.email,
-      name: user.name,
-      isPro: Boolean(user.isPro),
-      action: "github-publish",
-      summary: `published ${repoFilePath} to GitHub Pages`,
-      source: "github",
-      metadata: { projectName, filename: repoFilePath, liveUrl },
-    });
-    await createUserNotification({
-      userId: user._id,
-      type: "project-live",
-      title: "Your project is live",
-      message: `${projectName} is now published. Click to check it out.`,
-      targetType: "live-project",
-      targetId: repoFilePath,
-      metadata: { liveUrl, projectName, fileName: repoFilePath },
-    });
-
-    return res.json({
-      success: true,
-      message: "Project published successfully.",
-      liveProject: nextProject,
-      liveUrl,
-      repoUrl: buildGithubRepoUrl(owner, repo),
-      renderBlueprintReady: true,
-      needsHostingOnboarding: !nextProject.renderHostedConfirmed && !nextProject.renderUrl,
-      warnings,
-      sizeBytes: htmlSizeBytes,
-      user: toSafeUser(user),
-    });
-  } catch (error) {
-    console.error("GitHub publish failed:", error);
-    const apiMessage =
-      error?.response?.data?.message ||
-      error?.message ||
-      "Could not publish this project to GitHub right now.";
-    return res.status(error?.status || error?.response?.status || 500).json({
-      success: false,
-      message: apiMessage,
-    });
-  }
-});
-
-app.post("/api/github/publish-folder", publishRateLimit, express.json({ limit: "50mb" }), async (req, res) => {
-  if (!req.isAuthenticated() || !req.user) {
-    return res
-      .status(401)
-      .json({ success: false, message: "You need to sign in first." });
-  }
-
-  try {
-    const user = await User.findById(req.user._id).select("+githubToken");
-    if (!user) {
-      return res
-        .status(404)
-        .json({ success: false, message: "User not found." });
-    }
-    if (!user.githubUsername || !user.githubToken) {
-      return res.status(400).json({
-        success: false,
-        message: "Connect GitHub first before publishing to the web.",
-      });
-    }
-    if (!user.githubRepoCreated) {
-      return res.status(400).json({
-        success: false,
-        message: "Set up GitHub hosting first before publishing.",
-      });
-    }
-
-    const projectName = String(req.body?.projectName || "").trim();
-    const uploadedFiles = Array.isArray(req.body?.files) ? req.body.files : [];
-    if (!projectName) {
-      return res.status(400).json({
-        success: false,
-        message: "Enter a project name before publishing.",
-      });
-    }
-    if (!uploadedFiles.length) {
-      return res.status(400).json({
-        success: false,
-        message: "Import a project folder first before publishing it.",
-      });
-    }
-
-    const preparedPush = prepareGitHubPush(projectName, uploadedFiles);
-    const entryPath = preparedPush.entryPath;
-    const safeFiles = preparedPush.files
-      .map((file) => ({
-        path: normalizeRepoFilePath(file?.path || ""),
-        contentBase64: String(file?.contentBase64 || "").trim(),
-      }))
-      .filter((file) => file.path && file.contentBase64)
-      .filter((file) => !file.path.startsWith("..") && !file.path.includes("/../"));
-
-    if (!safeFiles.length) {
-      return res.status(400).json({
-        success: false,
-        message: "That project folder did not contain any publishable files.",
-      });
-    }
-    if (safeFiles.length > 250) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "This project folder is too large for one-click publish right now. Keep it under 250 files for the smoothest deploy.",
-      });
-    }
-    const totalBytes = safeFiles.reduce((sum, file) => {
-      const base64 = String(file.contentBase64 || "");
-      return sum + Math.ceil((base64.length * 3) / 4);
-    }, 0);
-    if (totalBytes > 35 * 1024 * 1024) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "This project folder is too large for GitHub one-click publish right now. Keep the upload under about 35MB.",
-      });
-    }
-
-    const folderSlug = preparedPush.folderSlug;
-    const repoFolderPath = normalizeRepoFilePath(`${GITHUB_PUBLIC_ROOT}/${folderSlug}`);
-    const owner = user.githubUsername;
-    const repo = getUserGithubRepoName(user);
-    const inheritedRenderBaseUrl = getUserPrimaryRenderBaseUrl(user);
-    const octokit = buildGithubClient(user);
-    await ensureGithubRepoScaffold(octokit, owner, repo, user.name || owner);
-
-    for (const file of safeFiles) {
-      const repoPath = normalizeRepoFilePath(`${repoFolderPath}/${file.path}`);
-      const exists = await getGithubFileSha(octokit, owner, repo, repoPath);
+      const existingSha = await getGithubFileSha(
+        octokit,
+        owner,
+        repo,
+        repoFilePath,
+      );
       await upsertGithubFile({
         octokit,
         owner,
         repo,
-        path: repoPath,
-        message: `${exists ? "Update" : "Publish"} ${repoPath} from MediaLab`,
-        contentBase64: file.contentBase64,
+        path: repoFilePath,
+        message: `${existingSha ? "Update" : "Publish"} ${repoFilePath} from MediaLab`,
+        contentBase64: Buffer.from(fullHtml).toString("base64"),
+      });
+
+      const liveUrl = `https://${owner}.github.io/${repo}/${folderSlug}/`;
+      const nextProject = {
+        name: projectName,
+        fileName: repoFilePath,
+        filename: repoFilePath,
+        entryPath: "index.html",
+        repoPath: repoFolderPath,
+        projectType: "single",
+        repo,
+        url: liveUrl,
+        liveUrl,
+        status: "live",
+        renderRepoUrl: buildGithubRepoUrl(owner, repo),
+        renderServiceName:
+          existingProject?.renderServiceName ||
+          buildDefaultRenderServiceName(user.name || owner),
+        renderUrl: existingProject?.renderUrl || inheritedRenderBaseUrl || "",
+        renderHostedConfirmed: Boolean(existingProject?.renderHostedConfirmed),
+        renderVerifiedAt: existingProject?.renderVerifiedAt || null,
+        renderDeployStatus:
+          existingProject?.renderDeployStatus ||
+          (user.confirmedFirstHosting && inheritedRenderBaseUrl
+            ? "deploying"
+            : ""),
+        adsensePublisherId:
+          existingProject?.monetizationEnabled && existingProject?.isMonetized
+            ? user.adsenseId || ""
+            : "",
+        monetizationEnabled: Boolean(existingProject?.monetizationEnabled),
+        isMonetized: Boolean(existingProject?.isMonetized),
+        adDisabledPages: Array.isArray(existingProject?.adDisabledPages)
+          ? existingProject.adDisabledPages
+          : [],
+        monetizationDisabledAt: existingProject?.monetizationDisabledAt || null,
+        monetizationVerifiedAt: existingProject?.monetizationVerifiedAt || null,
+        lastSyncedAt: new Date(),
+        updatedAt: new Date(),
+        createdAt: existingProject?.createdAt || new Date(),
+      };
+
+      user.liveProjects = user.liveProjects.filter(
+        (project) =>
+          String(project?.fileName || project?.filename || "") !== repoFilePath,
+      );
+      user.liveProjects.push(nextProject);
+      await user.save();
+
+      req.user.liveProjects = user.liveProjects;
+
+      await createUsageLog({
+        user,
+        email: user.email,
+        name: user.name,
+        isPro: Boolean(user.isPro),
+        action: "github-publish",
+        summary: `published ${repoFilePath} to GitHub Pages`,
+        source: "github",
+        metadata: { projectName, filename: repoFilePath, liveUrl },
+      });
+      await createUserNotification({
+        userId: user._id,
+        type: "project-live",
+        title: "Your project is live",
+        message: `${projectName} is now published. Click to check it out.`,
+        targetType: "live-project",
+        targetId: repoFilePath,
+        metadata: { liveUrl, projectName, fileName: repoFilePath },
+      });
+
+      return res.json({
+        success: true,
+        message: "Project published successfully.",
+        liveProject: nextProject,
+        liveUrl,
+        repoUrl: buildGithubRepoUrl(owner, repo),
+        renderBlueprintReady: true,
+        needsHostingOnboarding:
+          !nextProject.renderHostedConfirmed && !nextProject.renderUrl,
+        warnings,
+        sizeBytes: htmlSizeBytes,
+        user: toSafeUser(user),
+      });
+    } catch (error) {
+      console.error("GitHub publish failed:", error);
+      const apiMessage =
+        error?.response?.data?.message ||
+        error?.message ||
+        "Could not publish this project to GitHub right now.";
+      return res.status(error?.status || error?.response?.status || 500).json({
+        success: false,
+        message: apiMessage,
       });
     }
+  },
+);
 
-    const repoEntryPath = normalizeRepoFilePath(`${repoFolderPath}/${entryPath}`);
-    const liveUrl = buildFolderProjectLiveUrl(owner, repo, repoFolderPath, entryPath);
-    const existingProject = (Array.isArray(user.liveProjects) ? user.liveProjects : []).find(
-      (project) => String(project?.fileName || project?.filename || "").trim() === repoEntryPath,
-    );
-    const nextProject = {
-      name: projectName,
-      fileName: repoEntryPath,
-      filename: repoEntryPath,
-      entryPath,
-      repoPath: repoFolderPath,
-      projectType: preparedPush.projectType,
-      repo,
-      url: liveUrl,
-      liveUrl,
-      status: "live",
-      renderRepoUrl: buildGithubRepoUrl(owner, repo),
-      renderServiceName:
-        existingProject?.renderServiceName || buildDefaultRenderServiceName(user.name || owner),
-      renderUrl: existingProject?.renderUrl || inheritedRenderBaseUrl || "",
-      renderHostedConfirmed: Boolean(existingProject?.renderHostedConfirmed),
-      renderVerifiedAt: existingProject?.renderVerifiedAt || null,
-      renderDeployStatus:
-        existingProject?.renderDeployStatus ||
-        (user.confirmedFirstHosting && inheritedRenderBaseUrl ? "deploying" : ""),
-      adsensePublisherId:
-        Boolean(existingProject?.monetizationEnabled) && Boolean(existingProject?.isMonetized)
-          ? user.adsenseId || ""
-          : "",
-      monetizationEnabled: Boolean(existingProject?.monetizationEnabled),
-      isMonetized: Boolean(existingProject?.isMonetized),
-      adDisabledPages: Array.isArray(existingProject?.adDisabledPages)
-        ? existingProject.adDisabledPages
-        : [],
-      monetizationDisabledAt: existingProject?.monetizationDisabledAt || null,
-      monetizationVerifiedAt: existingProject?.monetizationVerifiedAt || null,
-      lastSyncedAt: new Date(),
-      updatedAt: new Date(),
-      createdAt: existingProject?.createdAt || new Date(),
-    };
+app.post(
+  "/api/github/publish-folder",
+  publishRateLimit,
+  express.json({ limit: "50mb" }),
+  async (req, res) => {
+    if (!req.isAuthenticated() || !req.user) {
+      return res
+        .status(401)
+        .json({ success: false, message: "You need to sign in first." });
+    }
 
-    user.liveProjects = Array.isArray(user.liveProjects) ? user.liveProjects : [];
-    user.liveProjects = user.liveProjects.filter(
-      (project) => String(project?.fileName || project?.filename || "").trim() !== repoEntryPath,
-    );
-    user.liveProjects.push(nextProject);
-    await user.save();
-    req.user.liveProjects = user.liveProjects;
+    try {
+      const user = await User.findById(req.user._id).select("+githubToken");
+      if (!user) {
+        return res
+          .status(404)
+          .json({ success: false, message: "User not found." });
+      }
+      if (!user.githubUsername || !user.githubToken) {
+        return res.status(400).json({
+          success: false,
+          message: "Connect GitHub first before publishing to the web.",
+        });
+      }
+      if (!user.githubRepoCreated) {
+        return res.status(400).json({
+          success: false,
+          message: "Set up GitHub hosting first before publishing.",
+        });
+      }
 
-    await createUsageLog({
-      user,
-      email: user.email,
-      name: user.name,
-      isPro: Boolean(user.isPro),
-      action: "github-publish-folder",
-      summary: `published ${safeFiles.length} files to ${repoFolderPath}`,
-      source: "github",
-      metadata: { projectName, folderSlug: repoFolderPath, entryPath: repoEntryPath, liveUrl },
-    });
+      const projectName = String(req.body?.projectName || "").trim();
+      const uploadedFiles = Array.isArray(req.body?.files)
+        ? req.body.files
+        : [];
+      if (!projectName) {
+        return res.status(400).json({
+          success: false,
+          message: "Enter a project name before publishing.",
+        });
+      }
+      if (!uploadedFiles.length) {
+        return res.status(400).json({
+          success: false,
+          message: "Import a project folder first before publishing it.",
+        });
+      }
 
-    return res.json({
-      success: true,
-      message: "Project folder published successfully.",
-      liveProject: nextProject,
-      liveUrl,
-      repoUrl: buildGithubRepoUrl(owner, repo),
-      renderBlueprintReady: true,
-      needsHostingOnboarding: !nextProject.renderHostedConfirmed && !nextProject.renderUrl,
-      fileCount: safeFiles.length,
-      user: toSafeUser(user),
-    });
-  } catch (error) {
-    console.error("GitHub folder publish failed:", error);
-    const apiMessage =
-      error?.response?.data?.message ||
-      error?.message ||
-      "Could not publish this project folder right now.";
-    return res.status(error?.status || error?.response?.status || 500).json({
-      success: false,
-      message: apiMessage,
-    });
-  }
-});
+      const preparedPush = prepareGitHubPush(projectName, uploadedFiles);
+      const entryPath = preparedPush.entryPath;
+      const safeFiles = preparedPush.files
+        .map((file) => ({
+          path: normalizeRepoFilePath(file?.path || ""),
+          contentBase64: String(file?.contentBase64 || "").trim(),
+        }))
+        .filter((file) => file.path && file.contentBase64)
+        .filter(
+          (file) => !file.path.startsWith("..") && !file.path.includes("/../"),
+        );
+
+      if (!safeFiles.length) {
+        return res.status(400).json({
+          success: false,
+          message: "That project folder did not contain any publishable files.",
+        });
+      }
+      if (safeFiles.length > 250) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "This project folder is too large for one-click publish right now. Keep it under 250 files for the smoothest deploy.",
+        });
+      }
+      const totalBytes = safeFiles.reduce((sum, file) => {
+        const base64 = String(file.contentBase64 || "");
+        return sum + Math.ceil((base64.length * 3) / 4);
+      }, 0);
+      if (totalBytes > 35 * 1024 * 1024) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "This project folder is too large for GitHub one-click publish right now. Keep the upload under about 35MB.",
+        });
+      }
+
+      const folderSlug = preparedPush.folderSlug;
+      const repoFolderPath = normalizeRepoFilePath(
+        `${GITHUB_PUBLIC_ROOT}/${folderSlug}`,
+      );
+      const owner = user.githubUsername;
+      const repo = getUserGithubRepoName(user);
+      const inheritedRenderBaseUrl = getUserPrimaryRenderBaseUrl(user);
+      const octokit = buildGithubClient(user);
+      await ensureGithubRepoScaffold(octokit, owner, repo, user.name || owner);
+
+      for (const file of safeFiles) {
+        const repoPath = normalizeRepoFilePath(
+          `${repoFolderPath}/${file.path}`,
+        );
+        const exists = await getGithubFileSha(octokit, owner, repo, repoPath);
+        await upsertGithubFile({
+          octokit,
+          owner,
+          repo,
+          path: repoPath,
+          message: `${exists ? "Update" : "Publish"} ${repoPath} from MediaLab`,
+          contentBase64: file.contentBase64,
+        });
+      }
+
+      const repoEntryPath = normalizeRepoFilePath(
+        `${repoFolderPath}/${entryPath}`,
+      );
+      const liveUrl = buildFolderProjectLiveUrl(
+        owner,
+        repo,
+        repoFolderPath,
+        entryPath,
+      );
+      const existingProject = (
+        Array.isArray(user.liveProjects) ? user.liveProjects : []
+      ).find(
+        (project) =>
+          String(project?.fileName || project?.filename || "").trim() ===
+          repoEntryPath,
+      );
+      const nextProject = {
+        name: projectName,
+        fileName: repoEntryPath,
+        filename: repoEntryPath,
+        entryPath,
+        repoPath: repoFolderPath,
+        projectType: preparedPush.projectType,
+        repo,
+        url: liveUrl,
+        liveUrl,
+        status: "live",
+        renderRepoUrl: buildGithubRepoUrl(owner, repo),
+        renderServiceName:
+          existingProject?.renderServiceName ||
+          buildDefaultRenderServiceName(user.name || owner),
+        renderUrl: existingProject?.renderUrl || inheritedRenderBaseUrl || "",
+        renderHostedConfirmed: Boolean(existingProject?.renderHostedConfirmed),
+        renderVerifiedAt: existingProject?.renderVerifiedAt || null,
+        renderDeployStatus:
+          existingProject?.renderDeployStatus ||
+          (user.confirmedFirstHosting && inheritedRenderBaseUrl
+            ? "deploying"
+            : ""),
+        adsensePublisherId:
+          Boolean(existingProject?.monetizationEnabled) &&
+          Boolean(existingProject?.isMonetized)
+            ? user.adsenseId || ""
+            : "",
+        monetizationEnabled: Boolean(existingProject?.monetizationEnabled),
+        isMonetized: Boolean(existingProject?.isMonetized),
+        adDisabledPages: Array.isArray(existingProject?.adDisabledPages)
+          ? existingProject.adDisabledPages
+          : [],
+        monetizationDisabledAt: existingProject?.monetizationDisabledAt || null,
+        monetizationVerifiedAt: existingProject?.monetizationVerifiedAt || null,
+        lastSyncedAt: new Date(),
+        updatedAt: new Date(),
+        createdAt: existingProject?.createdAt || new Date(),
+      };
+
+      user.liveProjects = Array.isArray(user.liveProjects)
+        ? user.liveProjects
+        : [];
+      user.liveProjects = user.liveProjects.filter(
+        (project) =>
+          String(project?.fileName || project?.filename || "").trim() !==
+          repoEntryPath,
+      );
+      user.liveProjects.push(nextProject);
+      await user.save();
+      req.user.liveProjects = user.liveProjects;
+
+      await createUsageLog({
+        user,
+        email: user.email,
+        name: user.name,
+        isPro: Boolean(user.isPro),
+        action: "github-publish-folder",
+        summary: `published ${safeFiles.length} files to ${repoFolderPath}`,
+        source: "github",
+        metadata: {
+          projectName,
+          folderSlug: repoFolderPath,
+          entryPath: repoEntryPath,
+          liveUrl,
+        },
+      });
+
+      return res.json({
+        success: true,
+        message: "Project folder published successfully.",
+        liveProject: nextProject,
+        liveUrl,
+        repoUrl: buildGithubRepoUrl(owner, repo),
+        renderBlueprintReady: true,
+        needsHostingOnboarding:
+          !nextProject.renderHostedConfirmed && !nextProject.renderUrl,
+        fileCount: safeFiles.length,
+        user: toSafeUser(user),
+      });
+    } catch (error) {
+      console.error("GitHub folder publish failed:", error);
+      const apiMessage =
+        error?.response?.data?.message ||
+        error?.message ||
+        "Could not publish this project folder right now.";
+      return res.status(error?.status || error?.response?.status || 500).json({
+        success: false,
+        message: apiMessage,
+      });
+    }
+  },
+);
 
 app.get("/api/github/projects", async (req, res) => {
   if (!req.isAuthenticated() || !req.user) {
@@ -5464,15 +6422,26 @@ app.get("/api/github/projects", async (req, res) => {
   try {
     const user = await User.findById(req.user._id).select("+githubToken");
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found." });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found." });
     }
 
-    user.liveProjects = Array.isArray(user.liveProjects) ? user.liveProjects : [];
-    if (user.githubUsername && user.githubToken && user.githubRepoCreated && user.liveProjects.length) {
+    user.liveProjects = Array.isArray(user.liveProjects)
+      ? user.liveProjects
+      : [];
+    if (
+      user.githubUsername &&
+      user.githubToken &&
+      user.githubRepoCreated &&
+      user.liveProjects.length
+    ) {
       const octokit = buildGithubClient(user);
       const verified = await Promise.all(
         user.liveProjects.map(async (project) => {
-          const fileName = String(project?.fileName || project?.filename || "").trim();
+          const fileName = String(
+            project?.fileName || project?.filename || "",
+          ).trim();
           if (!fileName) return null;
           try {
             await octokit.rest.repos.getContent({
@@ -5586,7 +6555,9 @@ app.get("/api/github/project-content", async (req, res) => {
     return res.json({
       success: true,
       filename,
-      content: Buffer.from(contentResponse.data.content, "base64").toString("utf8"),
+      content: Buffer.from(contentResponse.data.content, "base64").toString(
+        "utf8",
+      ),
     });
   } catch (error) {
     console.error("GitHub project content fetch failed:", error);
@@ -5622,9 +6593,13 @@ app.delete("/api/github/project", async (req, res) => {
     }
 
     const octokit = buildGithubClient(user);
-    user.liveProjects = Array.isArray(user.liveProjects) ? user.liveProjects : [];
+    user.liveProjects = Array.isArray(user.liveProjects)
+      ? user.liveProjects
+      : [];
     const projectToDelete = user.liveProjects.find(
-      (project) => String(project?.fileName || project?.filename || "").trim() === filename,
+      (project) =>
+        String(project?.fileName || project?.filename || "").trim() ===
+        filename,
     );
 
     if (projectToDelete?.repoPath) {
@@ -5657,7 +6632,9 @@ app.delete("/api/github/project", async (req, res) => {
     }
 
     user.liveProjects = user.liveProjects.filter(
-      (project) => String(project?.fileName || project?.filename || "").trim() !== filename,
+      (project) =>
+        String(project?.fileName || project?.filename || "").trim() !==
+        filename,
     );
     await user.save();
     req.user.liveProjects = user.liveProjects;
@@ -5683,7 +6660,8 @@ app.delete("/api/github/project", async (req, res) => {
     console.error("GitHub project delete failed:", error);
     return res.status(error?.status || error?.response?.status || 500).json({
       success: false,
-      message: error?.message || "Could not delete that live project right now.",
+      message:
+        error?.message || "Could not delete that live project right now.",
     });
   }
 });
@@ -5702,11 +6680,15 @@ app.post(
   marketplaceImageUpload.single("screenshot"),
   async (req, res) => {
     if (!req.isAuthenticated() || !req.user) {
-      return res.status(401).json({ success: false, message: "Sign in first." });
+      return res
+        .status(401)
+        .json({ success: false, message: "Sign in first." });
     }
     try {
       if (!req.file?.buffer) {
-        return res.status(400).json({ success: false, message: "Choose an image first." });
+        return res
+          .status(400)
+          .json({ success: false, message: "Choose an image first." });
       }
       const uploaded = await uploadImageToImageKit({
         fileBuffer: req.file.buffer,
@@ -5725,7 +6707,8 @@ app.post(
       console.error("Marketplace screenshot upload failed:", error);
       return res.status(500).json({
         success: false,
-        message: error?.message || "Could not upload this screenshot right now.",
+        message:
+          error?.message || "Could not upload this screenshot right now.",
       });
     }
   },
@@ -5744,10 +6727,14 @@ app.post(
     try {
       const user = await User.findById(req.user._id).select("+githubToken");
       if (!user) {
-        return res.status(404).json({ success: false, message: "User not found." });
+        return res
+          .status(404)
+          .json({ success: false, message: "User not found." });
       }
 
-      const nextAdsenseId = normalizeAdsensePublisherId(req.body?.adsenseId || "");
+      const nextAdsenseId = normalizeAdsensePublisherId(
+        req.body?.adsenseId || "",
+      );
       if (nextAdsenseId && !/^ca-pub-\d+$/i.test(nextAdsenseId)) {
         return res.status(400).json({
           success: false,
@@ -5759,7 +6746,11 @@ app.post(
       let faviconUpdated = false;
 
       if (req.file) {
-        if (!user.githubUsername || !user.githubToken || !user.githubRepoCreated) {
+        if (
+          !user.githubUsername ||
+          !user.githubToken ||
+          !user.githubRepoCreated
+        ) {
           return res.status(400).json({
             success: false,
             message:
@@ -5828,7 +6819,9 @@ app.post("/api/github/setup-adsense", express.json(), async (req, res) => {
   try {
     const user = await User.findById(req.user._id).select("+githubToken");
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found." });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found." });
     }
     if (!user.githubUsername || !user.githubToken || !user.githubRepoCreated) {
       return res.status(400).json({
@@ -5836,7 +6829,9 @@ app.post("/api/github/setup-adsense", express.json(), async (req, res) => {
         message: "Set up GitHub hosting first before generating ads.txt.",
       });
     }
-    const adsenseId = normalizeAdsensePublisherId(req.body?.adsenseId || user.adsenseId || "");
+    const adsenseId = normalizeAdsensePublisherId(
+      req.body?.adsenseId || user.adsenseId || "",
+    );
     if (!/^ca-pub-\d+$/i.test(adsenseId)) {
       return res.status(400).json({
         success: false,
@@ -5901,7 +6896,9 @@ app.get("/api/github/project-health", async (req, res) => {
   try {
     const url = String(req.query?.url || "").trim();
     if (!url) {
-      return res.status(400).json({ success: false, message: "Missing live URL." });
+      return res
+        .status(400)
+        .json({ success: false, message: "Missing live URL." });
     }
     const response = await fetch(url, {
       method: "GET",
@@ -5935,19 +6932,28 @@ app.get("/api/github/project-monitor", async (req, res) => {
   try {
     const filename = String(req.query?.filename || "").trim();
     if (!filename) {
-      return res.status(400).json({ success: false, message: "Missing filename." });
+      return res
+        .status(400)
+        .json({ success: false, message: "Missing filename." });
     }
 
     const user = await User.findById(req.user._id);
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found." });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found." });
     }
 
-    const project = (Array.isArray(user.liveProjects) ? user.liveProjects : []).find(
-      (item) => String(item?.fileName || item?.filename || "").trim() === filename,
+    const project = (
+      Array.isArray(user.liveProjects) ? user.liveProjects : []
+    ).find(
+      (item) =>
+        String(item?.fileName || item?.filename || "").trim() === filename,
     );
     if (!project) {
-      return res.status(404).json({ success: false, message: "Live project not found." });
+      return res
+        .status(404)
+        .json({ success: false, message: "Live project not found." });
     }
 
     let adsenseSync = null;
@@ -5973,11 +6979,24 @@ app.get("/api/github/project-monitor", async (req, res) => {
       });
       health.ok = response.status < 400;
       health.status = response.status;
-      health.state = response.status < 400 ? "online" : response.status >= 500 ? "offline" : "deploying";
+      health.state =
+        response.status < 400
+          ? "online"
+          : response.status >= 500
+            ? "offline"
+            : "deploying";
       health.label =
-        response.status < 400 ? "System Online" : response.status >= 500 ? "Offline" : "Deploying";
+        response.status < 400
+          ? "System Online"
+          : response.status >= 500
+            ? "Offline"
+            : "Deploying";
       html = await response.text();
-      if (response.status < 400 && project.renderUrl && !project.renderHostedConfirmed) {
+      if (
+        response.status < 400 &&
+        project.renderUrl &&
+        !project.renderHostedConfirmed
+      ) {
         project.renderHostedConfirmed = true;
         project.renderVerifiedAt = new Date();
         project.renderDeployStatus = "live";
@@ -5995,7 +7014,10 @@ app.get("/api/github/project-monitor", async (req, res) => {
     } catch (error) {
       health.ok = false;
       health.status = 0;
-      health.state = project.renderUrl && !project.renderHostedConfirmed ? "deploying" : "offline";
+      health.state =
+        project.renderUrl && !project.renderHostedConfirmed
+          ? "deploying"
+          : "offline";
       health.label = health.state === "deploying" ? "Deploying" : "Offline";
     }
 
@@ -6027,7 +7049,11 @@ app.get("/api/github/project-monitor", async (req, res) => {
     }
 
     let adsPerformance = null;
-    if (project?.monetizationEnabled && project?.isMonetized && user.googleRefreshToken) {
+    if (
+      project?.monetizationEnabled &&
+      project?.isMonetized &&
+      user.googleRefreshToken
+    ) {
       try {
         adsPerformance = await getAdsenseDomainStats(user, liveUrl);
       } catch (error) {
@@ -6038,7 +7064,9 @@ app.get("/api/github/project-monitor", async (req, res) => {
     return res.json({
       success: true,
       project: {
-        ...(typeof project.toObject === "function" ? project.toObject() : { ...project }),
+        ...(typeof project.toObject === "function"
+          ? project.toObject()
+          : { ...project }),
         liveUrl,
       },
       health,
@@ -6047,10 +7075,10 @@ app.get("/api/github/project-monitor", async (req, res) => {
       adsTxtUrl,
       monetizationApproved: Boolean(
         project?.monetizationEnabled &&
-          project?.isMonetized &&
-          adsDetected &&
-          adsTxtVerified &&
-          user.adsenseId,
+        project?.isMonetized &&
+        adsDetected &&
+        adsTxtVerified &&
+        user.adsenseId,
       ),
       adsenseId: user.adsenseId || "",
       adsenseSiteStatus: user.adsenseSiteStatus || "",
@@ -6079,13 +7107,16 @@ app.get("/api/marketplace", async (req, res) => {
     ]);
     return res.json({
       success: true,
-      items: items.map((item) => buildMarketplacePublicItem(item, req.user?._id)),
+      items: items.map((item) =>
+        buildMarketplacePublicItem(item, req.user?._id),
+      ),
     });
   } catch (error) {
     console.error("Marketplace discovery fetch failed:", error);
     return res.status(500).json({
       success: false,
-      message: error?.message || "Could not load marketplace projects right now.",
+      message:
+        error?.message || "Could not load marketplace projects right now.",
     });
   }
 });
@@ -6104,7 +7135,9 @@ app.get("/api/marketplace/mine", async (req, res) => {
       .lean();
     return res.json({
       success: true,
-      items: items.map((item) => buildMarketplacePublicItem(item, req.user?._id)),
+      items: items.map((item) =>
+        buildMarketplacePublicItem(item, req.user?._id),
+      ),
     });
   } catch (error) {
     console.error("Marketplace my sales fetch failed:", error);
@@ -6123,12 +7156,16 @@ app.get("/api/marketplace/purchases", async (req, res) => {
     });
   }
   try {
-    const items = await MarketplaceItem.find({ "purchases.buyerId": req.user._id })
+    const items = await MarketplaceItem.find({
+      "purchases.buyerId": req.user._id,
+    })
       .sort({ updatedAt: -1, createdAt: -1 })
       .lean();
     return res.json({
       success: true,
-      items: items.map((item) => buildMarketplacePublicItem(item, req.user?._id)),
+      items: items.map((item) =>
+        buildMarketplacePublicItem(item, req.user?._id),
+      ),
     });
   } catch (error) {
     console.error("Marketplace purchases fetch failed:", error);
@@ -6142,7 +7179,11 @@ app.get("/api/marketplace/purchases", async (req, res) => {
 app.get("/api/marketplace/:id", async (req, res) => {
   try {
     const item = await MarketplaceItem.findById(req.params.id).lean();
-    if (!item || (item.status !== "approved" && String(item.authorId) !== String(req.user?._id || ""))) {
+    if (
+      !item ||
+      (item.status !== "approved" &&
+        String(item.authorId) !== String(req.user?._id || ""))
+    ) {
       return res.status(404).json({
         success: false,
         message: "Marketplace listing not found.",
@@ -6161,216 +7202,270 @@ app.get("/api/marketplace/:id", async (req, res) => {
   }
 });
 
-app.post("/api/marketplace", publishRateLimit, express.json({ limit: "15mb" }), async (req, res) => {
-  if (!req.isAuthenticated() || !req.user) {
-    return res.status(401).json({
-      success: false,
-      message: "Sign in first before posting a marketplace sale.",
-    });
-  }
+app.post(
+  "/api/marketplace",
+  publishRateLimit,
+  express.json({ limit: "15mb" }),
+  async (req, res) => {
+    if (!req.isAuthenticated() || !req.user) {
+      return res.status(401).json({
+        success: false,
+        message: "Sign in first before posting a marketplace sale.",
+      });
+    }
 
-  try {
-    const user = await User.findById(req.user._id);
-    if (!user) {
-      return res.status(404).json({ success: false, message: "User not found." });
-    }
-    const sourceType = ["upload", "draft", "live", "template-code"].includes(String(req.body?.sourceType || "").trim())
-      ? String(req.body.sourceType).trim()
-      : "draft";
-    const listingKind =
-      String(req.body?.listingKind || "").trim().toLowerCase() === "template" ||
-      sourceType === "template-code"
-        ? "template"
-        : "sale";
-    const projectId = buildMarketplaceProjectId(
-      sourceType,
-      req.body?.projectId || "",
-      req.body?.title || "",
-    );
-    const title = sanitizeMarketplaceText(req.body?.title || "", 120);
-    const description = sanitizeMarketplaceText(req.body?.description || "", 1200);
-    const purpose = sanitizeMarketplaceText(req.body?.purpose || "", 800);
-    const category = sanitizeMarketplaceText(req.body?.category || "General", 80) || "General";
-    const price = listingKind === "template" ? 0 : normalizeMarketplacePrice(req.body?.price);
-    const allowTest = Boolean(req.body?.allowTest);
-    const screenshots = (Array.isArray(req.body?.screenshots) ? req.body.screenshots : [])
-      .map((value) => String(value || "").trim())
-      .filter(Boolean)
-      .slice(0, 4);
-    const screenshotAssets = (Array.isArray(req.body?.screenshotAssets) ? req.body.screenshotAssets : [])
-      .map((asset) => ({
-        url: String(asset?.url || "").trim(),
-        thumbnailUrl: String(asset?.thumbnailUrl || asset?.url || "").trim(),
-        fileId: String(asset?.fileId || "").trim(),
-        name: String(asset?.name || "").trim(),
-      }))
-      .filter((asset) => asset.url)
-      .slice(0, 4);
-    const sourceHtml = String(req.body?.sourceHtml || "").trim();
-    const sourceEntryPath = normalizeImportedEntryPath(req.body?.sourceEntryPath || "index.html");
-    const sourceFiles = (Array.isArray(req.body?.sourceFiles) ? req.body.sourceFiles : [])
-      .map((file) => ({
-        path: normalizeRepoFilePath(file?.path || file?.name || ""),
-        name: String(file?.name || "").trim(),
-        content: typeof file?.content === "string" ? file.content : "",
-        contentBase64: typeof file?.contentBase64 === "string" ? file.contentBase64 : "",
-        mimeType: String(file?.mimeType || "").trim(),
-      }))
-      .filter((file) => file.path);
-    const packagedSourceHtml = resolveMarketplaceSourceHtmlFromFiles(sourceFiles, sourceEntryPath);
+    try {
+      const user = await User.findById(req.user._id);
+      if (!user) {
+        return res
+          .status(404)
+          .json({ success: false, message: "User not found." });
+      }
+      const sourceType = ["upload", "draft", "live", "template-code"].includes(
+        String(req.body?.sourceType || "").trim(),
+      )
+        ? String(req.body.sourceType).trim()
+        : "draft";
+      const listingKind =
+        String(req.body?.listingKind || "")
+          .trim()
+          .toLowerCase() === "template" || sourceType === "template-code"
+          ? "template"
+          : "sale";
+      const projectId = buildMarketplaceProjectId(
+        sourceType,
+        req.body?.projectId || "",
+        req.body?.title || "",
+      );
+      const title = sanitizeMarketplaceText(req.body?.title || "", 120);
+      const description = sanitizeMarketplaceText(
+        req.body?.description || "",
+        1200,
+      );
+      const purpose = sanitizeMarketplaceText(req.body?.purpose || "", 800);
+      const category =
+        sanitizeMarketplaceText(req.body?.category || "General", 80) ||
+        "General";
+      const price =
+        listingKind === "template"
+          ? 0
+          : normalizeMarketplacePrice(req.body?.price);
+      const allowTest = Boolean(req.body?.allowTest);
+      const screenshots = (
+        Array.isArray(req.body?.screenshots) ? req.body.screenshots : []
+      )
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+        .slice(0, 4);
+      const screenshotAssets = (
+        Array.isArray(req.body?.screenshotAssets)
+          ? req.body.screenshotAssets
+          : []
+      )
+        .map((asset) => ({
+          url: String(asset?.url || "").trim(),
+          thumbnailUrl: String(asset?.thumbnailUrl || asset?.url || "").trim(),
+          fileId: String(asset?.fileId || "").trim(),
+          name: String(asset?.name || "").trim(),
+        }))
+        .filter((asset) => asset.url)
+        .slice(0, 4);
+      const sourceHtml = String(req.body?.sourceHtml || "").trim();
+      const sourceEntryPath = normalizeImportedEntryPath(
+        req.body?.sourceEntryPath || "index.html",
+      );
+      const sourceFiles = (
+        Array.isArray(req.body?.sourceFiles) ? req.body.sourceFiles : []
+      )
+        .map((file) => ({
+          path: normalizeRepoFilePath(file?.path || file?.name || ""),
+          name: String(file?.name || "").trim(),
+          content: typeof file?.content === "string" ? file.content : "",
+          contentBase64:
+            typeof file?.contentBase64 === "string" ? file.contentBase64 : "",
+          mimeType: String(file?.mimeType || "").trim(),
+        }))
+        .filter((file) => file.path);
+      const packagedSourceHtml = resolveMarketplaceSourceHtmlFromFiles(
+        sourceFiles,
+        sourceEntryPath,
+      );
 
-    if (!projectId && listingKind !== "template") {
-      return res.status(400).json({
-        success: false,
-        message: "Select a project source first before submitting it to the marketplace.",
-      });
-    }
-    if (!title) {
-      return res.status(400).json({
-        success: false,
-        message: "Enter a marketplace title before submitting this sale.",
-      });
-    }
-    if (!description) {
-      return res.status(400).json({
-        success: false,
-        message: "Add a professional description before submitting this sale.",
-      });
-    }
-    if (listingKind !== "template" && purpose.length < 5) {
-      return res.status(400).json({
-        success: false,
-        message: "Add a clearer project purpose before submitting this sale.",
-      });
-    }
-    if (listingKind !== "template" && !category) {
-      return res.status(400).json({
-        success: false,
-        message: "Choose a project category before submitting this sale.",
-      });
-    }
-    if (listingKind !== "template" && screenshots.length < 4) {
-      return res.status(400).json({
-        success: false,
-        message: "Upload 4 preview images so buyers get a proper marketplace preview.",
-      });
-    }
-    let sourceProject = null;
-    let liveUrl = "";
-    let resolvedSourceHtml = sourceHtml || packagedSourceHtml;
-    if (listingKind === "template") {
-      resolvedSourceHtml = normalizeMarketplaceTemplateHtml(sourceHtml || packagedSourceHtml, title);
-    } else if (sourceType === "draft") {
-      const builderDrafts = Array.isArray(user.builderDrafts) ? user.builderDrafts : [];
-      const draft = builderDrafts.find((item) => String(item?.name || "").trim() === projectId);
-      if (!draft && !resolvedSourceHtml) {
+      if (!projectId && listingKind !== "template") {
         return res.status(400).json({
           success: false,
-          message: "Choose one of your MediaLab drafts before listing it.",
+          message:
+            "Select a project source first before submitting it to the marketplace.",
         });
       }
-      resolvedSourceHtml =
-        resolvedSourceHtml ||
-        String(draft?.canvasHtml || "").trim() ||
-        String(draft?.canvasState?.html || "").trim();
-    } else if (sourceType === "upload") {
+      if (!title) {
+        return res.status(400).json({
+          success: false,
+          message: "Enter a marketplace title before submitting this sale.",
+        });
+      }
+      if (!description) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Add a professional description before submitting this sale.",
+        });
+      }
+      if (listingKind !== "template" && purpose.length < 5) {
+        return res.status(400).json({
+          success: false,
+          message: "Add a clearer project purpose before submitting this sale.",
+        });
+      }
+      if (listingKind !== "template" && !category) {
+        return res.status(400).json({
+          success: false,
+          message: "Choose a project category before submitting this sale.",
+        });
+      }
+      if (listingKind !== "template" && screenshots.length < 4) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Upload 4 preview images so buyers get a proper marketplace preview.",
+        });
+      }
+      let sourceProject = null;
+      let liveUrl = "";
+      let resolvedSourceHtml = sourceHtml || packagedSourceHtml;
+      if (listingKind === "template") {
+        resolvedSourceHtml = normalizeMarketplaceTemplateHtml(
+          sourceHtml || packagedSourceHtml,
+          title,
+        );
+      } else if (sourceType === "draft") {
+        const builderDrafts = Array.isArray(user.builderDrafts)
+          ? user.builderDrafts
+          : [];
+        const draft = builderDrafts.find(
+          (item) => String(item?.name || "").trim() === projectId,
+        );
+        if (!draft && !resolvedSourceHtml) {
+          return res.status(400).json({
+            success: false,
+            message: "Choose one of your MediaLab drafts before listing it.",
+          });
+        }
+        resolvedSourceHtml =
+          resolvedSourceHtml ||
+          String(draft?.canvasHtml || "").trim() ||
+          String(draft?.canvasState?.html || "").trim();
+      } else if (sourceType === "upload") {
+        if (!resolvedSourceHtml) {
+          return res.status(400).json({
+            success: false,
+            message:
+              "Upload a project folder that contains an HTML entry file before continuing.",
+          });
+        }
+      } else {
+        sourceProject = findLiveProject(user, projectId);
+        liveUrl = sourceProject ? buildProjectLiveUrl(user, sourceProject) : "";
+        if (!resolvedSourceHtml && sourceProject) {
+          const fetched = await fetchMarketplaceSourceHtml(user, projectId);
+          resolvedSourceHtml = String(fetched?.html || "").trim();
+        }
+        if (!resolvedSourceHtml) {
+          return res.status(400).json({
+            success: false,
+            message:
+              "Terminate the live project first so MediaLab can package it for the marketplace.",
+          });
+        }
+      }
       if (!resolvedSourceHtml) {
         return res.status(400).json({
           success: false,
-          message: "Upload a project folder that contains an HTML entry file before continuing.",
+          message:
+            "MediaLab could not package this project source yet. Re-select the source and try again.",
         });
       }
-    } else {
-      sourceProject = findLiveProject(user, projectId);
-      liveUrl = sourceProject ? buildProjectLiveUrl(user, sourceProject) : "";
-      if (!resolvedSourceHtml && sourceProject) {
-        const fetched = await fetchMarketplaceSourceHtml(user, projectId);
-        resolvedSourceHtml = String(fetched?.html || "").trim();
-      }
-      if (!resolvedSourceHtml) {
+
+      const existing = await MarketplaceItem.findOne({
+        authorId: user._id,
+        projectId,
+        status: { $in: ["pending", "approved"] },
+      });
+      if (existing) {
         return res.status(400).json({
           success: false,
-          message: "Terminate the live project first so MediaLab can package it for the marketplace.",
+          message: "This project is already listed in your marketplace sales.",
         });
       }
-    }
-    if (!resolvedSourceHtml) {
-      return res.status(400).json({
-        success: false,
-        message: "MediaLab could not package this project source yet. Re-select the source and try again.",
+
+      const sellerRatingMeta = computeSellerRatingMeta(user);
+      const item = await MarketplaceItem.create({
+        projectId:
+          listingKind === "template" ? `template-${Date.now()}` : projectId,
+        authorId: user._id,
+        title,
+        description,
+        price,
+        category,
+        screenshots,
+        screenshotAssets,
+        allowTest: listingKind === "template" ? false : allowTest,
+        purpose,
+        sourceType,
+        listingKind,
+        sourceHtml: resolvedSourceHtml,
+        sourceEntryPath,
+        sourceFiles,
+        status: "pending",
+        authorName: user.name || user.email || "MediaLab Creator",
+        authorEmail: String(user.email || "")
+          .trim()
+          .toLowerCase(),
+        authorAvatar: user.profilePicture || "",
+        keepListedAfterPurchase:
+          String(user.email || "")
+            .trim()
+            .toLowerCase() === "dev@gmail.com",
+        sellerRatingCount: sellerRatingMeta.sellerRatingCount,
+        sellerRatingPercent: sellerRatingMeta.sellerRatingPercent,
+        liveUrl,
       });
-    }
 
-    const existing = await MarketplaceItem.findOne({
-      authorId: user._id,
-      projectId,
-      status: { $in: ["pending", "approved"] },
-    });
-    if (existing) {
-      return res.status(400).json({
-        success: false,
-        message: "This project is already listed in your marketplace sales.",
-      });
-    }
-
-    const sellerRatingMeta = computeSellerRatingMeta(user);
-    const item = await MarketplaceItem.create({
-      projectId: listingKind === "template" ? `template-${Date.now()}` : projectId,
-      authorId: user._id,
-      title,
-      description,
-      price,
-      category,
-      screenshots,
-      screenshotAssets,
-      allowTest: listingKind === "template" ? false : allowTest,
-      purpose,
-      sourceType,
-      listingKind,
-      sourceHtml: resolvedSourceHtml,
-      sourceEntryPath,
-      sourceFiles,
-      status: "pending",
-      authorName: user.name || user.email || "MediaLab Creator",
-      authorEmail: String(user.email || "").trim().toLowerCase(),
-      authorAvatar: user.profilePicture || "",
-      keepListedAfterPurchase: String(user.email || "").trim().toLowerCase() === "dev@gmail.com",
-      sellerRatingCount: sellerRatingMeta.sellerRatingCount,
-      sellerRatingPercent: sellerRatingMeta.sellerRatingPercent,
-      liveUrl,
-    });
-
-    if (user.githubUsername && user.githubToken) {
-      try {
-        await syncMarketplaceListingToGithub(user, item);
-      } catch (repoError) {
-        console.warn("Marketplace repo sync skipped:", repoError.message);
+      if (user.githubUsername && user.githubToken) {
+        try {
+          await syncMarketplaceListingToGithub(user, item);
+        } catch (repoError) {
+          console.warn("Marketplace repo sync skipped:", repoError.message);
+        }
       }
-    }
 
-    await createUsageLog({
-      user,
-      email: user.email,
-      name: user.name,
-      isPro: Boolean(user.isPro),
-      action: "marketplace-listing-create",
-      summary: `submitted marketplace listing ${title}`,
-      source: "marketplace",
-      metadata: { projectId, title, price, sourceType, listingKind },
-    });
-    return res.json({
-      success: true,
-      message: listingKind === "template" ? "Template submitted for marketplace review." : "Project submitted for marketplace review.",
-      item: buildMarketplacePublicItem(item.toObject(), req.user?._id),
-    });
-  } catch (error) {
-    console.error("Marketplace create failed:", error);
-    return res.status(500).json({
-      success: false,
-      message: error?.message || "Could not submit this marketplace listing.",
-    });
-  }
-});
+      await createUsageLog({
+        user,
+        email: user.email,
+        name: user.name,
+        isPro: Boolean(user.isPro),
+        action: "marketplace-listing-create",
+        summary: `submitted marketplace listing ${title}`,
+        source: "marketplace",
+        metadata: { projectId, title, price, sourceType, listingKind },
+      });
+      return res.json({
+        success: true,
+        message:
+          listingKind === "template"
+            ? "Template submitted for marketplace review."
+            : "Project submitted for marketplace review.",
+        item: buildMarketplacePublicItem(item.toObject(), req.user?._id),
+      });
+    } catch (error) {
+      console.error("Marketplace create failed:", error);
+      return res.status(500).json({
+        success: false,
+        message: error?.message || "Could not submit this marketplace listing.",
+      });
+    }
+  },
+);
 
 app.get("/api/marketplace/:id/edit", async (req, res) => {
   if (!req.isAuthenticated() || !req.user) {
@@ -6400,278 +7495,353 @@ app.get("/api/marketplace/:id/edit", async (req, res) => {
     console.error("Marketplace edit detail failed:", error);
     return res.status(500).json({
       success: false,
-      message: error?.message || "Could not load this marketplace listing for editing.",
+      message:
+        error?.message ||
+        "Could not load this marketplace listing for editing.",
     });
   }
 });
 
-app.patch("/api/marketplace/:id", publishRateLimit, express.json({ limit: "15mb" }), async (req, res) => {
-  if (!req.isAuthenticated() || !req.user) {
-    return res.status(401).json({
-      success: false,
-      message: "Sign in first before editing a marketplace sale.",
-    });
-  }
-
-  try {
-    const user = await User.findById(req.user._id);
-    if (!user) {
-      return res.status(404).json({ success: false, message: "User not found." });
-    }
-    const item = await MarketplaceItem.findById(req.params.id);
-    if (!item || String(item.authorId || "") !== String(req.user._id || "")) {
-      return res.status(404).json({
+app.patch(
+  "/api/marketplace/:id",
+  publishRateLimit,
+  express.json({ limit: "15mb" }),
+  async (req, res) => {
+    if (!req.isAuthenticated() || !req.user) {
+      return res.status(401).json({
         success: false,
-        message: "Marketplace listing not found.",
+        message: "Sign in first before editing a marketplace sale.",
       });
     }
-    const sourceType = ["upload", "draft", "live", "template-code"].includes(String(req.body?.sourceType || "").trim())
-      ? String(req.body.sourceType).trim()
-      : item.sourceType || "draft";
-    const listingKind =
-      String(req.body?.listingKind || item.listingKind || "").trim().toLowerCase() === "template" ||
-      sourceType === "template-code"
-        ? "template"
-        : "sale";
-    const projectId = buildMarketplaceProjectId(
-      sourceType,
-      req.body?.projectId || item.projectId || "",
-      req.body?.title || item.title || "",
-    );
-    const title = sanitizeMarketplaceText(req.body?.title || item.title || "", 120);
-    const description = sanitizeMarketplaceText(req.body?.description || item.description || "", 1200);
-    const purpose = sanitizeMarketplaceText(req.body?.purpose || item.purpose || "", 800);
-    const category =
-      sanitizeMarketplaceText(req.body?.category || item.category || "General", 80) || "General";
-    const price = listingKind === "template"
-      ? 0
-      : normalizeMarketplacePrice(
-          req.body?.price !== undefined ? req.body.price : item.price,
+
+    try {
+      const user = await User.findById(req.user._id);
+      if (!user) {
+        return res
+          .status(404)
+          .json({ success: false, message: "User not found." });
+      }
+      const item = await MarketplaceItem.findById(req.params.id);
+      if (!item || String(item.authorId || "") !== String(req.user._id || "")) {
+        return res.status(404).json({
+          success: false,
+          message: "Marketplace listing not found.",
+        });
+      }
+      const sourceType = ["upload", "draft", "live", "template-code"].includes(
+        String(req.body?.sourceType || "").trim(),
+      )
+        ? String(req.body.sourceType).trim()
+        : item.sourceType || "draft";
+      const listingKind =
+        String(req.body?.listingKind || item.listingKind || "")
+          .trim()
+          .toLowerCase() === "template" || sourceType === "template-code"
+          ? "template"
+          : "sale";
+      const projectId = buildMarketplaceProjectId(
+        sourceType,
+        req.body?.projectId || item.projectId || "",
+        req.body?.title || item.title || "",
+      );
+      const title = sanitizeMarketplaceText(
+        req.body?.title || item.title || "",
+        120,
+      );
+      const description = sanitizeMarketplaceText(
+        req.body?.description || item.description || "",
+        1200,
+      );
+      const purpose = sanitizeMarketplaceText(
+        req.body?.purpose || item.purpose || "",
+        800,
+      );
+      const category =
+        sanitizeMarketplaceText(
+          req.body?.category || item.category || "General",
+          80,
+        ) || "General";
+      const price =
+        listingKind === "template"
+          ? 0
+          : normalizeMarketplacePrice(
+              req.body?.price !== undefined ? req.body.price : item.price,
+            );
+      const allowTest =
+        req.body?.allowTest !== undefined
+          ? Boolean(req.body.allowTest)
+          : Boolean(item.allowTest);
+      const screenshots = (
+        Array.isArray(req.body?.screenshots)
+          ? req.body.screenshots
+          : item.screenshots || []
+      )
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+        .slice(0, 4);
+      const screenshotAssets = (
+        Array.isArray(req.body?.screenshotAssets)
+          ? req.body.screenshotAssets
+          : item.screenshotAssets || []
+      )
+        .map((asset) => ({
+          url: String(asset?.url || "").trim(),
+          thumbnailUrl: String(asset?.thumbnailUrl || asset?.url || "").trim(),
+          fileId: String(asset?.fileId || "").trim(),
+          name: String(asset?.name || "").trim(),
+        }))
+        .filter((asset) => asset.url)
+        .slice(0, 4);
+      const sourceHtml = String(
+        req.body?.sourceHtml || item.sourceHtml || "",
+      ).trim();
+      const sourceEntryPath = normalizeImportedEntryPath(
+        req.body?.sourceEntryPath || item.sourceEntryPath || "index.html",
+      );
+      const sourceFiles = (
+        Array.isArray(req.body?.sourceFiles)
+          ? req.body.sourceFiles
+          : item.sourceFiles || []
+      )
+        .map((file) => ({
+          path: normalizeRepoFilePath(file?.path || file?.name || ""),
+          name: String(file?.name || "").trim(),
+          content: typeof file?.content === "string" ? file.content : "",
+          contentBase64:
+            typeof file?.contentBase64 === "string" ? file.contentBase64 : "",
+          mimeType: String(file?.mimeType || "").trim(),
+        }))
+        .filter((file) => file.path);
+      const packagedSourceHtml = resolveMarketplaceSourceHtmlFromFiles(
+        sourceFiles,
+        sourceEntryPath,
+      );
+
+      if (!projectId && listingKind !== "template") {
+        return res.status(400).json({
+          success: false,
+          message: "Select a project source first before updating it.",
+        });
+      }
+      if (!title) {
+        return res.status(400).json({
+          success: false,
+          message: "Enter a marketplace title before updating this sale.",
+        });
+      }
+      if (!description) {
+        return res.status(400).json({
+          success: false,
+          message: "Add a professional description before updating this sale.",
+        });
+      }
+      if (listingKind !== "template" && purpose.length < 5) {
+        return res.status(400).json({
+          success: false,
+          message: "Add a clearer project purpose before updating this sale.",
+        });
+      }
+      if (listingKind !== "template" && !category) {
+        return res.status(400).json({
+          success: false,
+          message: "Choose a project category before updating this sale.",
+        });
+      }
+      if (listingKind !== "template" && screenshots.length < 4) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Upload 4 preview images so buyers get a proper marketplace preview.",
+        });
+      }
+      let sourceProject = null;
+      let liveUrl = "";
+      let resolvedSourceHtml = sourceHtml || packagedSourceHtml;
+      if (listingKind === "template") {
+        resolvedSourceHtml = normalizeMarketplaceTemplateHtml(
+          sourceHtml || packagedSourceHtml,
+          title,
         );
-    const allowTest =
-      req.body?.allowTest !== undefined ? Boolean(req.body.allowTest) : Boolean(item.allowTest);
-    const screenshots = (Array.isArray(req.body?.screenshots) ? req.body.screenshots : item.screenshots || [])
-      .map((value) => String(value || "").trim())
-      .filter(Boolean)
-      .slice(0, 4);
-    const screenshotAssets = (Array.isArray(req.body?.screenshotAssets) ? req.body.screenshotAssets : item.screenshotAssets || [])
-      .map((asset) => ({
-        url: String(asset?.url || "").trim(),
-        thumbnailUrl: String(asset?.thumbnailUrl || asset?.url || "").trim(),
-        fileId: String(asset?.fileId || "").trim(),
-        name: String(asset?.name || "").trim(),
-      }))
-      .filter((asset) => asset.url)
-      .slice(0, 4);
-    const sourceHtml = String(req.body?.sourceHtml || item.sourceHtml || "").trim();
-    const sourceEntryPath = normalizeImportedEntryPath(
-      req.body?.sourceEntryPath || item.sourceEntryPath || "index.html",
-    );
-    const sourceFiles = (Array.isArray(req.body?.sourceFiles) ? req.body.sourceFiles : item.sourceFiles || [])
-      .map((file) => ({
-        path: normalizeRepoFilePath(file?.path || file?.name || ""),
-        name: String(file?.name || "").trim(),
-        content: typeof file?.content === "string" ? file.content : "",
-        contentBase64: typeof file?.contentBase64 === "string" ? file.contentBase64 : "",
-        mimeType: String(file?.mimeType || "").trim(),
-      }))
-      .filter((file) => file.path);
-    const packagedSourceHtml = resolveMarketplaceSourceHtmlFromFiles(sourceFiles, sourceEntryPath);
-
-    if (!projectId && listingKind !== "template") {
-      return res.status(400).json({
-        success: false,
-        message: "Select a project source first before updating it.",
-      });
-    }
-    if (!title) {
-      return res.status(400).json({
-        success: false,
-        message: "Enter a marketplace title before updating this sale.",
-      });
-    }
-    if (!description) {
-      return res.status(400).json({
-        success: false,
-        message: "Add a professional description before updating this sale.",
-      });
-    }
-    if (listingKind !== "template" && purpose.length < 5) {
-      return res.status(400).json({
-        success: false,
-        message: "Add a clearer project purpose before updating this sale.",
-      });
-    }
-    if (listingKind !== "template" && !category) {
-      return res.status(400).json({
-        success: false,
-        message: "Choose a project category before updating this sale.",
-      });
-    }
-    if (listingKind !== "template" && screenshots.length < 4) {
-      return res.status(400).json({
-        success: false,
-        message: "Upload 4 preview images so buyers get a proper marketplace preview.",
-      });
-    }
-    let sourceProject = null;
-    let liveUrl = "";
-    let resolvedSourceHtml = sourceHtml || packagedSourceHtml;
-    if (listingKind === "template") {
-      resolvedSourceHtml = normalizeMarketplaceTemplateHtml(sourceHtml || packagedSourceHtml, title);
-    } else if (sourceType === "draft") {
-      const builderDrafts = Array.isArray(user.builderDrafts) ? user.builderDrafts : [];
-      const draft = builderDrafts.find((entry) => String(entry?.name || "").trim() === projectId);
-      if (!draft && !resolvedSourceHtml) {
-        return res.status(400).json({
-          success: false,
-          message: "Choose one of your MediaLab drafts before updating it.",
-        });
-      }
-      resolvedSourceHtml =
-        resolvedSourceHtml ||
-        String(draft?.canvasHtml || "").trim() ||
-        String(draft?.canvasState?.html || "").trim();
-    } else if (sourceType === "upload") {
-      if (!resolvedSourceHtml) {
-        return res.status(400).json({
-          success: false,
-          message: "Upload a project folder that contains an HTML entry file before continuing.",
-        });
-      }
-    } else {
-      sourceProject = findLiveProject(user, projectId);
-      liveUrl = sourceProject ? buildProjectLiveUrl(user, sourceProject) : "";
-      if (!resolvedSourceHtml && sourceProject) {
-        const fetched = await fetchMarketplaceSourceHtml(user, projectId);
-        resolvedSourceHtml = String(fetched?.html || "").trim();
+      } else if (sourceType === "draft") {
+        const builderDrafts = Array.isArray(user.builderDrafts)
+          ? user.builderDrafts
+          : [];
+        const draft = builderDrafts.find(
+          (entry) => String(entry?.name || "").trim() === projectId,
+        );
+        if (!draft && !resolvedSourceHtml) {
+          return res.status(400).json({
+            success: false,
+            message: "Choose one of your MediaLab drafts before updating it.",
+          });
+        }
+        resolvedSourceHtml =
+          resolvedSourceHtml ||
+          String(draft?.canvasHtml || "").trim() ||
+          String(draft?.canvasState?.html || "").trim();
+      } else if (sourceType === "upload") {
+        if (!resolvedSourceHtml) {
+          return res.status(400).json({
+            success: false,
+            message:
+              "Upload a project folder that contains an HTML entry file before continuing.",
+          });
+        }
+      } else {
+        sourceProject = findLiveProject(user, projectId);
+        liveUrl = sourceProject ? buildProjectLiveUrl(user, sourceProject) : "";
+        if (!resolvedSourceHtml && sourceProject) {
+          const fetched = await fetchMarketplaceSourceHtml(user, projectId);
+          resolvedSourceHtml = String(fetched?.html || "").trim();
+        }
+        if (!resolvedSourceHtml) {
+          return res.status(400).json({
+            success: false,
+            message:
+              "Terminate the live project first so MediaLab can package it for the marketplace.",
+          });
+        }
       }
       if (!resolvedSourceHtml) {
         return res.status(400).json({
           success: false,
-          message: "Terminate the live project first so MediaLab can package it for the marketplace.",
+          message:
+            "MediaLab could not package this project source yet. Re-select the source and try again.",
         });
       }
-    }
-    if (!resolvedSourceHtml) {
-      return res.status(400).json({
-        success: false,
-        message: "MediaLab could not package this project source yet. Re-select the source and try again.",
-      });
-    }
 
-    if (String(item.listingKind || "sale") === "template") {
-      await cleanupMarketplaceTemplateArtifacts(item);
-    }
-
-    item.projectId = listingKind === "template" ? item.projectId || `template-${Date.now()}` : projectId;
-    item.title = title;
-    item.description = description;
-    item.price = price;
-    item.category = category;
-    item.screenshots = screenshots;
-    item.screenshotAssets = screenshotAssets;
-    item.allowTest = listingKind === "template" ? false : allowTest;
-    item.purpose = purpose;
-    item.sourceType = sourceType;
-    item.listingKind = listingKind;
-    item.sourceHtml = resolvedSourceHtml;
-    item.sourceEntryPath = sourceEntryPath;
-    item.sourceFiles = sourceFiles;
-    item.status = "pending";
-    item.disapprovalReason = "";
-    item.reviewedAt = null;
-    item.liveUrl = liveUrl;
-    item.authorEmail = String(user.email || "").trim().toLowerCase();
-    item.keepListedAfterPurchase = String(user.email || "").trim().toLowerCase() === "dev@gmail.com";
-    item.updatedAt = new Date();
-    await item.save();
-
-    if (user.githubUsername && user.githubToken) {
-      try {
-        await syncMarketplaceListingToGithub(user, item);
-      } catch (repoError) {
-        console.warn("Marketplace repo sync skipped:", repoError.message);
+      if (String(item.listingKind || "sale") === "template") {
+        await cleanupMarketplaceTemplateArtifacts(item);
       }
-    }
 
-    await createUsageLog({
-      user,
-      email: user.email,
-      name: user.name,
-      isPro: Boolean(user.isPro),
-      action: "marketplace-listing-edit",
-      summary: `updated marketplace listing ${title}`,
-      source: "marketplace",
-      metadata: { projectId, title, price, sourceType, listingKind },
-    });
+      item.projectId =
+        listingKind === "template"
+          ? item.projectId || `template-${Date.now()}`
+          : projectId;
+      item.title = title;
+      item.description = description;
+      item.price = price;
+      item.category = category;
+      item.screenshots = screenshots;
+      item.screenshotAssets = screenshotAssets;
+      item.allowTest = listingKind === "template" ? false : allowTest;
+      item.purpose = purpose;
+      item.sourceType = sourceType;
+      item.listingKind = listingKind;
+      item.sourceHtml = resolvedSourceHtml;
+      item.sourceEntryPath = sourceEntryPath;
+      item.sourceFiles = sourceFiles;
+      item.status = "pending";
+      item.disapprovalReason = "";
+      item.reviewedAt = null;
+      item.liveUrl = liveUrl;
+      item.authorEmail = String(user.email || "")
+        .trim()
+        .toLowerCase();
+      item.keepListedAfterPurchase =
+        String(user.email || "")
+          .trim()
+          .toLowerCase() === "dev@gmail.com";
+      item.updatedAt = new Date();
+      await item.save();
 
-    return res.json({
-      success: true,
-      message: "Marketplace listing updated and sent for review.",
-      item: buildMarketplacePublicItem(item.toObject(), req.user?._id),
-    });
-  } catch (error) {
-    console.error("Marketplace update failed:", error);
-    return res.status(500).json({
-      success: false,
-      message: error?.message || "Could not update this marketplace listing.",
-    });
-  }
-});
+      if (user.githubUsername && user.githubToken) {
+        try {
+          await syncMarketplaceListingToGithub(user, item);
+        } catch (repoError) {
+          console.warn("Marketplace repo sync skipped:", repoError.message);
+        }
+      }
 
-app.post("/api/marketplace/:id/comment", publishRateLimit, express.json(), async (req, res) => {
-  if (!req.isAuthenticated() || !req.user) {
-    return res.status(401).json({ success: false, message: "Sign in first to comment." });
-  }
+      await createUsageLog({
+        user,
+        email: user.email,
+        name: user.name,
+        isPro: Boolean(user.isPro),
+        action: "marketplace-listing-edit",
+        summary: `updated marketplace listing ${title}`,
+        source: "marketplace",
+        metadata: { projectId, title, price, sourceType, listingKind },
+      });
 
-  try {
-    const item = await MarketplaceItem.findById(req.params.id);
-    if (!item || item.status !== "approved") {
-      return res.status(404).json({ success: false, message: "Marketplace listing not found." });
-    }
-    if (String(item.authorId || "") === String(req.user._id || "")) {
-      return res.status(403).json({
+      return res.json({
+        success: true,
+        message: "Marketplace listing updated and sent for review.",
+        item: buildMarketplacePublicItem(item.toObject(), req.user?._id),
+      });
+    } catch (error) {
+      console.error("Marketplace update failed:", error);
+      return res.status(500).json({
         success: false,
-        message: "You cannot comment on your own marketplace project.",
+        message: error?.message || "Could not update this marketplace listing.",
       });
     }
-    const text = sanitizeMarketplaceText(req.body?.text || "", 400);
-    const rating = Math.max(1, Math.min(5, Number(req.body?.rating || 5)));
-    if (!text) {
-      return res.status(400).json({ success: false, message: "Write a comment first." });
+  },
+);
+
+app.post(
+  "/api/marketplace/:id/comment",
+  publishRateLimit,
+  express.json(),
+  async (req, res) => {
+    if (!req.isAuthenticated() || !req.user) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Sign in first to comment." });
     }
-    item.comments.push({
-      userId: req.user._id,
-      name: req.user.name || req.user.email || "MediaLab user",
-      text,
-      rating,
-      date: new Date(),
-    });
-    item.updatedAt = new Date();
-    await item.save();
-    await createUserNotification({
-      userId: item.authorId,
-      type: "marketplace-comment",
-      title: `${req.user.name || "Someone"} commented on your sale`,
-      message: `${req.user.name || "A buyer"} commented on ${item.title}. Click to open the listing.`,
-      targetType: "marketplace-sale",
-      targetId: String(item._id),
-      metadata: { itemId: String(item._id), title: item.title },
-    });
-    return res.json({
-      success: true,
-      message: "Comment posted.",
-      item: buildMarketplacePublicItem(item.toObject(), req.user?._id),
-    });
-  } catch (error) {
-    console.error("Marketplace comment failed:", error);
-    return res.status(500).json({
-      success: false,
-      message: error?.message || "Could not save your marketplace comment.",
-    });
-  }
-});
+
+    try {
+      const item = await MarketplaceItem.findById(req.params.id);
+      if (!item || item.status !== "approved") {
+        return res
+          .status(404)
+          .json({ success: false, message: "Marketplace listing not found." });
+      }
+      if (String(item.authorId || "") === String(req.user._id || "")) {
+        return res.status(403).json({
+          success: false,
+          message: "You cannot comment on your own marketplace project.",
+        });
+      }
+      const text = sanitizeMarketplaceText(req.body?.text || "", 400);
+      const rating = Math.max(1, Math.min(5, Number(req.body?.rating || 5)));
+      if (!text) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Write a comment first." });
+      }
+      item.comments.push({
+        userId: req.user._id,
+        name: req.user.name || req.user.email || "MediaLab user",
+        text,
+        rating,
+        date: new Date(),
+      });
+      item.updatedAt = new Date();
+      await item.save();
+      await createUserNotification({
+        userId: item.authorId,
+        type: "marketplace-comment",
+        title: `${req.user.name || "Someone"} commented on your sale`,
+        message: `${req.user.name || "A buyer"} commented on ${item.title}. Click to open the listing.`,
+        targetType: "marketplace-sale",
+        targetId: String(item._id),
+        metadata: { itemId: String(item._id), title: item.title },
+      });
+      return res.json({
+        success: true,
+        message: "Comment posted.",
+        item: buildMarketplacePublicItem(item.toObject(), req.user?._id),
+      });
+    } catch (error) {
+      console.error("Marketplace comment failed:", error);
+      return res.status(500).json({
+        success: false,
+        message: error?.message || "Could not save your marketplace comment.",
+      });
+    }
+  },
+);
 
 app.post(
   "/api/marketplace/:id/comments/:commentId/reply",
@@ -6679,27 +7849,37 @@ app.post(
   express.json(),
   async (req, res) => {
     if (!req.isAuthenticated() || !req.user) {
-      return res.status(401).json({ success: false, message: "Sign in first to reply." });
+      return res
+        .status(401)
+        .json({ success: false, message: "Sign in first to reply." });
     }
     try {
       const item = await MarketplaceItem.findById(req.params.id);
       if (!item || item.status !== "approved") {
-        return res.status(404).json({ success: false, message: "Marketplace listing not found." });
+        return res
+          .status(404)
+          .json({ success: false, message: "Marketplace listing not found." });
       }
       const text = sanitizeMarketplaceText(req.body?.text || "", 300);
       if (!text) {
-        return res.status(400).json({ success: false, message: "Write a reply first." });
+        return res
+          .status(400)
+          .json({ success: false, message: "Write a reply first." });
       }
       const comment = (Array.isArray(item.comments) ? item.comments : []).find(
-        (entry) => String(entry?._id || "") === String(req.params.commentId || ""),
+        (entry) =>
+          String(entry?._id || "") === String(req.params.commentId || ""),
       );
       if (!comment) {
-        return res.status(404).json({ success: false, message: "Comment not found." });
+        return res
+          .status(404)
+          .json({ success: false, message: "Comment not found." });
       }
       if (String(item.authorId || "") === String(req.user._id || "")) {
         return res.status(403).json({
           success: false,
-          message: "You cannot reply inside your own marketplace project thread.",
+          message:
+            "You cannot reply inside your own marketplace project thread.",
         });
       }
       comment.replies = Array.isArray(comment.replies) ? comment.replies : [];
@@ -6718,7 +7898,11 @@ app.post(
         message: `${req.user.name || "A buyer"} replied in the discussion for ${item.title}.`,
         targetType: "marketplace-sale",
         targetId: String(item._id),
-        metadata: { itemId: String(item._id), title: item.title, commentId: String(comment._id || "") },
+        metadata: {
+          itemId: String(item._id),
+          title: item.title,
+          commentId: String(comment._id || ""),
+        },
       });
       return res.json({
         success: true,
@@ -6735,484 +7919,611 @@ app.post(
   },
 );
 
-app.post("/api/marketplace/:id/rate", publishRateLimit, express.json(), async (req, res) => {
-  if (!req.isAuthenticated() || !req.user) {
-    return res.status(401).json({ success: false, message: "Sign in first to rate." });
-  }
+app.post(
+  "/api/marketplace/:id/rate",
+  publishRateLimit,
+  express.json(),
+  async (req, res) => {
+    if (!req.isAuthenticated() || !req.user) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Sign in first to rate." });
+    }
 
-  try {
-    const item = await MarketplaceItem.findById(req.params.id);
-    if (!item || item.status !== "approved") {
-      return res.status(404).json({ success: false, message: "Marketplace listing not found." });
-    }
-    if (String(item.authorId || "") === String(req.user._id || "")) {
-      return res.status(403).json({
-        success: false,
-        message: "You cannot rate your own marketplace project.",
-      });
-    }
-    const value = Math.max(0, Math.min(5, Number(req.body?.value || 0)));
-    const ratings = Array.isArray(item.ratings) ? item.ratings : [];
-    const existingRatingIndex = ratings.findIndex(
-      (rating) => String(rating?.userId || "") === String(req.user._id),
-    );
-    if (value <= 0) {
+    try {
+      const item = await MarketplaceItem.findById(req.params.id);
+      if (!item || item.status !== "approved") {
+        return res
+          .status(404)
+          .json({ success: false, message: "Marketplace listing not found." });
+      }
+      if (String(item.authorId || "") === String(req.user._id || "")) {
+        return res.status(403).json({
+          success: false,
+          message: "You cannot rate your own marketplace project.",
+        });
+      }
+      const value = Math.max(0, Math.min(5, Number(req.body?.value || 0)));
+      const ratings = Array.isArray(item.ratings) ? item.ratings : [];
+      const existingRatingIndex = ratings.findIndex(
+        (rating) => String(rating?.userId || "") === String(req.user._id),
+      );
+      if (value <= 0) {
+        if (existingRatingIndex >= 0) {
+          ratings.splice(existingRatingIndex, 1);
+        }
+        item.ratings = ratings;
+        item.updatedAt = new Date();
+        await item.save();
+        return res.json({
+          success: true,
+          message: "Marketplace rating removed.",
+          item: buildMarketplacePublicItem(item, String(req.user._id || "")),
+        });
+      }
       if (existingRatingIndex >= 0) {
-        ratings.splice(existingRatingIndex, 1);
+        ratings[existingRatingIndex].value = value;
+        ratings[existingRatingIndex].date = new Date();
+      } else {
+        ratings.push({
+          userId: req.user._id,
+          value,
+          date: new Date(),
+        });
       }
       item.ratings = ratings;
       item.updatedAt = new Date();
       await item.save();
+      await createUserNotification({
+        userId: item.authorId,
+        type: "marketplace-rating",
+        title: `${req.user.name || "Someone"} rated your project`,
+        message: `${req.user.name || "A buyer"} rated ${item.title}. Click to open the listing.`,
+        targetType: "marketplace-sale",
+        targetId: String(item._id),
+        metadata: { itemId: String(item._id), title: item.title, value },
+      });
       return res.json({
         success: true,
-        message: "Marketplace rating removed.",
-        item: buildMarketplacePublicItem(item, String(req.user._id || "")),
+        message: "Rating saved.",
+        item: buildMarketplacePublicItem(item.toObject(), req.user?._id),
+      });
+    } catch (error) {
+      console.error("Marketplace rating failed:", error);
+      return res.status(500).json({
+        success: false,
+        message: error?.message || "Could not save that marketplace rating.",
       });
     }
-    if (existingRatingIndex >= 0) {
-      ratings[existingRatingIndex].value = value;
-      ratings[existingRatingIndex].date = new Date();
-    } else {
-      ratings.push({
+  },
+);
+
+app.post(
+  "/api/marketplace/:id/rate-seller",
+  publishRateLimit,
+  express.json(),
+  async (req, res) => {
+    if (!req.isAuthenticated() || !req.user) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Sign in first to rate." });
+    }
+
+    try {
+      const item = await MarketplaceItem.findById(req.params.id);
+      if (!item || item.status !== "approved") {
+        return res
+          .status(404)
+          .json({ success: false, message: "Marketplace listing not found." });
+      }
+      if (String(item.authorId || "") === String(req.user._id || "")) {
+        return res.status(403).json({
+          success: false,
+          message: "You cannot rate your own seller profile.",
+        });
+      }
+      const author = await User.findById(item.authorId);
+      if (!author) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Seller account not found." });
+      }
+      author.sellerRatings = Array.isArray(author.sellerRatings)
+        ? author.sellerRatings
+        : [];
+      const alreadyRated = author.sellerRatings.some(
+        (entry) => String(entry?.userId || "") === String(req.user._id),
+      );
+      if (alreadyRated) {
+        return res.status(400).json({
+          success: false,
+          message: "You have already rated this seller.",
+        });
+      }
+      const value = Math.max(1, Math.min(5, Number(req.body?.value || 5)));
+      author.sellerRatings.push({
         userId: req.user._id,
         value,
         date: new Date(),
+        marketplaceItemId: item._id,
       });
-    }
-    item.ratings = ratings;
-    item.updatedAt = new Date();
-    await item.save();
-    await createUserNotification({
-      userId: item.authorId,
-      type: "marketplace-rating",
-      title: `${req.user.name || "Someone"} rated your project`,
-      message: `${req.user.name || "A buyer"} rated ${item.title}. Click to open the listing.`,
-      targetType: "marketplace-sale",
-      targetId: String(item._id),
-      metadata: { itemId: String(item._id), title: item.title, value },
-    });
-    return res.json({
-      success: true,
-      message: "Rating saved.",
-      item: buildMarketplacePublicItem(item.toObject(), req.user?._id),
-    });
-  } catch (error) {
-    console.error("Marketplace rating failed:", error);
-    return res.status(500).json({
-      success: false,
-      message: error?.message || "Could not save that marketplace rating.",
-    });
-  }
-});
-
-app.post("/api/marketplace/:id/rate-seller", publishRateLimit, express.json(), async (req, res) => {
-  if (!req.isAuthenticated() || !req.user) {
-    return res.status(401).json({ success: false, message: "Sign in first to rate." });
-  }
-
-  try {
-    const item = await MarketplaceItem.findById(req.params.id);
-    if (!item || item.status !== "approved") {
-      return res.status(404).json({ success: false, message: "Marketplace listing not found." });
-    }
-    if (String(item.authorId || "") === String(req.user._id || "")) {
-      return res.status(403).json({
+      await author.save();
+      await syncAuthorSellerRatingToListings(author._id);
+      const refreshedItem = await MarketplaceItem.findById(item._id).lean();
+      await createUserNotification({
+        userId: author._id,
+        type: "marketplace-seller-rating",
+        title: `${req.user.name || "Someone"} rated you as a seller`,
+        message: `${req.user.name || "A buyer"} rated your seller profile from ${item.title}.`,
+        targetType: "marketplace-sale",
+        targetId: String(item._id),
+        metadata: { itemId: String(item._id), title: item.title, value },
+      });
+      return res.json({
+        success: true,
+        message: "Seller rating saved.",
+        item: buildMarketplacePublicItem(
+          refreshedItem || item.toObject(),
+          req.user?._id,
+        ),
+      });
+    } catch (error) {
+      console.error("Seller rating failed:", error);
+      return res.status(500).json({
         success: false,
-        message: "You cannot rate your own seller profile.",
+        message: error?.message || "Could not save that seller rating.",
       });
     }
-    const author = await User.findById(item.authorId);
-    if (!author) {
-      return res.status(404).json({ success: false, message: "Seller account not found." });
-    }
-    author.sellerRatings = Array.isArray(author.sellerRatings) ? author.sellerRatings : [];
-    const alreadyRated = author.sellerRatings.some(
-      (entry) => String(entry?.userId || "") === String(req.user._id),
-    );
-    if (alreadyRated) {
-      return res.status(400).json({
-        success: false,
-        message: "You have already rated this seller.",
-      });
-    }
-    const value = Math.max(1, Math.min(5, Number(req.body?.value || 5)));
-    author.sellerRatings.push({
-      userId: req.user._id,
-      value,
-      date: new Date(),
-      marketplaceItemId: item._id,
-    });
-    await author.save();
-    await syncAuthorSellerRatingToListings(author._id);
-    const refreshedItem = await MarketplaceItem.findById(item._id).lean();
-    await createUserNotification({
-      userId: author._id,
-      type: "marketplace-seller-rating",
-      title: `${req.user.name || "Someone"} rated you as a seller`,
-      message: `${req.user.name || "A buyer"} rated your seller profile from ${item.title}.`,
-      targetType: "marketplace-sale",
-      targetId: String(item._id),
-      metadata: { itemId: String(item._id), title: item.title, value },
-    });
-    return res.json({
-      success: true,
-      message: "Seller rating saved.",
-      item: buildMarketplacePublicItem(refreshedItem || item.toObject(), req.user?._id),
-    });
-  } catch (error) {
-    console.error("Seller rating failed:", error);
-    return res.status(500).json({
-      success: false,
-      message: error?.message || "Could not save that seller rating.",
-    });
-  }
-});
+  },
+);
 
-app.post("/api/marketplace/:id/purchase", publishRateLimit, express.json(), async (req, res) => {
-  if (!req.isAuthenticated() || !req.user) {
-    return res.status(401).json({ success: false, message: "Sign in first to purchase." });
-  }
-
-  try {
-    const item = await MarketplaceItem.findById(req.params.id);
-    if (!item || item.status !== "approved") {
-      return res.status(404).json({ success: false, message: "Marketplace listing not found." });
+app.post(
+  "/api/marketplace/:id/purchase",
+  publishRateLimit,
+  express.json(),
+  async (req, res) => {
+    if (!req.isAuthenticated() || !req.user) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Sign in first to purchase." });
     }
-    if (shouldKeepMarketplaceListingAvailable(item)) {
-      item.keepListedAfterPurchase = true;
-      if (!String(item.authorEmail || "").trim()) {
-        item.authorEmail = ADMIN_EMAIL;
+
+    try {
+      const item = await MarketplaceItem.findById(req.params.id);
+      if (!item || item.status !== "approved") {
+        return res
+          .status(404)
+          .json({ success: false, message: "Marketplace listing not found." });
       }
-    }
-    if (String(item.authorId) === String(req.user._id)) {
-      return res.status(400).json({
-        success: false,
-        message: "You already own this project as the seller.",
-      });
-    }
-    const existingPurchase = (Array.isArray(item.purchases) ? item.purchases : []).find(
-      (purchase) =>
-        String(purchase?.buyerId || "") === String(req.user._id) &&
-        ["pending", "approved"].includes(String(purchase?.status || "").toLowerCase()),
-    );
-    if (existingPurchase) {
-      const isTemplate = String(item.listingKind || "sale").toLowerCase() === "template";
-      return res.status(400).json({
-        success: false,
-        message:
-          existingPurchase.status === "approved"
-            ? isTemplate
-              ? "Already added to workspace."
-              : "This project is already in your purchased items."
-            : "Your purchase request is already pending approval.",
-      });
-    }
-    const purchase = {
-      buyerId: req.user._id,
-      buyerName: req.user.name || "",
-      buyerEmail: req.user.email || "",
-      status: "pending",
-      message: "Your purchase will be processed within 24 hours.",
-      createdAt: new Date(),
-    };
-    item.purchases.push(purchase);
-    item.updatedAt = new Date();
-    item.status = "approved";
-
-    let transfer = null;
-    let grantedTemplate = null;
-    let responseMessage = "Your purchase will be processed within 24 hours.";
-    if (Number(item.price || 0) <= 0 || String(item.listingKind || "sale") === "template") {
-      const buyer = await User.findById(req.user._id);
-      if (!buyer) {
-        return res.status(404).json({ success: false, message: "Buyer account not found." });
-      }
-      const targetPurchase = item.purchases[item.purchases.length - 1];
-      targetPurchase.status = "approved";
-      targetPurchase.reviewedAt = new Date();
-      targetPurchase.approvedUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-      if (String(item.listingKind || "sale") === "template") {
-        targetPurchase.message = "Purchase approved. You now own the template.";
-        grantedTemplate = await grantMarketplaceTemplateToBuyer(item, buyer);
-      } else {
-        targetPurchase.message = "Purchase approved. You now own the project.";
-        transfer = await transferMarketplaceProjectToBuyer(item, buyer);
-      }
-      item.status = "approved";
-      responseMessage =
-        String(item.listingKind || "sale") === "template"
-          ? "Purchase approved. Template added to your Web Builder templates."
-          : "Purchase approved. You now own the project.";
-    }
-
-    await item.save();
-    await createUserNotification({
-      userId: item.authorId,
-      type: "marketplace-purchase",
-      title:
-        Number(item.price || 0) <= 0
-          ? `${req.user.name || "A buyer"} claimed your project`
-          : `${req.user.name || "A buyer"} purchased your project`,
-      message:
-        Number(item.price || 0) <= 0
-          ? `${item.title} was claimed and approved automatically.`
-          : `${item.title} now has a pending purchase request. Click to review it.`,
-      targetType: "marketplace-sale",
-      targetId: String(item._id),
-      metadata: { itemId: String(item._id), title: item.title },
-    });
-
-    await createUsageLog({
-      user: req.user,
-      email: req.user.email,
-      name: req.user.name,
-      isPro: Boolean(req.user.isPro),
-      action: Number(item.price || 0) <= 0 ? "marketplace-purchase-approved" : "marketplace-purchase-pending",
-      summary:
-        Number(item.price || 0) <= 0
-          ? `claimed free marketplace project ${item.title}`
-          : `requested purchase for marketplace project ${item.title}`,
-      source: "marketplace",
-      metadata: { marketplaceItemId: String(item._id), title: item.title, price: item.price },
-    });
-
-    return res.json({
-      success: true,
-      message: responseMessage,
-      item: buildMarketplacePublicItem(item.toObject(), req.user?._id),
-      transfer,
-      template: grantedTemplate,
-    });
-  } catch (error) {
-    console.error("Marketplace purchase failed:", error);
-    return res.status(500).json({
-      success: false,
-      message: error?.message || "Could not start this purchase right now.",
-    });
-  }
-});
-
-app.patch("/api/marketplace/:id/remove", publishRateLimit, express.json(), async (req, res) => {
-  if (!req.isAuthenticated() || !req.user) {
-    return res.status(401).json({ success: false, message: "Sign in first to manage your sales." });
-  }
-  try {
-    const item = await MarketplaceItem.findById(req.params.id);
-    if (!item || String(item.authorId) !== String(req.user._id)) {
-      return res.status(404).json({ success: false, message: "Marketplace sale not found." });
-    }
-    const reason = sanitizeMarketplaceText(req.body?.reason || "", 240);
-    await cleanupMarketplaceStorageArtifacts(item);
-    await BuilderTemplate.deleteMany({ sourceMarketplaceItemId: item._id });
-    const marketplaceRepo = String(item.marketplaceRepo || "").trim();
-    const marketplaceRepoPath = String(item.marketplaceRepoPath || "").trim();
-    if (req.user.githubUsername && req.user.githubToken && marketplaceRepo && marketplaceRepoPath) {
-      try {
-        const octokit = buildGithubClient(req.user);
-        await deleteGithubPathRecursive(
-          octokit,
-          req.user.githubUsername,
-          marketplaceRepo,
-          marketplaceRepoPath,
-        );
-      } catch (repoError) {
-        const status = repoError?.status || repoError?.response?.status;
-        if (status !== 404) {
-          console.warn("Marketplace repo cleanup skipped:", repoError.message);
+      if (shouldKeepMarketplaceListingAvailable(item)) {
+        item.keepListedAfterPurchase = true;
+        if (!String(item.authorEmail || "").trim()) {
+          item.authorEmail = ADMIN_EMAIL;
         }
       }
-    }
-    await MarketplaceItem.deleteOne({ _id: item._id });
-    await createUsageLog({
-      user: req.user,
-      email: req.user.email,
-      name: req.user.name,
-      isPro: Boolean(req.user.isPro),
-      action: "marketplace-listing-deleted",
-      summary: `deleted marketplace sale ${item.title}`,
-      source: "marketplace",
-      metadata: { marketplaceItemId: String(item._id), reason: reason || "Seller removed the sale." },
-    });
-    return res.json({
-      success: true,
-      message: "Sale deleted from the marketplace.",
-      itemId: String(item._id),
-    });
-  } catch (error) {
-    console.error("Marketplace remove failed:", error);
-    return res.status(500).json({
-      success: false,
-      message: error?.message || "Could not remove this sale right now.",
-    });
-  }
-});
-
-app.get("/api/admin/marketplace", adminRateLimit, requireAdminApi, async (_req, res) => {
-  try {
-    const [pendingListings, approvedListings, itemsWithPendingPurchases, itemsWithReviewedPurchases] = await Promise.all([
-      MarketplaceItem.find({ status: "pending" }).sort({ createdAt: -1 }).lean(),
-      MarketplaceItem.find({ status: "approved" }).sort({ updatedAt: -1, createdAt: -1 }).lean(),
-      MarketplaceItem.find({ "purchases.status": "pending" }).sort({ updatedAt: -1 }).lean(),
-      MarketplaceItem.find({ "purchases.status": { $in: ["approved", "declined", "failed"] } }).sort({ updatedAt: -1 }).lean(),
-    ]);
-    const reviewedPurchases = itemsWithReviewedPurchases
-      .flatMap((item) =>
-        (Array.isArray(item.purchases) ? item.purchases : [])
-          .filter((purchase) =>
-            ["approved", "declined", "failed"].includes(
-              String(purchase.status || "").toLowerCase(),
-            ),
-          )
-          .map((purchase) => ({
-            itemId: String(item._id),
-            purchaseId: String(purchase._id),
-            title: item.title,
-            price: Number(item.price || 0),
-            status:
-              String(purchase.status || "").toLowerCase() === "failed"
-                ? "declined"
-                : String(purchase.status || "").toLowerCase(),
-            message: purchase.message || "",
-            declineReason: purchase.declineReason || "",
-            buyerId: purchase.buyerId || "",
-            buyerName: purchase.buyerName || "",
-            buyerEmail: purchase.buyerEmail || "",
-            createdAt: purchase.createdAt || null,
-            reviewedAt: purchase.reviewedAt || null,
-          })),
-      )
-      .sort(
-        (a, b) =>
-          new Date(b.reviewedAt || b.createdAt || 0) -
-          new Date(a.reviewedAt || a.createdAt || 0),
+      if (String(item.authorId) === String(req.user._id)) {
+        return res.status(400).json({
+          success: false,
+          message: "You already own this project as the seller.",
+        });
+      }
+      const existingPurchase = (
+        Array.isArray(item.purchases) ? item.purchases : []
+      ).find(
+        (purchase) =>
+          String(purchase?.buyerId || "") === String(req.user._id) &&
+          ["pending", "approved"].includes(
+            String(purchase?.status || "").toLowerCase(),
+          ),
       );
-    return res.json({
-      success: true,
-      pendingListings: pendingListings.map((item) => buildMarketplacePublicItem(item)),
-      approvedListings: approvedListings.map((item) => buildMarketplacePublicItem(item)),
-      pendingPurchases: itemsWithPendingPurchases
+      if (existingPurchase) {
+        const isTemplate =
+          String(item.listingKind || "sale").toLowerCase() === "template";
+        return res.status(400).json({
+          success: false,
+          message:
+            existingPurchase.status === "approved"
+              ? isTemplate
+                ? "Already added to workspace."
+                : "This project is already in your purchased items."
+              : "Your purchase request is already pending approval.",
+        });
+      }
+      const purchase = {
+        buyerId: req.user._id,
+        buyerName: req.user.name || "",
+        buyerEmail: req.user.email || "",
+        status: "pending",
+        message: "Your purchase will be processed within 24 hours.",
+        createdAt: new Date(),
+      };
+      item.purchases.push(purchase);
+      item.updatedAt = new Date();
+      item.status = "approved";
+
+      let transfer = null;
+      let grantedTemplate = null;
+      let responseMessage = "Your purchase will be processed within 24 hours.";
+      if (
+        Number(item.price || 0) <= 0 ||
+        String(item.listingKind || "sale") === "template"
+      ) {
+        const buyer = await User.findById(req.user._id);
+        if (!buyer) {
+          return res
+            .status(404)
+            .json({ success: false, message: "Buyer account not found." });
+        }
+        const targetPurchase = item.purchases[item.purchases.length - 1];
+        targetPurchase.status = "approved";
+        targetPurchase.reviewedAt = new Date();
+        targetPurchase.approvedUntil = new Date(
+          Date.now() + 7 * 24 * 60 * 60 * 1000,
+        );
+        if (String(item.listingKind || "sale") === "template") {
+          targetPurchase.message =
+            "Purchase approved. You now own the template.";
+          grantedTemplate = await grantMarketplaceTemplateToBuyer(item, buyer);
+        } else {
+          targetPurchase.message =
+            "Purchase approved. You now own the project.";
+          transfer = await transferMarketplaceProjectToBuyer(item, buyer);
+        }
+        item.status = "approved";
+        responseMessage =
+          String(item.listingKind || "sale") === "template"
+            ? "Purchase approved. Template added to your Web Builder templates."
+            : "Purchase approved. You now own the project.";
+      }
+
+      await item.save();
+      await createUserNotification({
+        userId: item.authorId,
+        type: "marketplace-purchase",
+        title:
+          Number(item.price || 0) <= 0
+            ? `${req.user.name || "A buyer"} claimed your project`
+            : `${req.user.name || "A buyer"} purchased your project`,
+        message:
+          Number(item.price || 0) <= 0
+            ? `${item.title} was claimed and approved automatically.`
+            : `${item.title} now has a pending purchase request. Click to review it.`,
+        targetType: "marketplace-sale",
+        targetId: String(item._id),
+        metadata: { itemId: String(item._id), title: item.title },
+      });
+
+      await createUsageLog({
+        user: req.user,
+        email: req.user.email,
+        name: req.user.name,
+        isPro: Boolean(req.user.isPro),
+        action:
+          Number(item.price || 0) <= 0
+            ? "marketplace-purchase-approved"
+            : "marketplace-purchase-pending",
+        summary:
+          Number(item.price || 0) <= 0
+            ? `claimed free marketplace project ${item.title}`
+            : `requested purchase for marketplace project ${item.title}`,
+        source: "marketplace",
+        metadata: {
+          marketplaceItemId: String(item._id),
+          title: item.title,
+          price: item.price,
+        },
+      });
+
+      return res.json({
+        success: true,
+        message: responseMessage,
+        item: buildMarketplacePublicItem(item.toObject(), req.user?._id),
+        transfer,
+        template: grantedTemplate,
+      });
+    } catch (error) {
+      console.error("Marketplace purchase failed:", error);
+      return res.status(500).json({
+        success: false,
+        message: error?.message || "Could not start this purchase right now.",
+      });
+    }
+  },
+);
+
+app.patch(
+  "/api/marketplace/:id/remove",
+  publishRateLimit,
+  express.json(),
+  async (req, res) => {
+    if (!req.isAuthenticated() || !req.user) {
+      return res
+        .status(401)
+        .json({
+          success: false,
+          message: "Sign in first to manage your sales.",
+        });
+    }
+    try {
+      const item = await MarketplaceItem.findById(req.params.id);
+      if (!item || String(item.authorId) !== String(req.user._id)) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Marketplace sale not found." });
+      }
+      const reason = sanitizeMarketplaceText(req.body?.reason || "", 240);
+      await cleanupMarketplaceStorageArtifacts(item);
+      await BuilderTemplate.deleteMany({ sourceMarketplaceItemId: item._id });
+      const marketplaceRepo = String(item.marketplaceRepo || "").trim();
+      const marketplaceRepoPath = String(item.marketplaceRepoPath || "").trim();
+      if (
+        req.user.githubUsername &&
+        req.user.githubToken &&
+        marketplaceRepo &&
+        marketplaceRepoPath
+      ) {
+        try {
+          const octokit = buildGithubClient(req.user);
+          await deleteGithubPathRecursive(
+            octokit,
+            req.user.githubUsername,
+            marketplaceRepo,
+            marketplaceRepoPath,
+          );
+        } catch (repoError) {
+          const status = repoError?.status || repoError?.response?.status;
+          if (status !== 404) {
+            console.warn(
+              "Marketplace repo cleanup skipped:",
+              repoError.message,
+            );
+          }
+        }
+      }
+      await MarketplaceItem.deleteOne({ _id: item._id });
+      await createUsageLog({
+        user: req.user,
+        email: req.user.email,
+        name: req.user.name,
+        isPro: Boolean(req.user.isPro),
+        action: "marketplace-listing-deleted",
+        summary: `deleted marketplace sale ${item.title}`,
+        source: "marketplace",
+        metadata: {
+          marketplaceItemId: String(item._id),
+          reason: reason || "Seller removed the sale.",
+        },
+      });
+      return res.json({
+        success: true,
+        message: "Sale deleted from the marketplace.",
+        itemId: String(item._id),
+      });
+    } catch (error) {
+      console.error("Marketplace remove failed:", error);
+      return res.status(500).json({
+        success: false,
+        message: error?.message || "Could not remove this sale right now.",
+      });
+    }
+  },
+);
+
+app.get(
+  "/api/admin/marketplace",
+  adminRateLimit,
+  requireAdminApi,
+  async (_req, res) => {
+    try {
+      const [
+        pendingListings,
+        approvedListings,
+        itemsWithPendingPurchases,
+        itemsWithReviewedPurchases,
+      ] = await Promise.all([
+        MarketplaceItem.find({ status: "pending" })
+          .sort({ createdAt: -1 })
+          .lean(),
+        MarketplaceItem.find({ status: "approved" })
+          .sort({ updatedAt: -1, createdAt: -1 })
+          .lean(),
+        MarketplaceItem.find({ "purchases.status": "pending" })
+          .sort({ updatedAt: -1 })
+          .lean(),
+        MarketplaceItem.find({
+          "purchases.status": { $in: ["approved", "declined", "failed"] },
+        })
+          .sort({ updatedAt: -1 })
+          .lean(),
+      ]);
+      const reviewedPurchases = itemsWithReviewedPurchases
         .flatMap((item) =>
           (Array.isArray(item.purchases) ? item.purchases : [])
-            .filter((purchase) => purchase.status === "pending")
+            .filter((purchase) =>
+              ["approved", "declined", "failed"].includes(
+                String(purchase.status || "").toLowerCase(),
+              ),
+            )
             .map((purchase) => ({
               itemId: String(item._id),
               purchaseId: String(purchase._id),
               title: item.title,
               price: Number(item.price || 0),
+              status:
+                String(purchase.status || "").toLowerCase() === "failed"
+                  ? "declined"
+                  : String(purchase.status || "").toLowerCase(),
+              message: purchase.message || "",
+              declineReason: purchase.declineReason || "",
               buyerId: purchase.buyerId || "",
               buyerName: purchase.buyerName || "",
               buyerEmail: purchase.buyerEmail || "",
               createdAt: purchase.createdAt || null,
+              reviewedAt: purchase.reviewedAt || null,
             })),
         )
-        .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)),
-      approvedPurchases: reviewedPurchases.filter(
-        (purchase) => String(purchase.status || "").toLowerCase() === "approved",
-      ),
-      declinedPurchases: reviewedPurchases.filter(
-        (purchase) => String(purchase.status || "").toLowerCase() === "declined",
-      ),
-    });
-  } catch (error) {
-    console.error("Admin marketplace fetch failed:", error);
-    return res.status(500).json({
-      success: false,
-      message: error?.message || "Could not load marketplace admin data.",
-    });
-  }
-});
-
-app.get("/api/admin/marketplace/:id", adminRateLimit, requireAdminApi, async (req, res) => {
-  try {
-    const item = await MarketplaceItem.findById(req.params.id).lean();
-    if (!item) {
-      return res.status(404).json({ success: false, message: "Marketplace listing not found." });
-    }
-    return res.json({
-      success: true,
-      item: {
-        ...buildMarketplacePublicItem(item),
-        sourceHtml: String(item.sourceHtml || ""),
-        sourceEntryPath: item.sourceEntryPath || "index.html",
-        sourceFiles: Array.isArray(item.sourceFiles) ? item.sourceFiles : [],
-      },
-    });
-  } catch (error) {
-    console.error("Admin marketplace detail failed:", error);
-    return res.status(500).json({
-      success: false,
-      message: error?.message || "Could not load this marketplace listing.",
-    });
-  }
-});
-
-app.patch("/api/admin/marketplace/:id", adminRateLimit, requireAdminApi, express.json(), async (req, res) => {
-  try {
-    const nextStatus = String(req.body?.status || "").trim().toLowerCase();
-    if (!["approved", "disapproved", "sold"].includes(nextStatus)) {
-      return res.status(400).json({
+        .sort(
+          (a, b) =>
+            new Date(b.reviewedAt || b.createdAt || 0) -
+            new Date(a.reviewedAt || a.createdAt || 0),
+        );
+      return res.json({
+        success: true,
+        pendingListings: pendingListings.map((item) =>
+          buildMarketplacePublicItem(item),
+        ),
+        approvedListings: approvedListings.map((item) =>
+          buildMarketplacePublicItem(item),
+        ),
+        pendingPurchases: itemsWithPendingPurchases
+          .flatMap((item) =>
+            (Array.isArray(item.purchases) ? item.purchases : [])
+              .filter((purchase) => purchase.status === "pending")
+              .map((purchase) => ({
+                itemId: String(item._id),
+                purchaseId: String(purchase._id),
+                title: item.title,
+                price: Number(item.price || 0),
+                buyerId: purchase.buyerId || "",
+                buyerName: purchase.buyerName || "",
+                buyerEmail: purchase.buyerEmail || "",
+                createdAt: purchase.createdAt || null,
+              })),
+          )
+          .sort(
+            (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0),
+          ),
+        approvedPurchases: reviewedPurchases.filter(
+          (purchase) =>
+            String(purchase.status || "").toLowerCase() === "approved",
+        ),
+        declinedPurchases: reviewedPurchases.filter(
+          (purchase) =>
+            String(purchase.status || "").toLowerCase() === "declined",
+        ),
+      });
+    } catch (error) {
+      console.error("Admin marketplace fetch failed:", error);
+      return res.status(500).json({
         success: false,
-        message: "Marketplace status must be approved, disapproved, or sold.",
+        message: error?.message || "Could not load marketplace admin data.",
       });
     }
-    const item = await MarketplaceItem.findById(req.params.id);
-    if (!item) {
-      return res.status(404).json({ success: false, message: "Marketplace listing not found." });
+  },
+);
+
+app.get(
+  "/api/admin/marketplace/:id",
+  adminRateLimit,
+  requireAdminApi,
+  async (req, res) => {
+    try {
+      const item = await MarketplaceItem.findById(req.params.id).lean();
+      if (!item) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Marketplace listing not found." });
+      }
+      return res.json({
+        success: true,
+        item: {
+          ...buildMarketplacePublicItem(item),
+          sourceHtml: String(item.sourceHtml || ""),
+          sourceEntryPath: item.sourceEntryPath || "index.html",
+          sourceFiles: Array.isArray(item.sourceFiles) ? item.sourceFiles : [],
+        },
+      });
+    } catch (error) {
+      console.error("Admin marketplace detail failed:", error);
+      return res.status(500).json({
+        success: false,
+        message: error?.message || "Could not load this marketplace listing.",
+      });
     }
-    const previousStatus = String(item.status || "").trim().toLowerCase();
-    item.status = nextStatus;
-    item.disapprovalReason =
-      nextStatus === "disapproved"
-        ? sanitizeMarketplaceText(req.body?.disapprovalReason || "", 500)
-        : "";
-    item.updatedAt = new Date();
-    item.reviewedAt = new Date();
-    await item.save();
-    await createUserNotification({
-      userId: item.authorId,
-      type: `marketplace-${nextStatus}`,
-      title:
-        nextStatus === "approved"
-          ? "Your marketplace project was approved"
-          : nextStatus === "disapproved" && previousStatus === "approved"
-            ? "Your marketplace project was suspended"
-            : nextStatus === "disapproved"
-            ? "Your marketplace project was disapproved"
-            : "Your marketplace project was updated",
-      message:
-        nextStatus === "disapproved" && previousStatus === "approved"
-          ? item.disapprovalReason || "Your approved sale was suspended. Click to review it in My Sales."
-          : nextStatus === "disapproved"
-          ? item.disapprovalReason || "Please review the feedback and submit again."
-          : String(item.listingKind || "sale") === "template"
-            ? `${item.title} was approved and is now live in Marketplace Templates.`
-            : `${item.title} is now ${nextStatus}. Click to review it in My Sales.`,
-      targetType: "marketplace-sale",
-      targetId: String(item._id),
-      metadata: {
-        itemId: String(item._id),
-        status: nextStatus,
-        title: item.title,
-        listingKind: item.listingKind || "sale",
-        templateSlug: "",
-      },
-    });
-    return res.json({
-      success: true,
-      message:
+  },
+);
+
+app.patch(
+  "/api/admin/marketplace/:id",
+  adminRateLimit,
+  requireAdminApi,
+  express.json(),
+  async (req, res) => {
+    try {
+      const nextStatus = String(req.body?.status || "")
+        .trim()
+        .toLowerCase();
+      if (!["approved", "disapproved", "sold"].includes(nextStatus)) {
+        return res.status(400).json({
+          success: false,
+          message: "Marketplace status must be approved, disapproved, or sold.",
+        });
+      }
+      const item = await MarketplaceItem.findById(req.params.id);
+      if (!item) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Marketplace listing not found." });
+      }
+      const previousStatus = String(item.status || "")
+        .trim()
+        .toLowerCase();
+      item.status = nextStatus;
+      item.disapprovalReason =
         nextStatus === "disapproved"
-          ? "Marketplace listing disapproved."
-          : `Marketplace listing marked ${nextStatus}.`,
-      item: buildMarketplacePublicItem(item.toObject()),
-    });
-  } catch (error) {
-    console.error("Admin marketplace listing update failed:", error);
-    return res.status(500).json({
-      success: false,
-      message: error?.message || "Could not update this marketplace listing.",
-    });
-  }
-});
+          ? sanitizeMarketplaceText(req.body?.disapprovalReason || "", 500)
+          : "";
+      item.updatedAt = new Date();
+      item.reviewedAt = new Date();
+      await item.save();
+      await createUserNotification({
+        userId: item.authorId,
+        type: `marketplace-${nextStatus}`,
+        title:
+          nextStatus === "approved"
+            ? "Your marketplace project was approved"
+            : nextStatus === "disapproved" && previousStatus === "approved"
+              ? "Your marketplace project was suspended"
+              : nextStatus === "disapproved"
+                ? "Your marketplace project was disapproved"
+                : "Your marketplace project was updated",
+        message:
+          nextStatus === "disapproved" && previousStatus === "approved"
+            ? item.disapprovalReason ||
+              "Your approved sale was suspended. Click to review it in My Sales."
+            : nextStatus === "disapproved"
+              ? item.disapprovalReason ||
+                "Please review the feedback and submit again."
+              : String(item.listingKind || "sale") === "template"
+                ? `${item.title} was approved and is now live in Marketplace Templates.`
+                : `${item.title} is now ${nextStatus}. Click to review it in My Sales.`,
+        targetType: "marketplace-sale",
+        targetId: String(item._id),
+        metadata: {
+          itemId: String(item._id),
+          status: nextStatus,
+          title: item.title,
+          listingKind: item.listingKind || "sale",
+          templateSlug: "",
+        },
+      });
+      return res.json({
+        success: true,
+        message:
+          nextStatus === "disapproved"
+            ? "Marketplace listing disapproved."
+            : `Marketplace listing marked ${nextStatus}.`,
+        item: buildMarketplacePublicItem(item.toObject()),
+      });
+    } catch (error) {
+      console.error("Admin marketplace listing update failed:", error);
+      return res.status(500).json({
+        success: false,
+        message: error?.message || "Could not update this marketplace listing.",
+      });
+    }
+  },
+);
 
 app.patch(
   "/api/admin/marketplace/:id/purchases/:purchaseId",
@@ -7221,8 +8532,11 @@ app.patch(
   express.json(),
   async (req, res) => {
     try {
-      const requestedStatus = String(req.body?.status || "").trim().toLowerCase();
-      const nextStatus = requestedStatus === "failed" ? "declined" : requestedStatus;
+      const requestedStatus = String(req.body?.status || "")
+        .trim()
+        .toLowerCase();
+      const nextStatus =
+        requestedStatus === "failed" ? "declined" : requestedStatus;
       const declineReason = sanitizeMarketplaceText(
         req.body?.declineReason || req.body?.failedReason || "",
         500,
@@ -7235,13 +8549,17 @@ app.patch(
       }
       const item = await MarketplaceItem.findById(req.params.id);
       if (!item) {
-        return res.status(404).json({ success: false, message: "Marketplace item not found." });
+        return res
+          .status(404)
+          .json({ success: false, message: "Marketplace item not found." });
       }
-      const purchase = (Array.isArray(item.purchases) ? item.purchases : []).find(
-        (entry) => String(entry._id) === String(req.params.purchaseId),
-      );
+      const purchase = (
+        Array.isArray(item.purchases) ? item.purchases : []
+      ).find((entry) => String(entry._id) === String(req.params.purchaseId));
       if (!purchase) {
-        return res.status(404).json({ success: false, message: "Purchase request not found." });
+        return res
+          .status(404)
+          .json({ success: false, message: "Purchase request not found." });
       }
       if (shouldKeepMarketplaceListingAvailable(item)) {
         item.keepListedAfterPurchase = true;
@@ -7258,7 +8576,9 @@ app.patch(
       if (nextStatus === "approved") {
         const buyer = await User.findById(purchase.buyerId);
         if (!buyer) {
-          return res.status(404).json({ success: false, message: "Buyer account not found." });
+          return res
+            .status(404)
+            .json({ success: false, message: "Buyer account not found." });
         }
         purchase.message =
           String(item.listingKind || "sale") === "template"
@@ -7282,7 +8602,11 @@ app.patch(
               : `Your purchase for ${item.title} was approved. You now own the project.`,
           targetType: "marketplace-purchased",
           targetId: String(item._id),
-          metadata: { itemId: String(item._id), title: item.title, purchaseId: String(purchase._id) },
+          metadata: {
+            itemId: String(item._id),
+            title: item.title,
+            purchaseId: String(purchase._id),
+          },
         });
         await createUserNotification({
           userId: item.authorId,
@@ -7291,7 +8615,11 @@ app.patch(
           message: `${item.title} was approved for ${purchase.buyerName || "the buyer"}.`,
           targetType: "marketplace-sale",
           targetId: String(item._id),
-          metadata: { itemId: String(item._id), title: item.title, purchaseId: String(purchase._id) },
+          metadata: {
+            itemId: String(item._id),
+            title: item.title,
+            purchaseId: String(purchase._id),
+          },
         });
       } else {
         purchase.declineReason = declineReason;
@@ -7352,228 +8680,261 @@ app.patch(
   },
 );
 
-app.post("/api/github/verify-render-hosting", express.json(), async (req, res) => {
-  if (!req.isAuthenticated() || !req.user) {
-    return res
-      .status(401)
-      .json({ success: false, message: "You need to sign in first." });
-  }
-
-  try {
-    const filename = String(req.body?.filename || "").trim();
-    const normalizedRenderUrl = normalizeRenderUrl(req.body?.renderUrl || "");
-    if (!filename || !normalizedRenderUrl) {
-      return res.status(400).json({
-        success: false,
-        message: "Project file and Render URL are required.",
-      });
+app.post(
+  "/api/github/verify-render-hosting",
+  express.json(),
+  async (req, res) => {
+    if (!req.isAuthenticated() || !req.user) {
+      return res
+        .status(401)
+        .json({ success: false, message: "You need to sign in first." });
     }
 
-    const user = await User.findById(req.user._id);
-    if (!user) {
-      return res.status(404).json({ success: false, message: "User not found." });
-    }
-
-    user.liveProjects = Array.isArray(user.liveProjects) ? user.liveProjects : [];
-    const projectIndex = user.liveProjects.findIndex(
-      (item) => String(item?.fileName || item?.filename || "").trim() === filename,
-    );
-    if (projectIndex < 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Live project not found for Render verification.",
-      });
-    }
-
-    let response;
     try {
-      response = await fetch(normalizedRenderUrl, {
-        method: "GET",
-        redirect: "follow",
-        headers: { "User-Agent": "MediaLab-Render-Verify" },
+      const filename = String(req.body?.filename || "").trim();
+      const normalizedRenderUrl = normalizeRenderUrl(req.body?.renderUrl || "");
+      if (!filename || !normalizedRenderUrl) {
+        return res.status(400).json({
+          success: false,
+          message: "Project file and Render URL are required.",
+        });
+      }
+
+      const user = await User.findById(req.user._id);
+      if (!user) {
+        return res
+          .status(404)
+          .json({ success: false, message: "User not found." });
+      }
+
+      user.liveProjects = Array.isArray(user.liveProjects)
+        ? user.liveProjects
+        : [];
+      const projectIndex = user.liveProjects.findIndex(
+        (item) =>
+          String(item?.fileName || item?.filename || "").trim() === filename,
+      );
+      if (projectIndex < 0) {
+        return res.status(404).json({
+          success: false,
+          message: "Live project not found for Render verification.",
+        });
+      }
+
+      let response;
+      try {
+        response = await fetch(normalizedRenderUrl, {
+          method: "GET",
+          redirect: "follow",
+          headers: { "User-Agent": "MediaLab-Render-Verify" },
+        });
+      } catch (error) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Render URL could not be reached yet. Finish hosting and try verify again.",
+        });
+      }
+
+      if (response.status >= 400) {
+        return res.status(400).json({
+          success: false,
+          message: `Render site responded with ${response.status}. Publish it on Render first, then verify again.`,
+        });
+      }
+
+      const project = user.liveProjects[projectIndex];
+      project.renderUrl = normalizedRenderUrl;
+      project.renderHostedConfirmed = true;
+      project.renderVerifiedAt = new Date();
+      project.updatedAt = new Date();
+
+      if (!user.confirmedFirstHosting) {
+        user.confirmedFirstHosting = true;
+        user.firstHostingConfirmedAt = new Date();
+      }
+
+      await user.save();
+      req.user.liveProjects = user.liveProjects;
+
+      await createUsageLog({
+        user,
+        email: user.email,
+        name: user.name,
+        isPro: Boolean(user.isPro),
+        action: "render-hosting-verified",
+        summary: `verified Render hosting for ${filename}`,
+        source: "render",
+        metadata: { filename, renderUrl: normalizedRenderUrl },
+      });
+
+      return res.json({
+        success: true,
+        message: "Render hosting verified successfully.",
+        project: user.liveProjects[projectIndex],
+        user: toSafeUser(user),
       });
     } catch (error) {
-      return res.status(400).json({
+      console.error("Render hosting verification failed:", error);
+      return res.status(500).json({
         success: false,
-        message: "Render URL could not be reached yet. Finish hosting and try verify again.",
+        message: error?.message || "Could not verify Render hosting right now.",
+      });
+    }
+  },
+);
+
+app.post(
+  "/api/projects/update-deploy-info",
+  express.json(),
+  async (req, res) => {
+    if (!req.isAuthenticated() || !req.user) {
+      return res.status(401).json({
+        success: false,
+        message: "You need to sign in before saving deployment details.",
       });
     }
 
-    if (response.status >= 400) {
-      return res.status(400).json({
-        success: false,
-        message: `Render site responded with ${response.status}. Publish it on Render first, then verify again.`,
-      });
-    }
-
-    const project = user.liveProjects[projectIndex];
-    project.renderUrl = normalizedRenderUrl;
-    project.renderHostedConfirmed = true;
-    project.renderVerifiedAt = new Date();
-    project.updatedAt = new Date();
-
-    if (!user.confirmedFirstHosting) {
-      user.confirmedFirstHosting = true;
-      user.firstHostingConfirmedAt = new Date();
-    }
-
-    await user.save();
-    req.user.liveProjects = user.liveProjects;
-
-    await createUsageLog({
-      user,
-      email: user.email,
-      name: user.name,
-      isPro: Boolean(user.isPro),
-      action: "render-hosting-verified",
-      summary: `verified Render hosting for ${filename}`,
-      source: "render",
-      metadata: { filename, renderUrl: normalizedRenderUrl },
-    });
-
-    return res.json({
-      success: true,
-      message: "Render hosting verified successfully.",
-      project: user.liveProjects[projectIndex],
-      user: toSafeUser(user),
-    });
-  } catch (error) {
-    console.error("Render hosting verification failed:", error);
-    return res.status(500).json({
-      success: false,
-      message: error?.message || "Could not verify Render hosting right now.",
-    });
-  }
-});
-
-app.post("/api/projects/update-deploy-info", express.json(), async (req, res) => {
-  if (!req.isAuthenticated() || !req.user) {
-    return res.status(401).json({
-      success: false,
-      message: "You need to sign in before saving deployment details.",
-    });
-  }
-
-  try {
-    const projectId = String(req.body?.projectId || req.body?.filename || "").trim();
-    const rawServiceId = String(req.body?.serviceId || "").trim();
-    const rawLiveUrl = String(req.body?.liveUrl || req.body?.renderUrl || "").trim();
-
-    if (!projectId) {
-      return res.status(400).json({ success: false, message: "Missing project identifier." });
-    }
-    if (!rawLiveUrl) {
-      return res.status(400).json({ success: false, message: "Paste the Render live URL first." });
-    }
-    if (rawServiceId && !/^srv-[a-z0-9]+$/i.test(rawServiceId)) {
-      return res.status(400).json({
-        success: false,
-        message: "Render Service ID must start with srv-.",
-      });
-    }
-
-    let normalizedLiveUrl = normalizeRenderUrl(rawLiveUrl);
-    let parsedLiveUrl;
     try {
-      parsedLiveUrl = new URL(normalizedLiveUrl);
-    } catch {
-      return res.status(400).json({
-        success: false,
-        message: "Use a valid Render URL ending in .onrender.com.",
+      const projectId = String(
+        req.body?.projectId || req.body?.filename || "",
+      ).trim();
+      const rawServiceId = String(req.body?.serviceId || "").trim();
+      const rawLiveUrl = String(
+        req.body?.liveUrl || req.body?.renderUrl || "",
+      ).trim();
+
+      if (!projectId) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Missing project identifier." });
+      }
+      if (!rawLiveUrl) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+            message: "Paste the Render live URL first.",
+          });
+      }
+      if (rawServiceId && !/^srv-[a-z0-9]+$/i.test(rawServiceId)) {
+        return res.status(400).json({
+          success: false,
+          message: "Render Service ID must start with srv-.",
+        });
+      }
+
+      let normalizedLiveUrl = normalizeRenderUrl(rawLiveUrl);
+      let parsedLiveUrl;
+      try {
+        parsedLiveUrl = new URL(normalizedLiveUrl);
+      } catch {
+        return res.status(400).json({
+          success: false,
+          message: "Use a valid Render URL ending in .onrender.com.",
+        });
+      }
+
+      if (!/\.onrender\.com$/i.test(parsedLiveUrl.hostname)) {
+        return res.status(400).json({
+          success: false,
+          message: "Use the final Render URL ending in .onrender.com.",
+        });
+      }
+
+      const renderBaseUrl = `${parsedLiveUrl.protocol}//${parsedLiveUrl.host}`;
+
+      let response;
+      try {
+        response = await fetch(normalizedLiveUrl, {
+          method: "GET",
+          redirect: "follow",
+          headers: { "User-Agent": "MediaLab-Render-Deploy-Verify" },
+        });
+      } catch (error) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Render URL could not be reached yet. Finish deployment on Render and try again.",
+        });
+      }
+
+      if (response.status >= 400) {
+        return res.status(400).json({
+          success: false,
+          message: `Render site responded with ${response.status}. Wait for deploy to finish, then verify again.`,
+        });
+      }
+
+      const user = await User.findById(req.user._id);
+      if (!user) {
+        return res
+          .status(404)
+          .json({ success: false, message: "User not found." });
+      }
+
+      user.liveProjects = Array.isArray(user.liveProjects)
+        ? user.liveProjects
+        : [];
+      const projectIndex = user.liveProjects.findIndex(
+        (item) =>
+          String(item?.fileName || item?.filename || "").trim() === projectId,
+      );
+      if (projectIndex < 0) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Live project not found." });
+      }
+
+      const project = user.liveProjects[projectIndex];
+      project.renderUrl = renderBaseUrl;
+      if (rawServiceId) {
+        project.renderServiceId = rawServiceId;
+      }
+      project.renderDeployStatus = "manual-verified";
+      project.renderHostedConfirmed = true;
+      project.renderVerifiedAt = new Date();
+      project.updatedAt = new Date();
+
+      if (!user.confirmedFirstHosting) {
+        user.confirmedFirstHosting = true;
+        user.firstHostingConfirmedAt = new Date();
+      }
+
+      await user.save();
+      req.user.liveProjects = user.liveProjects;
+
+      await createUsageLog({
+        user,
+        email: user.email,
+        name: user.name,
+        isPro: Boolean(user.isPro),
+        action: "render-hosting-saved",
+        summary: `saved Render deployment info for ${projectId}`,
+        source: "render",
+        metadata: {
+          projectId,
+          serviceId: rawServiceId,
+          renderUrl: renderBaseUrl,
+        },
       });
-    }
 
-    if (!/\.onrender\.com$/i.test(parsedLiveUrl.hostname)) {
-      return res.status(400).json({
-        success: false,
-        message: "Use the final Render URL ending in .onrender.com.",
-      });
-    }
-
-    const renderBaseUrl = `${parsedLiveUrl.protocol}//${parsedLiveUrl.host}`;
-
-    let response;
-    try {
-      response = await fetch(normalizedLiveUrl, {
-        method: "GET",
-        redirect: "follow",
-        headers: { "User-Agent": "MediaLab-Render-Deploy-Verify" },
+      return res.json({
+        success: true,
+        message: "Render deployment details saved successfully.",
+        project,
+        user: toSafeUser(user),
       });
     } catch (error) {
-      return res.status(400).json({
+      console.error("Saving Render deployment info failed:", error);
+      return res.status(500).json({
         success: false,
         message:
-          "Render URL could not be reached yet. Finish deployment on Render and try again.",
+          error?.message || "Could not save Render deployment info right now.",
       });
     }
-
-    if (response.status >= 400) {
-      return res.status(400).json({
-        success: false,
-        message: `Render site responded with ${response.status}. Wait for deploy to finish, then verify again.`,
-      });
-    }
-
-    const user = await User.findById(req.user._id);
-    if (!user) {
-      return res.status(404).json({ success: false, message: "User not found." });
-    }
-
-    user.liveProjects = Array.isArray(user.liveProjects) ? user.liveProjects : [];
-    const projectIndex = user.liveProjects.findIndex(
-      (item) => String(item?.fileName || item?.filename || "").trim() === projectId,
-    );
-    if (projectIndex < 0) {
-      return res.status(404).json({ success: false, message: "Live project not found." });
-    }
-
-    const project = user.liveProjects[projectIndex];
-    project.renderUrl = renderBaseUrl;
-    if (rawServiceId) {
-      project.renderServiceId = rawServiceId;
-    }
-    project.renderDeployStatus = "manual-verified";
-    project.renderHostedConfirmed = true;
-    project.renderVerifiedAt = new Date();
-    project.updatedAt = new Date();
-
-    if (!user.confirmedFirstHosting) {
-      user.confirmedFirstHosting = true;
-      user.firstHostingConfirmedAt = new Date();
-    }
-
-    await user.save();
-    req.user.liveProjects = user.liveProjects;
-
-    await createUsageLog({
-      user,
-      email: user.email,
-      name: user.name,
-      isPro: Boolean(user.isPro),
-      action: "render-hosting-saved",
-      summary: `saved Render deployment info for ${projectId}`,
-      source: "render",
-      metadata: {
-        projectId,
-        serviceId: rawServiceId,
-        renderUrl: renderBaseUrl,
-      },
-    });
-
-    return res.json({
-      success: true,
-      message: "Render deployment details saved successfully.",
-      project,
-      user: toSafeUser(user),
-    });
-  } catch (error) {
-    console.error("Saving Render deployment info failed:", error);
-    return res.status(500).json({
-      success: false,
-      message: error?.message || "Could not save Render deployment info right now.",
-    });
-  }
-});
+  },
+);
 
 app.post("/api/projects/sync-render-id", express.json(), async (req, res) => {
   if (!req.isAuthenticated() || !req.user) {
@@ -7594,14 +8955,21 @@ app.post("/api/projects/sync-render-id", express.json(), async (req, res) => {
     }
     const user = await User.findById(req.user._id);
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found." });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found." });
     }
-    user.liveProjects = Array.isArray(user.liveProjects) ? user.liveProjects : [];
+    user.liveProjects = Array.isArray(user.liveProjects)
+      ? user.liveProjects
+      : [];
     const projectIndex = user.liveProjects.findIndex(
-      (item) => String(item?.fileName || item?.filename || "").trim() === projectId,
+      (item) =>
+        String(item?.fileName || item?.filename || "").trim() === projectId,
     );
     if (projectIndex < 0) {
-      return res.status(404).json({ success: false, message: "Project not found." });
+      return res
+        .status(404)
+        .json({ success: false, message: "Project not found." });
     }
     const project = user.liveProjects[projectIndex];
     project.renderServiceId = serviceId;
@@ -7624,85 +8992,101 @@ app.post("/api/projects/sync-render-id", express.json(), async (req, res) => {
   }
 });
 
-app.post("/api/render/deploy", publishRateLimit, express.json(), async (req, res) => {
-  if (!req.isAuthenticated() || !req.user) {
-    return res.status(401).json({ success: false, message: "You need to sign in first." });
-  }
-
-  try {
-    const filename = String(req.body?.filename || "").trim();
-    const clientName = String(req.body?.clientName || req.user?.name || "client").trim();
-    const repoUrl = String(req.body?.repoUrl || "").trim();
-    const branch = String(req.body?.branch || "main").trim() || "main";
-    if (!filename || !repoUrl) {
-      return res.status(400).json({
-        success: false,
-        message: "Project filename and repository URL are required.",
-      });
+app.post(
+  "/api/render/deploy",
+  publishRateLimit,
+  express.json(),
+  async (req, res) => {
+    if (!req.isAuthenticated() || !req.user) {
+      return res
+        .status(401)
+        .json({ success: false, message: "You need to sign in first." });
     }
 
-    const user = await User.findById(req.user._id);
-    if (!user) {
-      return res.status(404).json({ success: false, message: "User not found." });
-    }
+    try {
+      const filename = String(req.body?.filename || "").trim();
+      const clientName = String(
+        req.body?.clientName || req.user?.name || "client",
+      ).trim();
+      const repoUrl = String(req.body?.repoUrl || "").trim();
+      const branch = String(req.body?.branch || "main").trim() || "main";
+      if (!filename || !repoUrl) {
+        return res.status(400).json({
+          success: false,
+          message: "Project filename and repository URL are required.",
+        });
+      }
 
-    user.liveProjects = Array.isArray(user.liveProjects) ? user.liveProjects : [];
-    const projectIndex = findLiveProjectIndex(user, filename);
-    if (projectIndex < 0) {
-      return res.status(404).json({ success: false, message: "Live project not found." });
-    }
+      const user = await User.findById(req.user._id);
+      if (!user) {
+        return res
+          .status(404)
+          .json({ success: false, message: "User not found." });
+      }
 
-    const deployment = await createRenderBlueprintInstance({
-      clientName,
-      repoUrl,
-      branch,
-    });
+      user.liveProjects = Array.isArray(user.liveProjects)
+        ? user.liveProjects
+        : [];
+      const projectIndex = findLiveProjectIndex(user, filename);
+      if (projectIndex < 0) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Live project not found." });
+      }
 
-    const project = user.liveProjects[projectIndex];
-    project.renderRepoUrl = repoUrl;
-    project.renderServiceName = deployment.serviceName;
-    project.renderBlueprintId = String(
-      deployment.data?.id || deployment.data?.blueprintId || "",
-    ).trim();
-    project.renderDeployStatus = "deploying";
-    project.updatedAt = new Date();
-
-    await user.save();
-    req.user.liveProjects = user.liveProjects;
-
-    await createUsageLog({
-      user,
-      email: user.email,
-      name: user.name,
-      isPro: Boolean(user.isPro),
-      action: "render-blueprint-created",
-      summary: `started Render deployment for ${filename}`,
-      source: "render",
-      metadata: {
-        filename,
+      const deployment = await createRenderBlueprintInstance({
+        clientName,
         repoUrl,
+        branch,
+      });
+
+      const project = user.liveProjects[projectIndex];
+      project.renderRepoUrl = repoUrl;
+      project.renderServiceName = deployment.serviceName;
+      project.renderBlueprintId = String(
+        deployment.data?.id || deployment.data?.blueprintId || "",
+      ).trim();
+      project.renderDeployStatus = "deploying";
+      project.updatedAt = new Date();
+
+      await user.save();
+      req.user.liveProjects = user.liveProjects;
+
+      await createUsageLog({
+        user,
+        email: user.email,
+        name: user.name,
+        isPro: Boolean(user.isPro),
+        action: "render-blueprint-created",
+        summary: `started Render deployment for ${filename}`,
+        source: "render",
+        metadata: {
+          filename,
+          repoUrl,
+          serviceName: deployment.serviceName,
+          blueprintId: project.renderBlueprintId,
+        },
+      });
+
+      return res.json({
+        success: true,
+        message: "Render deployment started.",
         serviceName: deployment.serviceName,
         blueprintId: project.renderBlueprintId,
-      },
-    });
-
-    return res.json({
-      success: true,
-      message: "Render deployment started.",
-      serviceName: deployment.serviceName,
-      blueprintId: project.renderBlueprintId,
-      renderYaml: deployment.renderYaml,
-      project,
-      user: toSafeUser(user),
-    });
-  } catch (error) {
-    console.error("Render auto deploy failed:", error);
-    return res.status(500).json({
-      success: false,
-      message: error?.message || "Could not start Render deployment right now.",
-    });
-  }
-});
+        renderYaml: deployment.renderYaml,
+        project,
+        user: toSafeUser(user),
+      });
+    } catch (error) {
+      console.error("Render auto deploy failed:", error);
+      return res.status(500).json({
+        success: false,
+        message:
+          error?.message || "Could not start Render deployment right now.",
+      });
+    }
+  },
+);
 
 app.post("/api/deploy-status", express.json(), async (req, res) => {
   try {
@@ -7721,9 +9105,12 @@ app.post("/api/deploy-status", express.json(), async (req, res) => {
       });
     }
 
-    user.liveProjects = Array.isArray(user.liveProjects) ? user.liveProjects : [];
+    user.liveProjects = Array.isArray(user.liveProjects)
+      ? user.liveProjects
+      : [];
     const project = user.liveProjects.find(
-      (item) => String(item?.renderServiceName || "").trim() === event.serviceName,
+      (item) =>
+        String(item?.renderServiceName || "").trim() === event.serviceName,
     );
     if (!project) {
       return res.status(404).json({
@@ -7785,9 +9172,12 @@ app.post("/api/adsense/link-site", express.json(), async (req, res) => {
   }
 
   try {
-    const submittedDomain = String(req.body?.domainName || "").trim().toLowerCase();
+    const submittedDomain = String(req.body?.domainName || "")
+      .trim()
+      .toLowerCase();
     const liveProjectUrl = normalizeRenderUrl(req.body?.liveProjectUrl || "");
-    const domainName = submittedDomain || extractDomainNameFromUrl(liveProjectUrl);
+    const domainName =
+      submittedDomain || extractDomainNameFromUrl(liveProjectUrl);
     if (!domainName) {
       return res.status(400).json({
         success: false,
@@ -7795,22 +9185,28 @@ app.post("/api/adsense/link-site", express.json(), async (req, res) => {
       });
     }
 
-    const user = await User.findById(req.user._id).select("+googleRefreshToken +adsenseAdCode");
+    const user = await User.findById(req.user._id).select(
+      "+googleRefreshToken +adsenseAdCode",
+    );
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found." });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found." });
     }
     if (!user.googleRefreshToken) {
       return res.status(400).json({
         success: false,
         requiresGoogleReconnect: true,
-        message: "Reconnect Google first so MediaLab can read your AdSense data.",
+        message:
+          "Reconnect Google first so MediaLab can read your AdSense data.",
       });
     }
     const allowedDomains = collectHostedProjectDomains(user);
     if (!allowedDomains.includes(domainName)) {
       return res.status(403).json({
         success: false,
-        message: "That domain is not recognized as one of your MediaLab hosted project domains.",
+        message:
+          "That domain is not recognized as one of your MediaLab hosted project domains.",
       });
     }
     const auth = getAdsenseOAuthClient(user);
@@ -7828,8 +9224,13 @@ app.post("/api/adsense/link-site", express.json(), async (req, res) => {
       const sites = sitesResponse.data?.sites || [];
       matchedSite = sites.find((site) => {
         const siteUrl =
-          site.siteUrl || site.url || site.domain || site.reportingDimensionId || "";
-        const siteDomain = extractDomainNameFromUrl(siteUrl) || String(siteUrl).trim();
+          site.siteUrl ||
+          site.url ||
+          site.domain ||
+          site.reportingDimensionId ||
+          "";
+        const siteDomain =
+          extractDomainNameFromUrl(siteUrl) || String(siteUrl).trim();
         return siteDomain === domainName;
       });
       if (matchedSite) {
@@ -7855,8 +9256,12 @@ app.post("/api/adsense/link-site", express.json(), async (req, res) => {
     const adClients = adClientsResponse.data?.adClients || [];
     const matchedAdClient =
       adClients.find((client) =>
-        String(client.productCode || "").toUpperCase().includes("AFC"),
-      ) || adClients[0] || null;
+        String(client.productCode || "")
+          .toUpperCase()
+          .includes("AFC"),
+      ) ||
+      adClients[0] ||
+      null;
 
     let adCode = "";
     if (matchedAdClient?.name) {
@@ -7872,7 +9277,10 @@ app.post("/api/adsense/link-site", express.json(), async (req, res) => {
     }
     user.adsenseAccountName = matchedAccount.name || "";
     user.adsenseSiteUrl =
-      matchedSite.siteUrl || matchedSite.url || matchedSite.domain || domainName;
+      matchedSite.siteUrl ||
+      matchedSite.url ||
+      matchedSite.domain ||
+      domainName;
     user.adsenseSiteStatus =
       matchedSite.state || matchedSite.status || matchedSite.platformType || "";
     user.adsenseLastCheckedAt = new Date();
@@ -7890,7 +9298,9 @@ app.post("/api/adsense/link-site", express.json(), async (req, res) => {
     await createUserNotification({
       userId: user._id,
       type: reviewPending ? "adsense-review" : "adsense-linked",
-      title: reviewPending ? "AdSense verification started" : "AdSense connected",
+      title: reviewPending
+        ? "AdSense verification started"
+        : "AdSense connected",
       message: reviewPending
         ? "Google is reviewing your AdSense site. MediaLab will keep checking the status for you."
         : "Your AdSense account is linked and ready for monetization checks.",
@@ -7945,19 +9355,29 @@ app.post("/api/adsense/link-site", express.json(), async (req, res) => {
 
 app.post("/api/github/monetize-project", express.json(), async (req, res) => {
   if (!req.isAuthenticated() || !req.user) {
-    return res.status(401).json({ success: false, message: "You need to sign in first." });
+    return res
+      .status(401)
+      .json({ success: false, message: "You need to sign in first." });
   }
   try {
     const filename = String(req.body?.filename || "").trim();
     if (!filename) {
-      return res.status(400).json({ success: false, message: "Missing project filename." });
+      return res
+        .status(400)
+        .json({ success: false, message: "Missing project filename." });
     }
-    const user = await User.findById(req.user._id).select("+githubToken +adsenseAdCode");
+    const user = await User.findById(req.user._id).select(
+      "+githubToken +adsenseAdCode",
+    );
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found." });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found." });
     }
     if (!user.githubUsername || !user.githubToken) {
-      return res.status(400).json({ success: false, message: "Connect GitHub first." });
+      return res
+        .status(400)
+        .json({ success: false, message: "Connect GitHub first." });
     }
     if (!user.adsenseId && !user.adsenseAdCode) {
       return res.status(400).json({
@@ -7973,12 +9393,17 @@ app.post("/api/github/monetize-project", express.json(), async (req, res) => {
       });
     }
 
-    user.liveProjects = Array.isArray(user.liveProjects) ? user.liveProjects : [];
+    user.liveProjects = Array.isArray(user.liveProjects)
+      ? user.liveProjects
+      : [];
     const projectIndex = user.liveProjects.findIndex(
-      (item) => String(item?.fileName || item?.filename || "").trim() === filename,
+      (item) =>
+        String(item?.fileName || item?.filename || "").trim() === filename,
     );
     if (projectIndex < 0) {
-      return res.status(404).json({ success: false, message: "Live project not found." });
+      return res
+        .status(404)
+        .json({ success: false, message: "Live project not found." });
     }
     const project = user.liveProjects[projectIndex];
     const octokit = buildGithubClient(user);
@@ -7990,10 +9415,14 @@ app.post("/api/github/monetize-project", express.json(), async (req, res) => {
     if (Array.isArray(contentResponse.data) || !contentResponse.data?.content) {
       return res.status(400).json({
         success: false,
-        message: "That project entry file could not be monetized automatically.",
+        message:
+          "That project entry file could not be monetized automatically.",
       });
     }
-    const sourceHtml = Buffer.from(contentResponse.data.content, "base64").toString("utf8");
+    const sourceHtml = Buffer.from(
+      contentResponse.data.content,
+      "base64",
+    ).toString("utf8");
     const monetizedHtml = buildPublishedHtmlFromSource({
       documentHtml: sourceHtml,
       projectName: project.name || "MediaLab Project",
@@ -8028,141 +9457,191 @@ app.post("/api/github/monetize-project", express.json(), async (req, res) => {
     console.error("Project monetization failed:", error);
     return res.status(500).json({
       success: false,
-      message: error?.message || "Could not enable monetization for this project.",
+      message:
+        error?.message || "Could not enable monetization for this project.",
     });
   }
 });
 
-app.post("/api/projects/:id/toggle-monetization", express.json(), async (req, res) => {
-  if (!req.isAuthenticated() || !req.user) {
-    return res.status(401).json({ success: false, message: "You need to sign in first." });
-  }
-
-  try {
-    const projectId = decodeURIComponent(String(req.params?.id || "").trim());
-    if (!projectId) {
-      return res.status(400).json({ success: false, message: "Missing project id." });
+app.post(
+  "/api/projects/:id/toggle-monetization",
+  express.json(),
+  async (req, res) => {
+    if (!req.isAuthenticated() || !req.user) {
+      return res
+        .status(401)
+        .json({ success: false, message: "You need to sign in first." });
     }
 
-    const user = await User.findById(req.user._id).select("+githubToken +adsenseAdCode");
-    if (!user) {
-      return res.status(404).json({ success: false, message: "User not found." });
-    }
-    if (!user.githubUsername || !user.githubToken) {
-      return res.status(400).json({ success: false, message: "Connect GitHub first." });
-    }
-
-    user.liveProjects = Array.isArray(user.liveProjects) ? user.liveProjects : [];
-    const projectIndex = user.liveProjects.findIndex(
-      (item) => String(item?.fileName || item?.filename || "").trim() === projectId,
-    );
-    if (projectIndex < 0) {
-      return res.status(404).json({ success: false, message: "Live project not found." });
-    }
-
-    const project = user.liveProjects[projectIndex];
-    if (!project.monetizationEnabled && !project.isMonetized) {
-      return res.status(400).json({
-        success: false,
-        message: "Activate monetization for this project first before using the ad toggle.",
-      });
-    }
-
-    const entryPath = String(project.fileName || project.filename || "").trim();
-    if (!entryPath) {
-      return res.status(400).json({ success: false, message: "Project entry file is missing." });
-    }
-
-    const octokit = buildGithubClient(user);
-    const contentResponse = await octokit.rest.repos.getContent({
-      owner: user.githubUsername,
-      repo: project.repo || getUserGithubRepoName(user),
-      path: entryPath,
-    });
-    if (Array.isArray(contentResponse.data) || !contentResponse.data?.content) {
-      return res.status(400).json({
-        success: false,
-        message: "That project entry file could not be updated for monetization.",
-      });
-    }
-
-    const sourceHtml = Buffer.from(contentResponse.data.content, "base64").toString("utf8");
-    const nextIsMonetized = !Boolean(project.isMonetized);
-    const cleanedHtml = stripAdsenseFromHtml(sourceHtml);
-    const nextHtml = nextIsMonetized
-      ? buildPublishedHtmlFromSource({
-          documentHtml: cleanedHtml,
-          projectName: project.name || "MediaLab Project",
-          adsenseId: user.adsenseId || "",
-          adsenseAdCode: user.adsenseAdCode || "",
-        })
-      : cleanedHtml;
-
-    await octokit.rest.repos.createOrUpdateFileContents({
-      owner: user.githubUsername,
-      repo: project.repo || getUserGithubRepoName(user),
-      path: entryPath,
-      sha: contentResponse.data.sha,
-      message: `${nextIsMonetized ? "Enable" : "Disable"} monetization for ${entryPath} from MediaLab`,
-      content: Buffer.from(nextHtml, "utf8").toString("base64"),
-    });
-
-    const disabledPageKey = String(project.entryPath || project.fileName || project.filename || "").trim();
-    project.isMonetized = nextIsMonetized;
-    project.adDisabledPages = Array.isArray(project.adDisabledPages) ? project.adDisabledPages : [];
-    if (nextIsMonetized) {
-      project.adDisabledPages = project.adDisabledPages.filter((item) => String(item || "").trim() !== disabledPageKey);
-      project.monetizationDisabledAt = null;
-    } else {
-      if (disabledPageKey && !project.adDisabledPages.includes(disabledPageKey)) {
-        project.adDisabledPages.push(disabledPageKey);
+    try {
+      const projectId = decodeURIComponent(String(req.params?.id || "").trim());
+      if (!projectId) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Missing project id." });
       }
-      project.monetizationDisabledAt = new Date();
-    }
-    project.updatedAt = new Date();
-    await user.save();
 
-    await createUsageLog({
-      ...buildUsageIdentity(req),
-      action: nextIsMonetized ? "project-monetization-on" : "project-monetization-off",
-      summary: nextIsMonetized
-        ? `enabled ad revenue on ${project.name || entryPath}`
-        : `disabled ad revenue on ${project.name || entryPath}`,
-      source: "adsense",
-      metadata: {
-        projectId,
-        entryPath,
+      const user = await User.findById(req.user._id).select(
+        "+githubToken +adsenseAdCode",
+      );
+      if (!user) {
+        return res
+          .status(404)
+          .json({ success: false, message: "User not found." });
+      }
+      if (!user.githubUsername || !user.githubToken) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Connect GitHub first." });
+      }
+
+      user.liveProjects = Array.isArray(user.liveProjects)
+        ? user.liveProjects
+        : [];
+      const projectIndex = user.liveProjects.findIndex(
+        (item) =>
+          String(item?.fileName || item?.filename || "").trim() === projectId,
+      );
+      if (projectIndex < 0) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Live project not found." });
+      }
+
+      const project = user.liveProjects[projectIndex];
+      if (!project.monetizationEnabled && !project.isMonetized) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Activate monetization for this project first before using the ad toggle.",
+        });
+      }
+
+      const entryPath = String(
+        project.fileName || project.filename || "",
+      ).trim();
+      if (!entryPath) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Project entry file is missing." });
+      }
+
+      const octokit = buildGithubClient(user);
+      const contentResponse = await octokit.rest.repos.getContent({
+        owner: user.githubUsername,
+        repo: project.repo || getUserGithubRepoName(user),
+        path: entryPath,
+      });
+      if (
+        Array.isArray(contentResponse.data) ||
+        !contentResponse.data?.content
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "That project entry file could not be updated for monetization.",
+        });
+      }
+
+      const sourceHtml = Buffer.from(
+        contentResponse.data.content,
+        "base64",
+      ).toString("utf8");
+      const nextIsMonetized = !Boolean(project.isMonetized);
+      const cleanedHtml = stripAdsenseFromHtml(sourceHtml);
+      const nextHtml = nextIsMonetized
+        ? buildPublishedHtmlFromSource({
+            documentHtml: cleanedHtml,
+            projectName: project.name || "MediaLab Project",
+            adsenseId: user.adsenseId || "",
+            adsenseAdCode: user.adsenseAdCode || "",
+          })
+        : cleanedHtml;
+
+      await octokit.rest.repos.createOrUpdateFileContents({
+        owner: user.githubUsername,
+        repo: project.repo || getUserGithubRepoName(user),
+        path: entryPath,
+        sha: contentResponse.data.sha,
+        message: `${nextIsMonetized ? "Enable" : "Disable"} monetization for ${entryPath} from MediaLab`,
+        content: Buffer.from(nextHtml, "utf8").toString("base64"),
+      });
+
+      const disabledPageKey = String(
+        project.entryPath || project.fileName || project.filename || "",
+      ).trim();
+      project.isMonetized = nextIsMonetized;
+      project.adDisabledPages = Array.isArray(project.adDisabledPages)
+        ? project.adDisabledPages
+        : [];
+      if (nextIsMonetized) {
+        project.adDisabledPages = project.adDisabledPages.filter(
+          (item) => String(item || "").trim() !== disabledPageKey,
+        );
+        project.monetizationDisabledAt = null;
+      } else {
+        if (
+          disabledPageKey &&
+          !project.adDisabledPages.includes(disabledPageKey)
+        ) {
+          project.adDisabledPages.push(disabledPageKey);
+        }
+        project.monetizationDisabledAt = new Date();
+      }
+      project.updatedAt = new Date();
+      await user.save();
+
+      await createUsageLog({
+        ...buildUsageIdentity(req),
+        action: nextIsMonetized
+          ? "project-monetization-on"
+          : "project-monetization-off",
+        summary: nextIsMonetized
+          ? `enabled ad revenue on ${project.name || entryPath}`
+          : `disabled ad revenue on ${project.name || entryPath}`,
+        source: "adsense",
+        metadata: {
+          projectId,
+          entryPath,
+          isMonetized: nextIsMonetized,
+          disabledAt: nextIsMonetized ? null : project.monetizationDisabledAt,
+        },
+      });
+
+      return res.json({
+        success: true,
         isMonetized: nextIsMonetized,
-        disabledAt: nextIsMonetized ? null : project.monetizationDisabledAt,
-      },
-    });
-
-    return res.json({
-      success: true,
-      isMonetized: nextIsMonetized,
-      message: nextIsMonetized
-        ? "Ads are now live for this project."
-        : "Ads are now turned off for this project.",
-      project,
-      user: toSafeUser(user),
-    });
-  } catch (error) {
-    console.error("Project monetization toggle failed:", error);
-    return res.status(error?.status || error?.response?.status || 500).json({
-      success: false,
-      message: error?.message || "Could not update project monetization right now.",
-    });
-  }
-});
+        message: nextIsMonetized
+          ? "Ads are now live for this project."
+          : "Ads are now turned off for this project.",
+        project,
+        user: toSafeUser(user),
+      });
+    } catch (error) {
+      console.error("Project monetization toggle failed:", error);
+      return res.status(error?.status || error?.response?.status || 500).json({
+        success: false,
+        message:
+          error?.message || "Could not update project monetization right now.",
+      });
+    }
+  },
+);
 
 app.post("/api/adsense/sync-status", async (req, res) => {
   if (!req.isAuthenticated() || !req.user) {
-    return res.status(401).json({ success: false, message: "You need to sign in first." });
+    return res
+      .status(401)
+      .json({ success: false, message: "You need to sign in first." });
   }
   try {
-    const user = await User.findById(req.user._id).select("+googleRefreshToken");
+    const user = await User.findById(req.user._id).select(
+      "+googleRefreshToken",
+    );
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found." });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found." });
     }
     const sync = await refreshAdsenseSiteStatusIfNeeded(user, {
       force: Boolean(req.body?.force),
@@ -8187,12 +9666,18 @@ app.post("/api/adsense/sync-status", async (req, res) => {
 
 app.post("/api/adsense/disconnect", async (req, res) => {
   if (!req.isAuthenticated() || !req.user) {
-    return res.status(401).json({ success: false, message: "You need to sign in first." });
+    return res
+      .status(401)
+      .json({ success: false, message: "You need to sign in first." });
   }
   try {
-    const user = await User.findById(req.user._id).select("+googleRefreshToken +adsenseAdCode");
+    const user = await User.findById(req.user._id).select(
+      "+googleRefreshToken +adsenseAdCode",
+    );
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found." });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found." });
     }
 
     user.adsenseId = "";
@@ -8241,9 +9726,13 @@ app.get("/api/adsense/report", async (req, res) => {
   }
 
   try {
-    const user = await User.findById(req.user._id).select("+googleRefreshToken");
+    const user = await User.findById(req.user._id).select(
+      "+googleRefreshToken",
+    );
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found." });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found." });
     }
     let adsenseSync = null;
     try {
@@ -8255,7 +9744,8 @@ app.get("/api/adsense/report", async (req, res) => {
     const targetUrl =
       String(req.query?.url || "").trim() ||
       String(
-        user.liveProjects?.find((project) => project?.renderHostedConfirmed)?.renderUrl ||
+        user.liveProjects?.find((project) => project?.renderHostedConfirmed)
+          ?.renderUrl ||
           user.liveProjects?.[0]?.renderUrl ||
           user.liveProjects?.[0]?.liveUrl ||
           user.liveProjects?.[0]?.url ||
@@ -8270,7 +9760,9 @@ app.get("/api/adsense/report", async (req, res) => {
         domains: [],
         message: "Connect AdSense for real-time stats.",
         siteStatus: String(user.adsenseSiteStatus || "").trim(),
-        reviewState: adsenseSync?.reviewState || normalizeAdsenseReviewState(user.adsenseSiteStatus || ""),
+        reviewState:
+          adsenseSync?.reviewState ||
+          normalizeAdsenseReviewState(user.adsenseSiteStatus || ""),
         lastCheckedAt: user.adsenseLastCheckedAt || null,
         approvedAt: user.adsenseApprovedAt || null,
       });
@@ -8288,9 +9780,12 @@ app.get("/api/adsense/report", async (req, res) => {
           clicks: 0,
         },
         domains: [],
-        message: "Publish and host a project first to start matching AdSense domains.",
+        message:
+          "Publish and host a project first to start matching AdSense domains.",
         siteStatus: String(user.adsenseSiteStatus || "").trim(),
-        reviewState: adsenseSync?.reviewState || normalizeAdsenseReviewState(user.adsenseSiteStatus || ""),
+        reviewState:
+          adsenseSync?.reviewState ||
+          normalizeAdsenseReviewState(user.adsenseSiteStatus || ""),
         lastCheckedAt: user.adsenseLastCheckedAt || null,
         approvedAt: user.adsenseApprovedAt || null,
       });
@@ -8311,9 +9806,12 @@ app.get("/api/adsense/report", async (req, res) => {
           clicks: 0,
         },
         domains,
-        message: "No AdSense account was returned for this Google connection yet.",
+        message:
+          "No AdSense account was returned for this Google connection yet.",
         siteStatus: String(user.adsenseSiteStatus || "").trim(),
-        reviewState: adsenseSync?.reviewState || normalizeAdsenseReviewState(user.adsenseSiteStatus || ""),
+        reviewState:
+          adsenseSync?.reviewState ||
+          normalizeAdsenseReviewState(user.adsenseSiteStatus || ""),
         lastCheckedAt: user.adsenseLastCheckedAt || null,
         approvedAt: user.adsenseApprovedAt || null,
       });
@@ -8347,7 +9845,8 @@ app.get("/api/adsense/report", async (req, res) => {
         limit: 1,
       });
 
-      const totals = report.data?.totals?.cells || report.data?.rows?.[0]?.cells || [];
+      const totals =
+        report.data?.totals?.cells || report.data?.rows?.[0]?.cells || [];
       const metricCells = totals.slice(-metrics.length);
       if (metricCells.length < metrics.length) continue;
 
@@ -8383,7 +9882,9 @@ app.get("/api/adsense/report", async (req, res) => {
       accountName,
       message: "Real-time AdSense stats loaded.",
       siteStatus: String(user.adsenseSiteStatus || "").trim(),
-      reviewState: adsenseSync?.reviewState || normalizeAdsenseReviewState(user.adsenseSiteStatus || ""),
+      reviewState:
+        adsenseSync?.reviewState ||
+        normalizeAdsenseReviewState(user.adsenseSiteStatus || ""),
       lastCheckedAt: user.adsenseLastCheckedAt || null,
       approvedAt: user.adsenseApprovedAt || null,
     });
@@ -8407,9 +9908,13 @@ app.get("/api/adsense/withdrawal-eligibility", async (req, res) => {
   }
 
   try {
-    const user = await User.findById(req.user._id).select("+googleRefreshToken");
+    const user = await User.findById(req.user._id).select(
+      "+googleRefreshToken",
+    );
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found." });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found." });
     }
 
     if (!user.googleRefreshToken) {
@@ -8436,7 +9941,8 @@ app.get("/api/adsense/withdrawal-eligibility", async (req, res) => {
         threshold: 100,
         currentBalance: 0,
         progressPercent: 0,
-        message: "No AdSense account was returned for this Google connection yet.",
+        message:
+          "No AdSense account was returned for this Google connection yet.",
       });
     }
 
@@ -8447,10 +9953,14 @@ app.get("/api/adsense/withdrawal-eligibility", async (req, res) => {
       limit: 1,
       languageCode: "en",
     });
-    const totals = report.data?.totals?.cells || report.data?.rows?.[0]?.cells || [];
+    const totals =
+      report.data?.totals?.cells || report.data?.rows?.[0]?.cells || [];
     const currentBalance = Number(totals?.[0]?.value || 0);
     const threshold = 100;
-    const progressPercent = Math.max(0, Math.min(100, (currentBalance / threshold) * 100));
+    const progressPercent = Math.max(
+      0,
+      Math.min(100, (currentBalance / threshold) * 100),
+    );
 
     return res.json({
       success: true,
@@ -8487,7 +9997,9 @@ app.get("/api/github/verify-ads-txt", async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found." });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found." });
     }
 
     let verified = false;
@@ -8536,16 +10048,24 @@ app.post(
     try {
       const user = await User.findById(req.user._id).select("+githubToken");
       if (!user) {
-        return res.status(404).json({ success: false, message: "User not found." });
+        return res
+          .status(404)
+          .json({ success: false, message: "User not found." });
       }
-      if (!user.githubUsername || !user.githubToken || !user.githubRepoCreated) {
+      if (
+        !user.githubUsername ||
+        !user.githubToken ||
+        !user.githubRepoCreated
+      ) {
         return res.status(400).json({
           success: false,
           message: "Set up GitHub hosting first before uploading ads.txt.",
         });
       }
 
-      const nextAdsenseId = normalizeAdsensePublisherId(req.body?.adsenseId || user.adsenseId || "");
+      const nextAdsenseId = normalizeAdsensePublisherId(
+        req.body?.adsenseId || user.adsenseId || "",
+      );
       if (nextAdsenseId && !/^ca-pub-\d+$/i.test(nextAdsenseId)) {
         return res.status(400).json({
           success: false,
@@ -8562,11 +10082,11 @@ app.post(
       const octokit = buildGithubClient(user);
       let existingSha = "";
       try {
-      const existing = await octokit.rest.repos.getContent({
-        owner: user.githubUsername,
-        repo: getUserGithubRepoName(user),
-        path: "ads.txt",
-      });
+        const existing = await octokit.rest.repos.getContent({
+          owner: user.githubUsername,
+          repo: getUserGithubRepoName(user),
+          path: "ads.txt",
+        });
         if (!Array.isArray(existing.data) && existing.data?.sha) {
           existingSha = existing.data.sha;
         }
@@ -8625,10 +10145,14 @@ app.post("/api/community-feedback", async (req, res) => {
     const feedbackText = String(req.body?.feedback || "").trim();
 
     if (!rating || rating < 1 || rating > 5) {
-      return res.status(400).json({ success: false, message: "Rating must be between 1 and 5." });
+      return res
+        .status(400)
+        .json({ success: false, message: "Rating must be between 1 and 5." });
     }
     if (!feedbackText) {
-      return res.status(400).json({ success: false, message: "Feedback message is required." });
+      return res
+        .status(400)
+        .json({ success: false, message: "Feedback message is required." });
     }
 
     const isLoggedIn = Boolean(req.user);
@@ -8667,7 +10191,9 @@ app.post("/api/community-feedback", async (req, res) => {
     });
   } catch (error) {
     console.error("Feedback save failed:", error);
-    res.status(500).json({ success: false, message: "Could not save feedback right now." });
+    res
+      .status(500)
+      .json({ success: false, message: "Could not save feedback right now." });
   }
 });
 
@@ -8791,19 +10317,26 @@ app.get("/api/upgrade-request/status", async (req, res) => {
     console.error("Upgrade request status fetch failed:", error);
     res
       .status(500)
-      .json({ success: false, message: "Could not load upgrade request status." });
+      .json({
+        success: false,
+        message: "Could not load upgrade request status.",
+      });
   }
 });
 
 app.post("/api/account/cancel-premium", async (req, res) => {
   try {
     if (!req.user?._id) {
-      return res.status(401).json({ success: false, message: "Login required." });
+      return res
+        .status(401)
+        .json({ success: false, message: "Login required." });
     }
 
     const user = await User.findById(req.user._id);
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found." });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found." });
     }
 
     user.isPro = false;
@@ -8811,7 +10344,10 @@ app.post("/api/account/cancel-premium", async (req, res) => {
 
     await UpgradeRequest.findOneAndUpdate(
       {
-        $or: [{ userId: req.user._id }, { email: String(user.email || "").toLowerCase() }],
+        $or: [
+          { userId: req.user._id },
+          { email: String(user.email || "").toLowerCase() },
+        ],
         status: "granted",
       },
       {
@@ -8834,37 +10370,56 @@ app.post("/api/account/cancel-premium", async (req, res) => {
     res.json({ success: true, isPro: false });
   } catch (error) {
     console.error("Cancel premium failed:", error);
-    res.status(500).json({ success: false, message: "Could not cancel premium right now." });
+    res
+      .status(500)
+      .json({ success: false, message: "Could not cancel premium right now." });
   }
 });
 
 app.post("/api/account/withdrawals", accountRateLimit, async (req, res) => {
   try {
     if (!req.user?._id) {
-      return res.status(401).json({ success: false, message: "Login required." });
+      return res
+        .status(401)
+        .json({ success: false, message: "Login required." });
     }
 
     const user = await User.findById(req.user._id);
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found." });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found." });
     }
 
-    const method = String(req.body?.method || "").trim().toLowerCase();
+    const method = String(req.body?.method || "")
+      .trim()
+      .toLowerCase();
     const amount = Number(req.body?.amount || 0);
     const destination = String(req.body?.destination || "").trim();
     const allowedMethods = ["paypal", "mpesa", "airtel"];
 
     if (!allowedMethods.includes(method)) {
-      return res.status(400).json({ success: false, message: "Select a valid withdrawal method." });
+      return res
+        .status(400)
+        .json({ success: false, message: "Select a valid withdrawal method." });
     }
     if (!destination) {
-      return res.status(400).json({ success: false, message: "Payment destination is required." });
+      return res
+        .status(400)
+        .json({ success: false, message: "Payment destination is required." });
     }
     if (!Number.isFinite(amount) || amount < 5) {
-      return res.status(400).json({ success: false, message: "Minimum withdrawal is $5." });
+      return res
+        .status(400)
+        .json({ success: false, message: "Minimum withdrawal is $5." });
     }
     if (amount > Number(user.accountBalance || 0)) {
-      return res.status(400).json({ success: false, message: "Withdrawal amount exceeds available balance." });
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "Withdrawal amount exceeds available balance.",
+        });
     }
 
     const now = Date.now();
@@ -8874,7 +10429,8 @@ app.post("/api/account/withdrawals", accountRateLimit, async (req, res) => {
     if (recentLock < 15000) {
       return res.status(429).json({
         success: false,
-        message: "Please wait a few seconds before submitting another withdrawal.",
+        message:
+          "Please wait a few seconds before submitting another withdrawal.",
       });
     }
 
@@ -8886,7 +10442,8 @@ app.post("/api/account/withdrawals", accountRateLimit, async (req, res) => {
     if (pendingExisting) {
       return res.status(429).json({
         success: false,
-        message: "A withdrawal request is already being processed. Please wait.",
+        message:
+          "A withdrawal request is already being processed. Please wait.",
       });
     }
 
@@ -8905,7 +10462,9 @@ app.post("/api/account/withdrawals", accountRateLimit, async (req, res) => {
       },
     });
 
-    user.accountBalance = Number((Number(user.accountBalance || 0) - amount).toFixed(2));
+    user.accountBalance = Number(
+      (Number(user.accountBalance || 0) - amount).toFixed(2),
+    );
     user.lastWithdrawalRequestedAt = new Date(now);
     await user.save();
     req.user.accountBalance = user.accountBalance;
@@ -8928,14 +10487,21 @@ app.post("/api/account/withdrawals", accountRateLimit, async (req, res) => {
     });
   } catch (error) {
     console.error("Withdrawal request failed:", error);
-    res.status(500).json({ success: false, message: "Could not submit withdrawal request right now." });
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: "Could not submit withdrawal request right now.",
+      });
   }
 });
 
 app.get("/api/account/withdrawals", async (req, res) => {
   try {
     if (!req.user?._id) {
-      return res.status(401).json({ success: false, message: "Login required." });
+      return res
+        .status(401)
+        .json({ success: false, message: "Login required." });
     }
 
     const requests = await WithdrawalRequest.find({ userId: req.user._id })
@@ -8957,135 +10523,161 @@ app.get("/api/account/withdrawals", async (req, res) => {
   }
 });
 
-app.post("/api/account/suspend", accountRateLimit, express.json(), async (req, res) => {
-  if (!req.isAuthenticated() || !req.user?._id) {
-    return res.status(401).json({ success: false, message: "Login required." });
-  }
-  try {
-    const user = await User.findById(req.user._id).select("+githubToken");
-    if (!user) {
-      return res.status(404).json({ success: false, message: "User not found." });
+app.post(
+  "/api/account/suspend",
+  accountRateLimit,
+  express.json(),
+  async (req, res) => {
+    if (!req.isAuthenticated() || !req.user?._id) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Login required." });
     }
-
-    const referralCode = String(req.body?.referralCode || "").trim();
-    const reason = String(req.body?.reason || "").trim();
-    if (!referralCode || referralCode !== String(user.referralCode || "").trim()) {
-      return res.status(400).json({
-        success: false,
-        message: "Owner verification failed. Enter the referral code tied to your account.",
-      });
-    }
-    if (reason.length < 6) {
-      return res.status(400).json({
-        success: false,
-        message: "Please tell us why you are suspending your account.",
-      });
-    }
-
-    const userId = user._id;
-    const userEmail = String(user.email || "").trim().toLowerCase();
-    const marketplaceItems = await MarketplaceItem.find({ authorId: userId }).lean();
-    const marketplaceItemIds = marketplaceItems.map((item) => item._id);
-
-    for (const item of marketplaceItems) {
-      await cleanupMarketplaceStorageArtifacts(item);
-    }
-    await cleanupStandaloneBuilderTemplatesForUser(userId);
-    await MarketplaceItem.deleteMany({ authorId: userId });
-    await removeUserParticipationFromMarketplace(userId);
-    await BuilderTemplate.deleteMany({ authorId: userId });
-
-    await Notification.deleteMany({
-      $or: [
-        { userId },
-        { targetId: { $in: marketplaceItemIds.map((id) => String(id)) } },
-      ],
-    });
-    await WithdrawalRequest.deleteMany({
-      $or: [{ userId }, { email: userEmail }],
-    });
-    await Download.deleteMany({
-      $or: [{ userId }, { email: userEmail }],
-    });
-    await UsageLog.deleteMany({
-      $or: [{ userId }, { email: userEmail }],
-    });
-    await Feedback.deleteMany({
-      $or: [{ userId }, { email: userEmail }],
-    });
-    await UpgradeRequest.deleteMany({
-      $or: [{ userId }, { email: userEmail }],
-    });
-
-    await User.updateMany(
-      {},
-      {
-        $pull: {
-          sellerRatings: { userId },
-          referralRewards: { referredUserId: userId },
-        },
-      },
-    );
-
-    if (user.githubUsername && user.githubToken) {
-      try {
-        const octokit = buildGithubClient(user);
-        const reposToDelete = [
-          getUserGithubRepoName(user),
-          "marketplace",
-        ].filter(Boolean);
-        for (const repoName of [...new Set(reposToDelete)]) {
-          try {
-            await deleteGithubRepoIfExists(octokit, user.githubUsername, repoName);
-          } catch (repoError) {
-            console.warn(`GitHub repo cleanup skipped for ${repoName}:`, repoError.message);
-          }
-        }
-      } catch (githubError) {
-        console.warn("GitHub account cleanup skipped:", githubError.message);
+    try {
+      const user = await User.findById(req.user._id).select("+githubToken");
+      if (!user) {
+        return res
+          .status(404)
+          .json({ success: false, message: "User not found." });
       }
-    }
 
-    await User.deleteOne({ _id: userId });
-
-    const finish = () =>
-      res.json({
-        success: true,
-        message: "Your MediaLab account has been suspended and removed.",
-      });
-
-    req.logout((logoutError) => {
-      if (logoutError) {
-        console.error("Account suspension logout failed:", logoutError);
-        return finish();
-      }
-      if (req.session) {
-        delete req.session.githubOAuthState;
-        delete req.session.githubOAuthUserId;
-        delete req.session.googleAuthMode;
-        return req.session.destroy(() => {
-          res.clearCookie("medialab.sid");
-          res.clearCookie("connect.sid");
-          finish();
+      const referralCode = String(req.body?.referralCode || "").trim();
+      const reason = String(req.body?.reason || "").trim();
+      if (
+        !referralCode ||
+        referralCode !== String(user.referralCode || "").trim()
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Owner verification failed. Enter the referral code tied to your account.",
         });
       }
-      res.clearCookie("medialab.sid");
-      res.clearCookie("connect.sid");
-      return finish();
-    });
-  } catch (error) {
-    console.error("Account suspension failed:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Could not suspend this account right now.",
-    });
-  }
-});
+      if (reason.length < 6) {
+        return res.status(400).json({
+          success: false,
+          message: "Please tell us why you are suspending your account.",
+        });
+      }
+
+      const userId = user._id;
+      const userEmail = String(user.email || "")
+        .trim()
+        .toLowerCase();
+      const marketplaceItems = await MarketplaceItem.find({
+        authorId: userId,
+      }).lean();
+      const marketplaceItemIds = marketplaceItems.map((item) => item._id);
+
+      for (const item of marketplaceItems) {
+        await cleanupMarketplaceStorageArtifacts(item);
+      }
+      await cleanupStandaloneBuilderTemplatesForUser(userId);
+      await MarketplaceItem.deleteMany({ authorId: userId });
+      await removeUserParticipationFromMarketplace(userId);
+      await BuilderTemplate.deleteMany({ authorId: userId });
+
+      await Notification.deleteMany({
+        $or: [
+          { userId },
+          { targetId: { $in: marketplaceItemIds.map((id) => String(id)) } },
+        ],
+      });
+      await WithdrawalRequest.deleteMany({
+        $or: [{ userId }, { email: userEmail }],
+      });
+      await Download.deleteMany({
+        $or: [{ userId }, { email: userEmail }],
+      });
+      await UsageLog.deleteMany({
+        $or: [{ userId }, { email: userEmail }],
+      });
+      await Feedback.deleteMany({
+        $or: [{ userId }, { email: userEmail }],
+      });
+      await UpgradeRequest.deleteMany({
+        $or: [{ userId }, { email: userEmail }],
+      });
+
+      await User.updateMany(
+        {},
+        {
+          $pull: {
+            sellerRatings: { userId },
+            referralRewards: { referredUserId: userId },
+          },
+        },
+      );
+
+      if (user.githubUsername && user.githubToken) {
+        try {
+          const octokit = buildGithubClient(user);
+          const reposToDelete = [
+            getUserGithubRepoName(user),
+            "marketplace",
+          ].filter(Boolean);
+          for (const repoName of [...new Set(reposToDelete)]) {
+            try {
+              await deleteGithubRepoIfExists(
+                octokit,
+                user.githubUsername,
+                repoName,
+              );
+            } catch (repoError) {
+              console.warn(
+                `GitHub repo cleanup skipped for ${repoName}:`,
+                repoError.message,
+              );
+            }
+          }
+        } catch (githubError) {
+          console.warn("GitHub account cleanup skipped:", githubError.message);
+        }
+      }
+
+      await User.deleteOne({ _id: userId });
+
+      const finish = () =>
+        res.json({
+          success: true,
+          message: "Your MediaLab account has been suspended and removed.",
+        });
+
+      req.logout((logoutError) => {
+        if (logoutError) {
+          console.error("Account suspension logout failed:", logoutError);
+          return finish();
+        }
+        if (req.session) {
+          delete req.session.githubOAuthState;
+          delete req.session.githubOAuthUserId;
+          delete req.session.googleAuthMode;
+          return req.session.destroy(() => {
+            res.clearCookie("medialab.sid");
+            res.clearCookie("connect.sid");
+            finish();
+          });
+        }
+        res.clearCookie("medialab.sid");
+        res.clearCookie("connect.sid");
+        return finish();
+      });
+    } catch (error) {
+      console.error("Account suspension failed:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Could not suspend this account right now.",
+      });
+    }
+  },
+);
 
 app.get("/api/builder-drafts", async (req, res) => {
   try {
     if (!req.user) {
-      return res.status(401).json({ success: false, message: "Login required." });
+      return res
+        .status(401)
+        .json({ success: false, message: "Login required." });
     }
     const user = await User.findById(req.user._id).select("builderDrafts");
     res.json({
@@ -9094,25 +10686,35 @@ app.get("/api/builder-drafts", async (req, res) => {
     });
   } catch (error) {
     console.error("Builder drafts fetch failed:", error);
-    res.status(500).json({ success: false, message: "Could not fetch drafts." });
+    res
+      .status(500)
+      .json({ success: false, message: "Could not fetch drafts." });
   }
 });
 
 app.post("/api/builder-drafts", async (req, res) => {
   try {
     if (!req.user) {
-      return res.status(401).json({ success: false, message: "Login required." });
+      return res
+        .status(401)
+        .json({ success: false, message: "Login required." });
     }
 
     const canvasHtml = String(req.body?.canvasHtml || "");
     const pageBackground = String(req.body?.pageBackground || "#ffffff");
     const isAutoSave = Boolean(req.body?.isAutoSave);
     const providedName = String(req.body?.name || "").trim();
-    const draftName = providedName || (isAutoSave ? "Auto Draft" : `Builder Draft ${new Date().toLocaleString()}`);
+    const draftName =
+      providedName ||
+      (isAutoSave
+        ? "Auto Draft"
+        : `Builder Draft ${new Date().toLocaleString()}`);
 
     const user = await User.findById(req.user._id);
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found." });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found." });
     }
 
     const nextDraft = {
@@ -9124,8 +10726,11 @@ app.post("/api/builder-drafts", async (req, res) => {
     };
 
     if (isAutoSave) {
-      const autosaveIndex = user.builderDrafts.findIndex((draft) => draft.isAutoSave);
-      if (autosaveIndex >= 0) user.builderDrafts.splice(autosaveIndex, 1, nextDraft);
+      const autosaveIndex = user.builderDrafts.findIndex(
+        (draft) => draft.isAutoSave,
+      );
+      if (autosaveIndex >= 0)
+        user.builderDrafts.splice(autosaveIndex, 1, nextDraft);
       else user.builderDrafts.push(nextDraft);
     } else {
       user.builderDrafts.push(nextDraft);
@@ -9147,7 +10752,8 @@ app.post("/api/builder-drafts", async (req, res) => {
     res.json({
       success: true,
       drafts: user.builderDrafts,
-      savedDraft: user.builderDrafts[user.builderDrafts.length - 1] || nextDraft,
+      savedDraft:
+        user.builderDrafts[user.builderDrafts.length - 1] || nextDraft,
     });
   } catch (error) {
     console.error("Builder draft save failed:", error);
@@ -9155,471 +10761,501 @@ app.post("/api/builder-drafts", async (req, res) => {
   }
 });
 
-app.get("/api/admin/feedbacks", adminRateLimit, requireAdminApi, async (_req, res) => {
-  try {
-    const feedbacks = await Feedback.find({}).sort({ createdAt: -1 }).lean();
-    res.json({ success: true, feedbacks });
-  } catch (error) {
-    console.error("Admin feedback fetch failed:", error);
-    res.status(500).json({ success: false, message: "Could not load feedbacks." });
-  }
-});
-
-app.get("/api/admin/usage-logs", adminRateLimit, requireAdminApi, async (_req, res) => {
-  try {
-    const logs = await UsageLog.find({})
-      .sort({ createdAt: -1 })
-      .limit(1000)
-      .lean({ virtuals: true });
-    res.json({ success: true, logs });
-  } catch (error) {
-    console.error("Admin usage log fetch failed:", error);
-    res
-      .status(500)
-      .json({ success: false, message: "Could not load usage logs." });
-  }
-});
-
-app.get("/api/admin/downloads", adminRateLimit, requireAdminApi, async (_req, res) => {
-  try {
-    const downloads = await Download.find({})
-      .sort({ createdAt: -1 })
-      .limit(300)
-      .lean();
-    res.json({ success: true, downloads });
-  } catch (error) {
-    console.error("Admin downloads fetch failed:", error);
-    res.status(500).json({ success: false, message: "Could not load downloads." });
-  }
-});
-
-app.get("/api/admin/withdrawals", adminRateLimit, requireAdminApi, async (_req, res) => {
-  try {
-    const cleanupBefore = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    await WithdrawalRequest.deleteMany({
-      status: { $in: ["paid", "failed"] },
-      reviewedAt: { $lte: cleanupBefore },
-    });
-    const withdrawals = await WithdrawalRequest.find({})
-      .sort({ createdAt: -1 })
-      .limit(300)
-      .lean();
-    res.json({ success: true, withdrawals });
-  } catch (error) {
-    console.error("Admin withdrawals fetch failed:", error);
-    res.status(500).json({ success: false, message: "Could not load withdrawals." });
-  }
-});
-
-app.get("/api/admin/payout-users", adminRateLimit, requireAdminApi, async (_req, res) => {
-  try {
-    await syncUserActivityWeights();
-    const users = await User.find({})
-      .sort({ activityWeight: -1, lastLogin: -1, createdAt: -1 })
-      .limit(120)
-      .select(
-        "name email profilePicture isPro location provider lastLogin createdAt accountBalance activityWeight activityStats lastActivityWeightCalculatedAt",
-      )
-      .lean();
-    res.json({ success: true, users });
-  } catch (error) {
-    console.error("Admin payout users fetch failed:", error);
-    res.status(500).json({ success: false, message: "Could not load payout users." });
-  }
-});
-
-app.post("/api/admin/users/:id/reward", adminRateLimit, requireAdminApi, async (req, res) => {
-  try {
-    const amount = Number(req.body?.amount || 0);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      return res.status(400).json({ success: false, message: "Enter a valid reward amount." });
+app.get(
+  "/api/admin/feedbacks",
+  adminRateLimit,
+  requireAdminApi,
+  async (_req, res) => {
+    try {
+      const feedbacks = await Feedback.find({}).sort({ createdAt: -1 }).lean();
+      res.json({ success: true, feedbacks });
+    } catch (error) {
+      console.error("Admin feedback fetch failed:", error);
+      res
+        .status(500)
+        .json({ success: false, message: "Could not load feedbacks." });
     }
-    const user = await User.findById(req.params.id);
-    if (!user) {
-      return res.status(404).json({ success: false, message: "User not found." });
+  },
+);
+
+app.get(
+  "/api/admin/usage-logs",
+  adminRateLimit,
+  requireAdminApi,
+  async (_req, res) => {
+    try {
+      const logs = await UsageLog.find({})
+        .sort({ createdAt: -1 })
+        .limit(1000)
+        .lean({ virtuals: true });
+      res.json({ success: true, logs });
+    } catch (error) {
+      console.error("Admin usage log fetch failed:", error);
+      res
+        .status(500)
+        .json({ success: false, message: "Could not load usage logs." });
     }
-    user.accountBalance = Number((Number(user.accountBalance || 0) + amount).toFixed(2));
-    await user.save();
-    await createUserNotification({
-      userId: user._id,
-      type: "wallet-credit",
-      title: `You've received $${amount.toFixed(2)} from MediaLab`,
-      message: "Your MediaLab wallet balance has been updated.",
-      targetType: "wallet",
-      metadata: { amount, reason: "admin-reward" },
-    });
+  },
+);
 
-    await createUsageLog({
-      user,
-      email: user.email,
-      name: user.name,
-      isPro: Boolean(user.isPro),
-      action: "admin-reward",
-      summary: `admin rewarded ${amount.toFixed(2)} to ${user.email}`,
-      source: "admin-payout",
-      metadata: { amount },
-    });
-
-    res.json({ success: true, user });
-  } catch (error) {
-    console.error("Admin reward failed:", error);
-    res.status(500).json({ success: false, message: "Could not reward this user." });
-  }
-});
-
-app.get("/api/admin/upgrade-requests", adminRateLimit, requireAdminApi, async (_req, res) => {
-  try {
-    const requests = await UpgradeRequest.find({
-      status: { $in: ["pending", "reviewing", "received"] },
-    })
-      .sort({ createdAt: -1 })
-      .limit(300)
-      .lean();
-    res.json({ success: true, requests });
-  } catch (error) {
-    console.error("Admin upgrade request fetch failed:", error);
-    res
-      .status(500)
-      .json({ success: false, message: "Could not load upgrade requests." });
-  }
-});
-
-app.delete("/api/admin/usage-logs", adminRateLimit, requireAdminApi, async (_req, res) => {
-  try {
-    await UsageLog.deleteMany({});
-    io.emit("admin:usage-log-cleared", {
-      action: "logs-cleared",
-      summary: "admin cleared usage logs",
-      source: "admin",
-      kind: "activity",
-      createdAt: new Date().toISOString(),
-      isAnonymous: true,
-      isPro: false,
-      email: "",
-      name: "admin",
-    });
-    res.json({ success: true, message: "Usage logs cleared." });
-  } catch (error) {
-    console.error("Admin usage log clear failed:", error);
-    res.status(500).json({ success: false, message: "Could not clear usage logs." });
-  }
-});
-
-app.patch("/api/admin/feedbacks/:id", adminRateLimit, requireAdminApi, async (req, res) => {
-  try {
-    const updates = {};
-    if (typeof req.body?.status === "string") {
-      updates.status = req.body.status === "completed" ? "completed" : "open";
+app.get(
+  "/api/admin/downloads",
+  adminRateLimit,
+  requireAdminApi,
+  async (_req, res) => {
+    try {
+      const downloads = await Download.find({})
+        .sort({ createdAt: -1 })
+        .limit(300)
+        .lean();
+      res.json({ success: true, downloads });
+    } catch (error) {
+      console.error("Admin downloads fetch failed:", error);
+      res
+        .status(500)
+        .json({ success: false, message: "Could not load downloads." });
     }
-    if (typeof req.body?.hidden === "boolean") {
-      updates.hidden = req.body.hidden;
-    }
+  },
+);
 
-    const feedback = await Feedback.findByIdAndUpdate(
-      req.params.id,
-      { $set: updates },
-      { new: true },
-    ).lean();
-
-    if (!feedback) {
-      return res.status(404).json({ success: false, message: "Feedback not found." });
-    }
-
-    res.json({ success: true, feedback });
-  } catch (error) {
-    console.error("Admin feedback update failed:", error);
-    res.status(500).json({ success: false, message: "Could not update feedback." });
-  }
-});
-
-app.delete("/api/admin/feedbacks/:id", adminRateLimit, requireAdminApi, async (req, res) => {
-  try {
-    const feedback = await Feedback.findByIdAndDelete(req.params.id).lean();
-
-    if (!feedback) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Feedback not found." });
-    }
-
-    res.json({ success: true, feedback });
-  } catch (error) {
-    console.error("Admin feedback delete failed:", error);
-    res
-      .status(500)
-      .json({ success: false, message: "Could not delete feedback." });
-  }
-});
-
-app.patch("/api/admin/upgrade-requests/:id", adminRateLimit, requireAdminApi, async (req, res) => {
-  try {
-    const nextStatus = String(req.body?.status || "").trim().toLowerCase();
-    if (!["granted", "denied", "reviewing", "pending"].includes(nextStatus)) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Invalid request status." });
-    }
-
-    const deniedReason = String(req.body?.deniedReason || "").trim();
-    if (nextStatus === "denied" && deniedReason.length < 3) {
-      return res.status(400).json({
-        success: false,
-        message: "Add a short reason so the user understands why the premium request was denied.",
+app.get(
+  "/api/admin/withdrawals",
+  adminRateLimit,
+  requireAdminApi,
+  async (_req, res) => {
+    try {
+      const cleanupBefore = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      await WithdrawalRequest.deleteMany({
+        status: { $in: ["paid", "failed"] },
+        reviewedAt: { $lte: cleanupBefore },
       });
+      const withdrawals = await WithdrawalRequest.find({})
+        .sort({ createdAt: -1 })
+        .limit(300)
+        .lean();
+      res.json({ success: true, withdrawals });
+    } catch (error) {
+      console.error("Admin withdrawals fetch failed:", error);
+      res
+        .status(500)
+        .json({ success: false, message: "Could not load withdrawals." });
     }
+  },
+);
 
-    const updates = {
-      status: nextStatus,
-      reviewedAt: new Date(),
-      reviewedBy: "admin",
-      deniedReason: nextStatus === "denied" ? deniedReason : "",
-    };
-
-    const request = await UpgradeRequest.findByIdAndUpdate(
-      req.params.id,
-      { $set: updates },
-      { new: true },
-    ).lean();
-
-    if (!request) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Upgrade request not found." });
+app.get(
+  "/api/admin/payout-users",
+  adminRateLimit,
+  requireAdminApi,
+  async (_req, res) => {
+    try {
+      await syncUserActivityWeights();
+      const users = await User.find({})
+        .sort({ activityWeight: -1, lastLogin: -1, createdAt: -1 })
+        .limit(120)
+        .select(
+          "name email profilePicture isPro location provider lastLogin createdAt accountBalance activityWeight activityStats lastActivityWeightCalculatedAt",
+        )
+        .lean();
+      res.json({ success: true, users });
+    } catch (error) {
+      console.error("Admin payout users fetch failed:", error);
+      res
+        .status(500)
+        .json({ success: false, message: "Could not load payout users." });
     }
+  },
+);
 
-    if (nextStatus === "granted") {
-      await User.updateMany(
-        {
-          $or: [
-            request.userId ? { _id: request.userId } : null,
-            { email: request.email },
-          ].filter(Boolean),
-        },
-        { $set: { isPro: true } },
+app.post(
+  "/api/admin/users/:id/reward",
+  adminRateLimit,
+  requireAdminApi,
+  async (req, res) => {
+    try {
+      const amount = Number(req.body?.amount || 0);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Enter a valid reward amount." });
+      }
+      const user = await User.findById(req.params.id);
+      if (!user) {
+        return res
+          .status(404)
+          .json({ success: false, message: "User not found." });
+      }
+      user.accountBalance = Number(
+        (Number(user.accountBalance || 0) + amount).toFixed(2),
       );
+      await user.save();
       await createUserNotification({
-        userId: request.userId,
-        type: "premium-granted",
-        title: "Premium request approved",
-        message: "Your premium request was approved. Premium tools are now available on your account.",
-        targetType: "premium",
-        metadata: { requestId: request._id, status: nextStatus },
+        userId: user._id,
+        type: "wallet-credit",
+        title: `You've received $${amount.toFixed(2)} from MediaLab`,
+        message: "Your MediaLab wallet balance has been updated.",
+        targetType: "wallet",
+        metadata: { amount, reason: "admin-reward" },
       });
-    } else if (nextStatus === "denied") {
-      await User.updateMany(
-        {
-          $or: [
-            request.userId ? { _id: request.userId } : null,
-            { email: request.email },
-          ].filter(Boolean),
-        },
-        { $set: { isPro: false } },
-      );
-      await createUserNotification({
-        userId: request.userId,
-        type: "premium-denied",
-        title: "Premium request was unsuccessful",
-        message: deniedReason
-          ? `Your recent premium request was unsuccessful. ${deniedReason}`
-          : "Your recent premium request was unsuccessful.",
-        targetType: "premium",
-        metadata: {
-          requestId: request._id,
-          status: nextStatus,
-          deniedReason,
-        },
+
+      await createUsageLog({
+        user,
+        email: user.email,
+        name: user.name,
+        isPro: Boolean(user.isPro),
+        action: "admin-reward",
+        summary: `admin rewarded ${amount.toFixed(2)} to ${user.email}`,
+        source: "admin-payout",
+        metadata: { amount },
       });
+
+      res.json({ success: true, user });
+    } catch (error) {
+      console.error("Admin reward failed:", error);
+      res
+        .status(500)
+        .json({ success: false, message: "Could not reward this user." });
     }
+  },
+);
 
-    await createUsageLog({
-      email: request.email,
-      name: request.name,
-      isAnonymous: false,
-      isPro: nextStatus === "granted",
-      action: `premium-request-${nextStatus}`,
-      summary: `${nextStatus} premium request for ${request.requestedFeature}`,
-      source: "admin-premium-requests",
-      metadata: { requestId: request._id, status: nextStatus, deniedReason: updates.deniedReason || "" },
-    });
-    io.emit("admin:premium-request-updated", request);
+app.get(
+  "/api/admin/upgrade-requests",
+  adminRateLimit,
+  requireAdminApi,
+  async (_req, res) => {
+    try {
+      const requests = await UpgradeRequest.find({
+        status: { $in: ["pending", "reviewing", "received"] },
+      })
+        .sort({ createdAt: -1 })
+        .limit(300)
+        .lean();
+      res.json({ success: true, requests });
+    } catch (error) {
+      console.error("Admin upgrade request fetch failed:", error);
+      res
+        .status(500)
+        .json({ success: false, message: "Could not load upgrade requests." });
+    }
+  },
+);
 
-    res.json({ success: true, request });
-  } catch (error) {
-    console.error("Admin upgrade request update failed:", error);
-    res
-      .status(500)
-      .json({ success: false, message: "Could not update premium request." });
-  }
-});
-
-app.patch("/api/admin/withdrawals/:id", adminRateLimit, requireAdminApi, async (req, res) => {
-  try {
-    const nextStatus = String(req.body?.status || "").trim().toLowerCase();
-    if (!["processing", "paid", "failed"].includes(nextStatus)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid withdrawal status.",
+app.delete(
+  "/api/admin/usage-logs",
+  adminRateLimit,
+  requireAdminApi,
+  async (_req, res) => {
+    try {
+      await UsageLog.deleteMany({});
+      io.emit("admin:usage-log-cleared", {
+        action: "logs-cleared",
+        summary: "admin cleared usage logs",
+        source: "admin",
+        kind: "activity",
+        createdAt: new Date().toISOString(),
+        isAnonymous: true,
+        isPro: false,
+        email: "",
+        name: "admin",
       });
+      res.json({ success: true, message: "Usage logs cleared." });
+    } catch (error) {
+      console.error("Admin usage log clear failed:", error);
+      res
+        .status(500)
+        .json({ success: false, message: "Could not clear usage logs." });
     }
+  },
+);
 
-    const request = await WithdrawalRequest.findById(req.params.id);
-    if (!request) {
-      return res.status(404).json({ success: false, message: "Withdrawal request not found." });
+app.patch(
+  "/api/admin/feedbacks/:id",
+  adminRateLimit,
+  requireAdminApi,
+  async (req, res) => {
+    try {
+      const updates = {};
+      if (typeof req.body?.status === "string") {
+        updates.status = req.body.status === "completed" ? "completed" : "open";
+      }
+      if (typeof req.body?.hidden === "boolean") {
+        updates.hidden = req.body.hidden;
+      }
+
+      const feedback = await Feedback.findByIdAndUpdate(
+        req.params.id,
+        { $set: updates },
+        { new: true },
+      ).lean();
+
+      if (!feedback) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Feedback not found." });
+      }
+
+      res.json({ success: true, feedback });
+    } catch (error) {
+      console.error("Admin feedback update failed:", error);
+      res
+        .status(500)
+        .json({ success: false, message: "Could not update feedback." });
     }
+  },
+);
 
-    const previousStatus = request.status;
-    request.status = nextStatus;
-    request.reviewedAt = new Date();
-    request.updatedAt = new Date();
-    request.deniedReason =
-      nextStatus === "failed" ? String(req.body?.deniedReason || "").trim() : "";
-    request.metadata = {
-      ...(request.metadata || {}),
-      reviewedAt: new Date(),
-      deniedReason: request.deniedReason,
-    };
-    await request.save();
+app.delete(
+  "/api/admin/feedbacks/:id",
+  adminRateLimit,
+  requireAdminApi,
+  async (req, res) => {
+    try {
+      const feedback = await Feedback.findByIdAndDelete(req.params.id).lean();
 
-    if (previousStatus !== "failed" && nextStatus === "failed") {
-      const user = await User.findById(request.userId);
-      if (user) {
-        user.accountBalance = Number(
-          (Number(user.accountBalance || 0) + Number(request.amount || 0)).toFixed(2),
+      if (!feedback) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Feedback not found." });
+      }
+
+      res.json({ success: true, feedback });
+    } catch (error) {
+      console.error("Admin feedback delete failed:", error);
+      res
+        .status(500)
+        .json({ success: false, message: "Could not delete feedback." });
+    }
+  },
+);
+
+app.patch(
+  "/api/admin/upgrade-requests/:id",
+  adminRateLimit,
+  requireAdminApi,
+  async (req, res) => {
+    try {
+      const nextStatus = String(req.body?.status || "")
+        .trim()
+        .toLowerCase();
+      if (!["granted", "denied", "reviewing", "pending"].includes(nextStatus)) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Invalid request status." });
+      }
+
+      const deniedReason = String(req.body?.deniedReason || "").trim();
+      if (nextStatus === "denied" && deniedReason.length < 3) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Add a short reason so the user understands why the premium request was denied.",
+        });
+      }
+
+      const updates = {
+        status: nextStatus,
+        reviewedAt: new Date(),
+        reviewedBy: "admin",
+        deniedReason: nextStatus === "denied" ? deniedReason : "",
+      };
+
+      const request = await UpgradeRequest.findByIdAndUpdate(
+        req.params.id,
+        { $set: updates },
+        { new: true },
+      ).lean();
+
+      if (!request) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Upgrade request not found." });
+      }
+
+      if (nextStatus === "granted") {
+        await User.updateMany(
+          {
+            $or: [
+              request.userId ? { _id: request.userId } : null,
+              { email: request.email },
+            ].filter(Boolean),
+          },
+          { $set: { isPro: true } },
         );
-        await user.save();
         await createUserNotification({
-          userId: user._id,
-          type: "withdrawal-failed",
-          title: "Withdrawal was not approved",
-          message: request.deniedReason
-            ? `Reason: ${request.deniedReason}`
-            : "Please review your withdrawal details in your wallet.",
-          targetType: "wallet",
+          userId: request.userId,
+          type: "premium-granted",
+          title: "Premium request approved",
+          message:
+            "Your premium request was approved. Premium tools are now available on your account.",
+          targetType: "premium",
+          metadata: { requestId: request._id, status: nextStatus },
+        });
+      } else if (nextStatus === "denied") {
+        await User.updateMany(
+          {
+            $or: [
+              request.userId ? { _id: request.userId } : null,
+              { email: request.email },
+            ].filter(Boolean),
+          },
+          { $set: { isPro: false } },
+        );
+        await createUserNotification({
+          userId: request.userId,
+          type: "premium-denied",
+          title: "Premium request was unsuccessful",
+          message: deniedReason
+            ? `Your recent premium request was unsuccessful. ${deniedReason}`
+            : "Your recent premium request was unsuccessful.",
+          targetType: "premium",
           metadata: {
-            amount: Number(request.amount || 0),
+            requestId: request._id,
             status: nextStatus,
-            deniedReason: request.deniedReason || "",
+            deniedReason,
           },
         });
       }
-    }
-    if (nextStatus === "paid") {
-      await createUserNotification({
-        userId: request.userId,
-        type: "withdrawal-paid",
-        title: "Withdrawal approved",
-        message: `Your ${Number(request.amount || 0).toFixed(2)} payout has been marked as paid.`,
-        targetType: "wallet",
-        metadata: { amount: Number(request.amount || 0), status: nextStatus },
+
+      await createUsageLog({
+        email: request.email,
+        name: request.name,
+        isAnonymous: false,
+        isPro: nextStatus === "granted",
+        action: `premium-request-${nextStatus}`,
+        summary: `${nextStatus} premium request for ${request.requestedFeature}`,
+        source: "admin-premium-requests",
+        metadata: {
+          requestId: request._id,
+          status: nextStatus,
+          deniedReason: updates.deniedReason || "",
+        },
       });
-    } else if (nextStatus === "processing") {
-      await createUserNotification({
-        userId: request.userId,
-        type: "withdrawal-processing",
-        title: "Withdrawal is processing",
-        message: "Your payout request is being reviewed by MediaLab.",
-        targetType: "wallet",
-        metadata: { amount: Number(request.amount || 0), status: nextStatus },
+      io.emit("admin:premium-request-updated", request);
+
+      res.json({ success: true, request });
+    } catch (error) {
+      console.error("Admin upgrade request update failed:", error);
+      res
+        .status(500)
+        .json({ success: false, message: "Could not update premium request." });
+    }
+  },
+);
+
+app.patch(
+  "/api/admin/withdrawals/:id",
+  adminRateLimit,
+  requireAdminApi,
+  async (req, res) => {
+    try {
+      const nextStatus = String(req.body?.status || "")
+        .trim()
+        .toLowerCase();
+      if (!["processing", "paid", "failed"].includes(nextStatus)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid withdrawal status.",
+        });
+      }
+
+      const request = await WithdrawalRequest.findById(req.params.id);
+      if (!request) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Withdrawal request not found." });
+      }
+
+      const previousStatus = request.status;
+      request.status = nextStatus;
+      request.reviewedAt = new Date();
+      request.updatedAt = new Date();
+      request.deniedReason =
+        nextStatus === "failed"
+          ? String(req.body?.deniedReason || "").trim()
+          : "";
+      request.metadata = {
+        ...(request.metadata || {}),
+        reviewedAt: new Date(),
+        deniedReason: request.deniedReason,
+      };
+      await request.save();
+
+      if (previousStatus !== "failed" && nextStatus === "failed") {
+        const user = await User.findById(request.userId);
+        if (user) {
+          user.accountBalance = Number(
+            (
+              Number(user.accountBalance || 0) + Number(request.amount || 0)
+            ).toFixed(2),
+          );
+          await user.save();
+          await createUserNotification({
+            userId: user._id,
+            type: "withdrawal-failed",
+            title: "Withdrawal was not approved",
+            message: request.deniedReason
+              ? `Reason: ${request.deniedReason}`
+              : "Please review your withdrawal details in your wallet.",
+            targetType: "wallet",
+            metadata: {
+              amount: Number(request.amount || 0),
+              status: nextStatus,
+              deniedReason: request.deniedReason || "",
+            },
+          });
+        }
+      }
+      if (nextStatus === "paid") {
+        await createUserNotification({
+          userId: request.userId,
+          type: "withdrawal-paid",
+          title: "Withdrawal approved",
+          message: `Your ${Number(request.amount || 0).toFixed(2)} payout has been marked as paid.`,
+          targetType: "wallet",
+          metadata: { amount: Number(request.amount || 0), status: nextStatus },
+        });
+      } else if (nextStatus === "processing") {
+        await createUserNotification({
+          userId: request.userId,
+          type: "withdrawal-processing",
+          title: "Withdrawal is processing",
+          message: "Your payout request is being reviewed by MediaLab.",
+          targetType: "wallet",
+          metadata: { amount: Number(request.amount || 0), status: nextStatus },
+        });
+      }
+
+      await createUsageLog({
+        email: request.email,
+        name: request.name,
+        action: "withdrawal-admin-update",
+        summary: `marked withdrawal ${request._id} as ${nextStatus}`,
+        source: "admin",
+        metadata: { withdrawalRequestId: request._id, status: nextStatus },
+      });
+
+      io.emit("admin:withdrawal-updated", request.toObject());
+      return res.json({ success: true, request });
+    } catch (error) {
+      console.error("Admin withdrawal update failed:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Could not update this withdrawal right now.",
       });
     }
+  },
+);
 
-    await createUsageLog({
-      email: request.email,
-      name: request.name,
-      action: "withdrawal-admin-update",
-      summary: `marked withdrawal ${request._id} as ${nextStatus}`,
-      source: "admin",
-      metadata: { withdrawalRequestId: request._id, status: nextStatus },
-    });
-
-    io.emit("admin:withdrawal-updated", request.toObject());
-    return res.json({ success: true, request });
-  } catch (error) {
-    console.error("Admin withdrawal update failed:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Could not update this withdrawal right now.",
-    });
-  }
-});
-
-app.get("/api/admin/analytics", adminRateLimit, requireAdminApi, async (_req, res) => {
-  try {
-    const last30Days = new Date();
-    last30Days.setDate(last30Days.getDate() - 30);
-    const [
-      totalUsers,
-      proUsers,
-      totalFeedbacks,
-      openFeedbacks,
-      completedFeedbacks,
-      hiddenFeedbacks,
-      totalUpgradeRequests,
-      pendingUpgradeRequests,
-      averageRatingRow,
-      recentUsers,
-      premiumRequests,
-      totalUsageLogs,
-      totalDownloads,
-      totalWithdrawals,
-      pendingWithdrawals,
-      paidWithdrawals,
-      recentErrors,
-      newUsers30d,
-      newProUsers30d,
-      newFeedbacks30d,
-      newUsageLogs30d,
-      newDownloads30d,
-      newWithdrawals30d,
-      newErrors30d,
-      newUpgradeRequests30d,
-      activeUpgradeRequests30d,
-    ] = await Promise.all([
-      User.countDocuments(),
-      User.countDocuments({ isPro: true }),
-      Feedback.countDocuments(),
-      Feedback.countDocuments({ status: "open", hidden: false }),
-      Feedback.countDocuments({ status: "completed" }),
-      Feedback.countDocuments({ hidden: true }),
-      UpgradeRequest.countDocuments({
-        status: { $in: ["pending", "reviewing", "received"] },
-      }),
-      UpgradeRequest.countDocuments({
-        status: { $in: ["pending", "reviewing", "received"] },
-      }),
-      Feedback.aggregate([{ $group: { _id: null, avgRating: { $avg: "$rating" } } }]),
-      User.find({})
-        .sort({ createdAt: -1 })
-        .limit(8)
-        .select("name email isPro createdAt profilePicture lastLogin location provider")
-        .lean(),
-      UpgradeRequest.find({})
-        .sort({ createdAt: -1 })
-        .limit(30)
-        .lean(),
-      UsageLog.countDocuments(),
-      Download.countDocuments(),
-      WithdrawalRequest.countDocuments(),
-      WithdrawalRequest.countDocuments({ status: { $in: ["pending", "processing"] } }),
-      WithdrawalRequest.countDocuments({ status: "paid" }),
-      UsageLog.countDocuments({ kind: "error" }),
-      User.countDocuments({ createdAt: { $gte: last30Days } }),
-      User.countDocuments({ isPro: true, createdAt: { $gte: last30Days } }),
-      Feedback.countDocuments({ createdAt: { $gte: last30Days } }),
-      UsageLog.countDocuments({ createdAt: { $gte: last30Days } }),
-      Download.countDocuments({ createdAt: { $gte: last30Days } }),
-      WithdrawalRequest.countDocuments({ createdAt: { $gte: last30Days } }),
-      UsageLog.countDocuments({ kind: "error", createdAt: { $gte: last30Days } }),
-      UpgradeRequest.countDocuments({ createdAt: { $gte: last30Days } }),
-      UpgradeRequest.countDocuments({
-        createdAt: { $gte: last30Days },
-        status: { $in: ["pending", "reviewing", "received"] },
-      }),
-    ]);
-
-    res.json({
-      success: true,
-      analytics: {
+app.get(
+  "/api/admin/analytics",
+  adminRateLimit,
+  requireAdminApi,
+  async (_req, res) => {
+    try {
+      const last30Days = new Date();
+      last30Days.setDate(last30Days.getDate() - 30);
+      const [
         totalUsers,
         proUsers,
         totalFeedbacks,
@@ -9628,115 +11264,214 @@ app.get("/api/admin/analytics", adminRateLimit, requireAdminApi, async (_req, re
         hiddenFeedbacks,
         totalUpgradeRequests,
         pendingUpgradeRequests,
+        averageRatingRow,
+        recentUsers,
+        premiumRequests,
         totalUsageLogs,
         totalDownloads,
         totalWithdrawals,
         pendingWithdrawals,
         paidWithdrawals,
         recentErrors,
-        last30Days: {
-          newUsers: newUsers30d,
-          newProUsers: newProUsers30d,
-          feedbacks: newFeedbacks30d,
-          usageLogs: newUsageLogs30d,
-          downloads: newDownloads30d,
-          withdrawals: newWithdrawals30d,
-          errors: newErrors30d,
-          upgradeRequests: activeUpgradeRequests30d,
-        },
-        averageRating: averageRatingRow?.[0]?.avgRating
-          ? Number(averageRatingRow[0].avgRating.toFixed(1))
-          : 0,
-        recentUsers,
-        premiumRequests,
-      },
-    });
-  } catch (error) {
-    console.error("Admin analytics fetch failed:", error);
-    res.status(500).json({ success: false, message: "Could not load analytics." });
-  }
-});
+        newUsers30d,
+        newProUsers30d,
+        newFeedbacks30d,
+        newUsageLogs30d,
+        newDownloads30d,
+        newWithdrawals30d,
+        newErrors30d,
+        newUpgradeRequests30d,
+        activeUpgradeRequests30d,
+      ] = await Promise.all([
+        User.countDocuments(),
+        User.countDocuments({ isPro: true }),
+        Feedback.countDocuments(),
+        Feedback.countDocuments({ status: "open", hidden: false }),
+        Feedback.countDocuments({ status: "completed" }),
+        Feedback.countDocuments({ hidden: true }),
+        UpgradeRequest.countDocuments({
+          status: { $in: ["pending", "reviewing", "received"] },
+        }),
+        UpgradeRequest.countDocuments({
+          status: { $in: ["pending", "reviewing", "received"] },
+        }),
+        Feedback.aggregate([
+          { $group: { _id: null, avgRating: { $avg: "$rating" } } },
+        ]),
+        User.find({})
+          .sort({ createdAt: -1 })
+          .limit(8)
+          .select(
+            "name email isPro createdAt profilePicture lastLogin location provider",
+          )
+          .lean(),
+        UpgradeRequest.find({}).sort({ createdAt: -1 }).limit(30).lean(),
+        UsageLog.countDocuments(),
+        Download.countDocuments(),
+        WithdrawalRequest.countDocuments(),
+        WithdrawalRequest.countDocuments({
+          status: { $in: ["pending", "processing"] },
+        }),
+        WithdrawalRequest.countDocuments({ status: "paid" }),
+        UsageLog.countDocuments({ kind: "error" }),
+        User.countDocuments({ createdAt: { $gte: last30Days } }),
+        User.countDocuments({ isPro: true, createdAt: { $gte: last30Days } }),
+        Feedback.countDocuments({ createdAt: { $gte: last30Days } }),
+        UsageLog.countDocuments({ createdAt: { $gte: last30Days } }),
+        Download.countDocuments({ createdAt: { $gte: last30Days } }),
+        WithdrawalRequest.countDocuments({ createdAt: { $gte: last30Days } }),
+        UsageLog.countDocuments({
+          kind: "error",
+          createdAt: { $gte: last30Days },
+        }),
+        UpgradeRequest.countDocuments({ createdAt: { $gte: last30Days } }),
+        UpgradeRequest.countDocuments({
+          createdAt: { $gte: last30Days },
+          status: { $in: ["pending", "reviewing", "received"] },
+        }),
+      ]);
 
-app.get("/api/admin/ai-usage", adminRateLimit, requireAdminApi, async (_req, res) => {
-  try {
-    const now = new Date();
-    const last24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const devUser = await User.findOne({ email: ADMIN_EMAIL })
-      .select("email name isPro aiQuota")
-      .lean();
-    const devQuota = devUser?.aiQuota || {};
-    const devDailyLimit = Number(devQuota.dailyLimit ?? 10);
-    const devUsedToday = Number(devQuota.usedToday ?? 0);
-    const devLastUsed = devQuota.lastUsed ? new Date(devQuota.lastUsed) : null;
-    const sameDay =
-      devLastUsed &&
-      devLastUsed.getFullYear() === now.getFullYear() &&
-      devLastUsed.getMonth() === now.getMonth() &&
-      devLastUsed.getDate() === now.getDate();
-    const effectiveUsedToday = sameDay ? devUsedToday : 0;
-    const isUnlimited = Boolean(devUser?.isPro) || String(devUser?.email || "") === ADMIN_EMAIL;
-    const usagePercent = isUnlimited
-      ? 0
-      : Math.max(0, Math.min(100, (effectiveUsedToday / Math.max(1, devDailyLimit)) * 100));
-    const cooldownEndsAt = new Date(now);
-    cooldownEndsAt.setHours(24, 0, 0, 0);
-    const cooldownMs = !isUnlimited && effectiveUsedToday >= devDailyLimit
-      ? Math.max(0, cooldownEndsAt.getTime() - now.getTime())
-      : 0;
-    const logs = await UsageLog.find({
-      action: { $in: ["ai-chat-edit", "ai-autofix"] },
-      createdAt: { $gte: last24h },
-    })
-      .sort({ createdAt: -1 })
-      .select("action createdAt metadata")
-      .lean();
-    const modelUsageMap = new Map();
-    logs.forEach((item) => {
-      const modelId = String(item?.metadata?.modelUsed || "").trim() || "unknown";
-      modelUsageMap.set(modelId, (modelUsageMap.get(modelId) || 0) + 1);
-    });
-    const totalRuns = logs.length;
-    const models = await AIModel.find({})
-      .sort({ priority: 1, modelId: 1 })
-      .select("modelId provider priority isActive status lastTested")
-      .lean();
-    const modelStats = models.map((model) => {
-      const runs = Number(modelUsageMap.get(model.modelId) || 0);
-      const runPercent = totalRuns ? Number(((runs / totalRuns) * 100).toFixed(1)) : 0;
-      return {
-        ...model,
-        runs24h: runs,
-        runPercent24h: runPercent,
-      };
-    });
-    res.json({
-      success: true,
-      usage: {
-        user: {
-          email: devUser?.email || ADMIN_EMAIL,
-          name: devUser?.name || "Developer",
-          isPro: Boolean(devUser?.isPro),
-          isUnlimited,
-          usedToday: effectiveUsedToday,
-          dailyLimit: devDailyLimit,
-          usagePercent: Number(usagePercent.toFixed(1)),
-          cooldownMs,
-          cooldownEndsAt: cooldownMs ? cooldownEndsAt.toISOString() : null,
+      res.json({
+        success: true,
+        analytics: {
+          totalUsers,
+          proUsers,
+          totalFeedbacks,
+          openFeedbacks,
+          completedFeedbacks,
+          hiddenFeedbacks,
+          totalUpgradeRequests,
+          pendingUpgradeRequests,
+          totalUsageLogs,
+          totalDownloads,
+          totalWithdrawals,
+          pendingWithdrawals,
+          paidWithdrawals,
+          recentErrors,
+          last30Days: {
+            newUsers: newUsers30d,
+            newProUsers: newProUsers30d,
+            feedbacks: newFeedbacks30d,
+            usageLogs: newUsageLogs30d,
+            downloads: newDownloads30d,
+            withdrawals: newWithdrawals30d,
+            errors: newErrors30d,
+            upgradeRequests: activeUpgradeRequests30d,
+          },
+          averageRating: averageRatingRow?.[0]?.avgRating
+            ? Number(averageRatingRow[0].avgRating.toFixed(1))
+            : 0,
+          recentUsers,
+          premiumRequests,
         },
-        totals: {
-          runs24h: totalRuns,
+      });
+    } catch (error) {
+      console.error("Admin analytics fetch failed:", error);
+      res
+        .status(500)
+        .json({ success: false, message: "Could not load analytics." });
+    }
+  },
+);
+
+app.get(
+  "/api/admin/ai-usage",
+  adminRateLimit,
+  requireAdminApi,
+  async (_req, res) => {
+    try {
+      const now = new Date();
+      const last24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const devUser = await User.findOne({ email: ADMIN_EMAIL })
+        .select("email name isPro aiQuota")
+        .lean();
+      const devQuota = devUser?.aiQuota || {};
+      const devDailyLimit = Number(devQuota.dailyLimit ?? 10);
+      const devUsedToday = Number(devQuota.usedToday ?? 0);
+      const devLastUsed = devQuota.lastUsed
+        ? new Date(devQuota.lastUsed)
+        : null;
+      const sameDay =
+        devLastUsed &&
+        devLastUsed.getFullYear() === now.getFullYear() &&
+        devLastUsed.getMonth() === now.getMonth() &&
+        devLastUsed.getDate() === now.getDate();
+      const effectiveUsedToday = sameDay ? devUsedToday : 0;
+      const isUnlimited =
+        Boolean(devUser?.isPro) || String(devUser?.email || "") === ADMIN_EMAIL;
+      const usagePercent = isUnlimited
+        ? 0
+        : Math.max(
+            0,
+            Math.min(
+              100,
+              (effectiveUsedToday / Math.max(1, devDailyLimit)) * 100,
+            ),
+          );
+      const cooldownEndsAt = new Date(now);
+      cooldownEndsAt.setHours(24, 0, 0, 0);
+      const cooldownMs =
+        !isUnlimited && effectiveUsedToday >= devDailyLimit
+          ? Math.max(0, cooldownEndsAt.getTime() - now.getTime())
+          : 0;
+      const logs = await UsageLog.find({
+        action: { $in: ["ai-chat-edit", "ai-autofix"] },
+        createdAt: { $gte: last24h },
+      })
+        .sort({ createdAt: -1 })
+        .select("action createdAt metadata")
+        .lean();
+      const modelUsageMap = new Map();
+      logs.forEach((item) => {
+        const modelId =
+          String(item?.metadata?.modelUsed || "").trim() || "unknown";
+        modelUsageMap.set(modelId, (modelUsageMap.get(modelId) || 0) + 1);
+      });
+      const totalRuns = logs.length;
+      const models = await AIModel.find({})
+        .sort({ priority: 1, modelId: 1 })
+        .select("modelId provider priority isActive status lastTested")
+        .lean();
+      const modelStats = models.map((model) => {
+        const runs = Number(modelUsageMap.get(model.modelId) || 0);
+        const runPercent = totalRuns
+          ? Number(((runs / totalRuns) * 100).toFixed(1))
+          : 0;
+        return {
+          ...model,
+          runs24h: runs,
+          runPercent24h: runPercent,
+        };
+      });
+      res.json({
+        success: true,
+        usage: {
+          user: {
+            email: devUser?.email || ADMIN_EMAIL,
+            name: devUser?.name || "Developer",
+            isPro: Boolean(devUser?.isPro),
+            isUnlimited,
+            usedToday: effectiveUsedToday,
+            dailyLimit: devDailyLimit,
+            usagePercent: Number(usagePercent.toFixed(1)),
+            cooldownMs,
+            cooldownEndsAt: cooldownMs ? cooldownEndsAt.toISOString() : null,
+          },
+          totals: {
+            runs24h: totalRuns,
+          },
+          models: modelStats,
         },
-        models: modelStats,
-      },
-    });
-  } catch (error) {
-    console.error("Admin AI usage fetch failed:", error);
-    res.status(500).json({
-      success: false,
-      message: "Could not load AI usage data.",
-    });
-  }
-});
+      });
+    } catch (error) {
+      console.error("Admin AI usage fetch failed:", error);
+      res.status(500).json({
+        success: false,
+        message: "Could not load AI usage data.",
+      });
+    }
+  },
+);
 
 io.on("connection", (socket) => {
   console.log(`🔌 Client connected: ${socket.id}`);
@@ -9755,7 +11490,9 @@ io.on("connection", (socket) => {
       const roomId = normalizeCollaborationRoomId(payload.roomId);
       if (!roomId) return;
       const requestedHost = Boolean(payload.isHost);
-      const providedHostToken = normalizeCollaborationHostToken(payload.hostToken);
+      const providedHostToken = normalizeCollaborationHostToken(
+        payload.hostToken,
+      );
       const endedRoom = getEndedCollaborationRoom(roomId);
       if (!requestedHost && endedRoom) {
         socket.emit("collaboration:join-invalid", {
@@ -9795,16 +11532,25 @@ io.on("connection", (socket) => {
       if (!room) return;
       removeSocketFromCollaborationRoom(socket.id);
       socket.join(`${COLLAB_ROOM_PREFIX}${roomId}`);
-      const hasHost = Boolean(room.hostSocketId && room.users.has(room.hostSocketId));
+      const hasHost = Boolean(
+        room.hostSocketId && room.users.has(room.hostSocketId),
+      );
       const hostTokenMatches =
         Boolean(providedHostToken) &&
-        providedHostToken === String(meetingRecord?.hostToken || room.hostToken || "");
+        providedHostToken ===
+          String(meetingRecord?.hostToken || room.hostToken || "");
       const isHost = requestedHost && hostTokenMatches;
       const entry = {
         socketId: socket.id,
         userId: String(payload.userId || "").trim(),
-        displayName: String(payload.displayName || "Guest").trim().slice(0, 80) || "Guest",
-        color: String(payload.color || "#22d3ee").trim().slice(0, 24) || "#22d3ee",
+        displayName:
+          String(payload.displayName || "Guest")
+            .trim()
+            .slice(0, 80) || "Guest",
+        color:
+          String(payload.color || "#22d3ee")
+            .trim()
+            .slice(0, 24) || "#22d3ee",
         isGuest: Boolean(payload.isGuest),
         isHost,
         canEdit: isHost ? true : Boolean(payload.canEdit) && !requestedHost,
@@ -9897,7 +11643,10 @@ io.on("connection", (socket) => {
       user: serializeCollaborationUser(user),
       requestedAt: Date.now(),
     };
-    io.to(hostSocketId).emit("collaboration:permission-request", requestPayload);
+    io.to(hostSocketId).emit(
+      "collaboration:permission-request",
+      requestPayload,
+    );
     io.to(hostSocketId).emit("request-to-join", requestPayload);
     emitCollaborationRoomState(roomId);
   });
@@ -9909,7 +11658,9 @@ io.on("connection", (socket) => {
     if (!room || !user || user.isHost) return;
     const hostSocketId = String(room.hostSocketId || "").trim();
     if (!hostSocketId || !room.users.has(hostSocketId)) return;
-    const requestKind = String(payload.requestKind || "").trim().toLowerCase();
+    const requestKind = String(payload.requestKind || "")
+      .trim()
+      .toLowerCase();
     if (!["audio", "video", "manipulation"].includes(requestKind)) return;
     user.awaitingApproval = true;
     user.pendingRequestKind = requestKind;
@@ -9920,7 +11671,10 @@ io.on("connection", (socket) => {
       user: serializeCollaborationUser(user),
       requestedAt: Date.now(),
     };
-    io.to(hostSocketId).emit("collaboration:permission-request", requestPayload);
+    io.to(hostSocketId).emit(
+      "collaboration:permission-request",
+      requestPayload,
+    );
     emitCollaborationRoomState(roomId);
   });
   socket.on("collaboration:respond-request", (payload = {}) => {
@@ -9932,10 +11686,21 @@ io.on("connection", (socket) => {
     const targetSocketId = String(payload.targetSocketId || "").trim();
     const target = room.users.get(targetSocketId);
     if (!target || target.isHost) return;
-    const requestKind = String(payload.requestKind || "").trim().toLowerCase();
-    const allowedKinds = ["audio", "video", "manipulation", "join-audio", "join-video"];
+    const requestKind = String(payload.requestKind || "")
+      .trim()
+      .toLowerCase();
+    const allowedKinds = [
+      "audio",
+      "video",
+      "manipulation",
+      "join-audio",
+      "join-video",
+    ];
     if (!allowedKinds.includes(requestKind)) return;
-    const approved = String(payload.decision || "").trim().toLowerCase() === "allow";
+    const approved =
+      String(payload.decision || "")
+        .trim()
+        .toLowerCase() === "allow";
     target.awaitingApproval = false;
     target.pendingRequestKind = "";
     if (approved) {
@@ -9980,7 +11745,9 @@ io.on("connection", (socket) => {
     const actingUser = room?.users?.get(socket.id);
     if (!room || !actingUser?.isHost) return;
     const targetSocketId = String(payload.targetSocketId || "").trim();
-    const capability = String(payload.capability || "").trim().toLowerCase();
+    const capability = String(payload.capability || "")
+      .trim()
+      .toLowerCase();
     const target = room.users.get(targetSocketId);
     if (!target || target.isHost) return;
     if (capability === "manipulation") {
@@ -10030,7 +11797,9 @@ io.on("connection", (socket) => {
     io.to(targetSocketId).emit("collaboration:webrtc-signal", {
       roomId,
       sourceSocketId: socket.id,
-      signalType: String(payload.signalType || "").trim().slice(0, 40),
+      signalType: String(payload.signalType || "")
+        .trim()
+        .slice(0, 40),
       data: payload.data || null,
       user: serializeCollaborationUser(user),
     });
@@ -10041,13 +11810,15 @@ io.on("connection", (socket) => {
     const room = collaborationRooms.get(roomId);
     const user = room?.users?.get(socket.id);
     if (!room || !user) return;
-    socket.to(`${COLLAB_ROOM_PREFIX}${roomId}`).emit("collaboration:cursor-update", {
-      roomId,
-      user: serializeCollaborationUser(user),
-      x: Number(payload.x || 0),
-      y: Number(payload.y || 0),
-      updatedAt: Date.now(),
-    });
+    socket
+      .to(`${COLLAB_ROOM_PREFIX}${roomId}`)
+      .emit("collaboration:cursor-update", {
+        roomId,
+        user: serializeCollaborationUser(user),
+        x: Number(payload.x || 0),
+        y: Number(payload.y || 0),
+        updatedAt: Date.now(),
+      });
   });
   socket.on("collaboration:content-sync", (payload = {}) => {
     const roomId = normalizeCollaborationRoomId(payload.roomId);
@@ -10056,21 +11827,27 @@ io.on("connection", (socket) => {
     const user = room?.users?.get(socket.id);
     if (!room || !user || (!user.canEdit && !user.isHost)) return;
     const snapshot = {
-      projectName: String(payload.projectName || "").trim().slice(0, 140),
+      projectName: String(payload.projectName || "")
+        .trim()
+        .slice(0, 140),
       html: String(payload.html || ""),
       pageBackground: String(payload.pageBackground || "").trim(),
       code: String(payload.code || ""),
-      activePath: String(payload.activePath || "index.html").trim().slice(0, 200),
+      activePath: String(payload.activePath || "index.html")
+        .trim()
+        .slice(0, 200),
       codeMode: Boolean(payload.codeMode),
       updatedBy: user.displayName,
       updatedAt: Date.now(),
     };
     room.latestSnapshot = snapshot;
-    socket.to(`${COLLAB_ROOM_PREFIX}${roomId}`).emit("collaboration:content-sync", {
-      roomId,
-      ...snapshot,
-      user: serializeCollaborationUser(user),
-    });
+    socket
+      .to(`${COLLAB_ROOM_PREFIX}${roomId}`)
+      .emit("collaboration:content-sync", {
+        roomId,
+        ...snapshot,
+        user: serializeCollaborationUser(user),
+      });
   });
   socket.on("disconnect", () => {
     removeSocketFromCollaborationRoom(socket.id);

@@ -28179,11 +28179,15 @@ console.log("Triggered ${eventName}", { source, event });
         const snap = (value) =>
           builderSnapEnabled
             ? Math.round(value / BUILDER_GRID_SIZE) * BUILDER_GRID_SIZE
-            : value;
+            : Math.round(value);
         const clamp = (value, min, max) =>
           Math.min(Math.max(value, min), Math.max(min, max));
         let activeLayoutPreview = null;
+        let dragRafId = null;
         const onPointerMove = (ev) => {
+          if (dragRafId) return;
+          dragRafId = requestAnimationFrame(() => {
+            dragRafId = null;
           if (isResizer) {
             // Resize logic unchanged
             clearLayoutDropGuides();
@@ -28297,10 +28301,12 @@ console.log("Triggered ${eventName}", { source, event });
               el.style.top = clampedTop + "px";
             }
           }
-          showBuilderGuides(el.offsetLeft, el.offsetTop);
-          scheduleCollaborationContentSync("move", 60);
+          showBuilderGuides(Math.round(el.offsetLeft), Math.round(el.offsetTop));
+          });
         };
+          scheduleCollaborationContentSync("move", 60);
         const onPointerUp = () => {
+          if (dragRafId) cancelAnimationFrame(dragRafId);
           if (activeLayoutPreview && !isResizer && !movingSelection) {
             attachElementToLayoutFlow(el, activeLayoutPreview);
           }
@@ -32140,7 +32146,7 @@ ${interactionBlock}
           try {
             setAiAgentStage("normalizing");
             const normalizePrompt =
-              "Convert this HTML into MediaLab canvas-ready structure. Ensure key visible blocks are wrapped as absolute .canvas-element nodes (or ml-container/ml-content compatible wrappers) with preserved layout, readable spacing, and valid inline-safe styles. Return ONLY HTML code, no markdown.";
+              "Convert this HTML into MediaLab canvas-ready structure. Ensure key visible blocks are wrapped as absolute .canvas-element nodes (or ml-container/ml-content compatible wrappers) with preserved layout, readable spacing, and valid inline-safe styles. CRITICAL: Every canvas-element must have explicit style attributes with left, top, width, height in pixels (e.g., style='left: 10px; top: 20px; width: 100px; height: 50px; position: absolute;'). Return ONLY HTML code, no markdown.";
             const normalizeRes = await fetch("/api/ai/chat-edit", {
               method: "POST",
               credentials: "include",
@@ -32158,9 +32164,10 @@ ${interactionBlock}
               String(normalizeData.updatedCode || "").trim()
             ) {
               const normalizedHtml = String(normalizeData.updatedCode || "");
-              updateBuilderFileContent(activePath, normalizedHtml);
+              const refinedHtml = ensureCanvasElementPositions(normalizedHtml);
+              updateBuilderFileContent(activePath, refinedHtml);
               if (editor) {
-                editor.value = normalizedHtml;
+                editor.value = refinedHtml;
                 handleBuilderCodeInput();
               }
               tryApplyCodeModeToCanvas({ silent: true });
@@ -32173,6 +32180,41 @@ ${interactionBlock}
         builderCodeMode = false;
         updateBuilderUI();
         return { applied: true, normalized: false };
+      }
+      function ensureCanvasElementPositions(html) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        const elements = doc.querySelectorAll('.canvas-element');
+        elements.forEach((el) => {
+          const style = el.getAttribute('style') || '';
+          const hasLeft = /left\s*:/.test(style);
+          const hasTop = /top\s*:/.test(style);
+          const hasWidth = /width\s*:/.test(style);
+          const hasHeight = /height\s*:/.test(style);
+          const hasPosition = /position\s*:/.test(style);
+          let newStyle = style;
+          if (!hasPosition) {
+            newStyle = 'position: absolute; ' + newStyle;
+          }
+          if (!hasLeft) {
+            const rect = el.getBoundingClientRect();
+            newStyle = newStyle + `; left: ${Math.round(rect.left || 0)}px`;
+          }
+          if (!hasTop) {
+            const rect = el.getBoundingClientRect();
+            newStyle = newStyle + `; top: ${Math.round(rect.top || 0)}px`;
+          }
+          if (!hasWidth) {
+            const rect = el.getBoundingClientRect();
+            newStyle = newStyle + `; width: ${Math.round(rect.width || 100)}px`;
+          }
+          if (!hasHeight) {
+            const rect = el.getBoundingClientRect();
+            newStyle = newStyle + `; height: ${Math.round(rect.height || 50)}px`;
+          }
+          el.setAttribute('style', newStyle.replace(/;\s*;/g, ';').trim());
+        });
+        return new XMLSerializer().serializeToString(doc).replace(/^[^<]*<body[^>]*>|<\/body>.*$/gi, '');
       }
       function stripAgentActionBlocks(responseText = "") {
         return String(responseText || "")
@@ -32669,8 +32711,13 @@ ${interactionBlock}
             method: "POST",
             credentials: "include",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userInput: prompt, currentCanvasCode: currentCode })
-          }).then(r => r.json()).catch(() => ({ success: false }));
+            body: JSON.stringify({
+              userInput: prompt,
+              currentCanvasCode: currentCode,
+            }),
+          })
+            .then((r) => r.json())
+            .catch(() => ({ success: false }));
           if (!managerResponse?.success) {
             throw new Error("Manager AI failed to analyze input");
           }
@@ -32690,11 +32737,15 @@ ${interactionBlock}
             } else {
               aiChatMessages.push({
                 role: "assistant",
-                text: visibleReply || "Ready. Tell me what you want to build or fix next.",
+                text:
+                  visibleReply ||
+                  "Ready. Tell me what you want to build or fix next.",
               });
             }
             setAiAgentStage("implementing");
-            const syncResult = await forceImplementAiCanvasSync({ allowNormalizer: true });
+            const syncResult = await forceImplementAiCanvasSync({
+              allowNormalizer: true,
+            });
             if (syncResult?.normalized) {
               aiChatMessages.push({
                 role: "assistant",
@@ -32707,7 +32758,9 @@ ${interactionBlock}
             const visibleResponse = stripAgentActionBlocks(chatResponse);
             aiChatMessages.push({
               role: "assistant",
-              text: visibleResponse || "I'm here to help! What would you like to do?",
+              text:
+                visibleResponse ||
+                "I'm here to help! What would you like to do?",
             });
           }
           setAiAgentStage("done");
@@ -32952,7 +33005,7 @@ ${interactionBlock}
           .join("");
         return `
         ${handles}
-        <div class="absolute -top-10 left-0 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-all z-[60]">
+        <div class="absolute -top-7 left-0 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-all z-[60]">
             <div class="drag-handle w-7 h-7 bg-gray-950 text-white rounded-lg border border-white/10 shadow-2xl flex items-center justify-center cursor-move pointer-events-auto"><i class="fas fa-arrows-alt text-[10px]"></i></div>
             <button onclick="openSmartInspector('${type}', this.closest('.canvas-element'))" class="w-7 h-7 bg-gray-950 text-cyan-400 rounded-lg border border-white/10 flex items-center justify-center pointer-events-auto"><i class="fas fa-sliders-h text-[10px]"></i></button>
             <button onclick="handleBuilderDeleteAction(this.closest('.canvas-element'))" class="w-7 h-7 bg-gray-950 text-red-500 rounded-lg border border-white/10 flex items-center justify-center pointer-events-auto"><i class="fas fa-trash-alt text-[10px]"></i></button>
