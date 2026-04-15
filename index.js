@@ -3853,12 +3853,10 @@ app.get("/api/referrals/status", async (req, res) => {
     });
   } catch (error) {
     console.error("Referral status failed:", error);
-    return res
-      .status(500)
-      .json({
-        success: false,
-        message: "Could not load referral info right now.",
-      });
+    return res.status(500).json({
+      success: false,
+      message: "Could not load referral info right now.",
+    });
   }
 });
 
@@ -3883,12 +3881,10 @@ app.post("/api/referrals/claim", async (req, res) => {
     }
     await ensureUserReferralCode(user);
     if (String(user.referralCode || "") === referralCode) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "You cannot use your own referral link.",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "You cannot use your own referral link.",
+      });
     }
     if (String(user.referredByCode || "").trim()) {
       return res.json({
@@ -3972,12 +3968,10 @@ app.post("/api/referrals/claim", async (req, res) => {
     });
   } catch (error) {
     console.error("Referral claim failed:", error);
-    return res
-      .status(500)
-      .json({
-        success: false,
-        message: "Could not save referral link right now.",
-      });
+    return res.status(500).json({
+      success: false,
+      message: "Could not save referral link right now.",
+    });
   }
 });
 
@@ -4084,12 +4078,10 @@ app.post(
         .trim()
         .toLowerCase();
       if (!message) {
-        return res
-          .status(400)
-          .json({
-            success: false,
-            message: "Notification message is required.",
-          });
+        return res.status(400).json({
+          success: false,
+          message: "Notification message is required.",
+        });
       }
       if (mode === "individual") {
         if (!email) {
@@ -4099,12 +4091,10 @@ app.post(
         }
         const user = await User.findOne({ email });
         if (!user) {
-          return res
-            .status(404)
-            .json({
-              success: false,
-              message: "User not found for that email.",
-            });
+          return res.status(404).json({
+            success: false,
+            message: "User not found for that email.",
+          });
         }
         const renderedMessage = renderAdminNotificationTemplate(message, user);
         const notification = await createUserNotification({
@@ -4120,12 +4110,10 @@ app.post(
           metadata: { scope: "individual", email, templateSource: message },
         });
         if (!notification) {
-          return res
-            .status(500)
-            .json({
-              success: false,
-              message: "Could not send this notification right now.",
-            });
+          return res.status(500).json({
+            success: false,
+            message: "Could not send this notification right now.",
+          });
         }
         return res.json({
           success: true,
@@ -4153,12 +4141,10 @@ app.post(
         if (notification) notifications.push(notification);
       }
       if (!notifications.length) {
-        return res
-          .status(500)
-          .json({
-            success: false,
-            message: "Could not send notifications right now.",
-          });
+        return res.status(500).json({
+          success: false,
+          message: "Could not send notifications right now.",
+        });
       }
       return res.json({
         success: true,
@@ -4583,21 +4569,17 @@ app.post("/api/ai/workspace-fetch", async (req, res) => {
         .json({ success: false, message: "Path is required." });
     }
     if (!hasPath) {
-      return res
-        .status(404)
-        .json({
-          success: false,
-          message: "File not found in current workspace snapshot.",
-        });
+      return res.status(404).json({
+        success: false,
+        message: "File not found in current workspace snapshot.",
+      });
     }
     return res.json({ success: true, path, content });
   } catch (error) {
-    return res
-      .status(500)
-      .json({
-        success: false,
-        message: error.message || "Could not fetch workspace file.",
-      });
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Could not fetch workspace file.",
+    });
   }
 });
 
@@ -4869,7 +4851,7 @@ app.post("/api/ai/autofix", async (req, res) => {
                 {
                   role: "system",
                   content:
-                    "You are the MediaLab UI Surgeon - expert at transforming canvas code into production-perfect HTML. Your mission:\n\n1. CODE QUALITY: Fix all HTML structure issues, validate semantics, eliminate dead code.\n2. RESPONSIVE DESIGN: Ensure mobile-first approach with proper media queries. Use Tailwind responsive prefixes (sm:, md:, lg:, xl:).\n3. VISUAL ALIGNMENT: Fix overlapping elements, z-index conflicts, spacing misalignments. Ensure precise pixel perfection.\n4. CSS OPTIMIZATION: Consolidate classes, remove duplicates, modernize selectors. Prioritize Tailwind utilities.\n5. PERFORMANCE: Minimize CSS/JS, optimize load time. Remove inline bloat.\n6. ACCESSIBILITY: Ensure ARIA labels, semantic HTML5 tags, proper contrast ratios.\n7. PRESERVATION: Keep ALL 'ml-container' and 'ml-content' IDs - the builder depends on them. Preserve all data-* attributes.\n\nReturn ONLY valid, minified HTML with no markdown, backticks, or code blocks. No explanations. Pure code ready to deploy.",
+                    "You are the MediaLab Canvas Perfectionist - expert at forming flawless canvas objects. Your mission:\n\n1. PIXEL-PERFECT POSITIONING: Every canvas element MUST have inline style='position: absolute; left: Npx; top: Npx; width: Npx; height: Npx; '. NEVER use percentages, auto, or relative positioning.\n2. MINIMUM DIMENSIONS: All elements minimum 32px width and 32px height for professional handle attachment and dragging.\n3. DRAG/RESIZE READY: Elements must be independently positioned, not in flex/grid containers. Use absolute positioning only. No layout reflow.\n4. ELEMENT INTEGRITY: Each element self-contained with explicit dimensions. No inherited sizing or content reflow.\n5. VISUAL PERFECTION: Fix all z-index conflicts, overlapping issues. Ensure proper visual hierarchy and stacking.\n6. CODE PURITY: Remove all editor artifacts, contenteditable attributes, data-builder-* attributes. Only keep data-canvas-element and data-element-id.\n7. ID PRESERVATION: Keep all 'ml-container' and 'ml-content' IDs and important data-* attributes for builder integration.\n8. PERFORMANCE: Minified CSS, inline critical styles, no external dependencies.\n\nReturn ONLY valid HTML with pixel-perfect inline styles. No markdown, no code blocks, no backticks. Pure production-ready canvas HTML.",
                 },
                 {
                   role: "user",
@@ -5012,12 +4994,10 @@ app.get("/api/data-explorer/status", async (req, res) => {
       collections: Array.isArray(state?.collections) ? state.collections : [],
     });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: error.message || "Could not read explorer state.",
-      });
+    res.status(500).json({
+      success: false,
+      message: error.message || "Could not read explorer state.",
+    });
   }
 });
 
@@ -5028,12 +5008,10 @@ app.post("/api/data-explorer/disconnect", async (req, res) => {
     }
     res.json({ success: true, disconnected: true });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: error.message || "Could not disconnect.",
-      });
+    res.status(500).json({
+      success: false,
+      message: error.message || "Could not disconnect.",
+    });
   }
 });
 
@@ -5104,12 +5082,10 @@ app.post("/api/virtualdb/connect", async (req, res) => {
       collections: ["virtual_models"],
     });
   } catch (error) {
-    res
-      .status(400)
-      .json({
-        success: false,
-        message: error.message || "Could not connect VirtualDB.",
-      });
+    res.status(400).json({
+      success: false,
+      message: error.message || "Could not connect VirtualDB.",
+    });
   }
 });
 
@@ -5137,12 +5113,10 @@ app.get("/api/virtualdb/models", async (req, res) => {
       limit: 200,
     });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: error.message || "Could not load virtual models.",
-      });
+    res.status(500).json({
+      success: false,
+      message: error.message || "Could not load virtual models.",
+    });
   }
 });
 
@@ -5191,12 +5165,10 @@ app.get("/api/virtualdb/model/:name", async (req, res) => {
       fields,
     });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: error.message || "Could not load that model.",
-      });
+    res.status(500).json({
+      success: false,
+      message: error.message || "Could not load that model.",
+    });
   }
 });
 
@@ -5249,12 +5221,10 @@ app.post("/api/virtualdb/document", async (req, res) => {
       },
     });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: error.message || "Could not insert document.",
-      });
+    res.status(500).json({
+      success: false,
+      message: error.message || "Could not insert document.",
+    });
   }
 });
 
@@ -5266,12 +5236,10 @@ app.patch("/api/virtualdb/document", async (req, res) => {
     const documentId = String(req.body?.documentId || "").trim();
     const fieldPath = String(req.body?.fieldPath || "").trim();
     if (!modelName || !documentId || !fieldPath) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "modelName, documentId, and fieldPath are required.",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "modelName, documentId, and fieldPath are required.",
+      });
     }
     const filter = {
       _id: new mongoose.Types.ObjectId(documentId),
@@ -5291,12 +5259,10 @@ app.patch("/api/virtualdb/document", async (req, res) => {
       : null;
     res.json({ success: true, document: view });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: error.message || "Could not update document.",
-      });
+    res.status(500).json({
+      success: false,
+      message: error.message || "Could not update document.",
+    });
   }
 });
 
@@ -5334,12 +5300,10 @@ app.post("/api/virtualdb/model", async (req, res) => {
       model: serializeExplorerValue(created.toObject()),
     });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: error.message || "Could not create model.",
-      });
+    res.status(500).json({
+      success: false,
+      message: error.message || "Could not create model.",
+    });
   }
 });
 
@@ -5368,12 +5332,10 @@ app.post("/api/virtualdb/disconnect", async (req, res) => {
     }
     res.json({ success: true, action, retentionHours });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: error.message || "Could not disconnect VirtualDB.",
-      });
+    res.status(500).json({
+      success: false,
+      message: error.message || "Could not disconnect VirtualDB.",
+    });
   }
 });
 
@@ -5411,12 +5373,10 @@ app.get("/api/data-explorer/collections", async (req, res) => {
       dbName: connectionState.dbName,
     });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: error.message || "Could not list collections.",
-      });
+    res.status(500).json({
+      success: false,
+      message: error.message || "Could not list collections.",
+    });
   }
 });
 
@@ -5443,12 +5403,10 @@ app.get("/api/data-explorer/collection/:name", async (req, res) => {
     if (state?.engine === "virtual-medialabdb") {
       if (!requireAuth(req, res)) return;
       if (collectionName !== "virtual_models") {
-        return res
-          .status(400)
-          .json({
-            success: false,
-            message: "Only virtual_models is available in VirtualDB.",
-          });
+        return res.status(400).json({
+          success: false,
+          message: "Only virtual_models is available in VirtualDB.",
+        });
       }
       const vstate = await getOrCreateVirtualDbConnection();
       const now = new Date();
@@ -5503,12 +5461,10 @@ app.get("/api/data-explorer/collection/:name", async (req, res) => {
       limit,
     });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: error.message || "Could not load collection data.",
-      });
+    res.status(500).json({
+      success: false,
+      message: error.message || "Could not load collection data.",
+    });
   }
 });
 
@@ -5526,22 +5482,18 @@ app.patch("/api/data-explorer/document", async (req, res) => {
     const documentId = String(req.body?.documentId || "").trim();
     const fieldPath = String(req.body?.fieldPath || "").trim();
     if (!collectionName || !documentId || !fieldPath) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Collection, document, and field are required.",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Collection, document, and field are required.",
+      });
     }
     if (state?.engine === "virtual-medialabdb") {
       if (!requireAuth(req, res)) return;
       if (collectionName !== "virtual_models") {
-        return res
-          .status(400)
-          .json({
-            success: false,
-            message: "Only virtual_models is editable in VirtualDB.",
-          });
+        return res.status(400).json({
+          success: false,
+          message: "Only virtual_models is editable in VirtualDB.",
+        });
       }
       const vstate = await getOrCreateVirtualDbConnection();
       const filter = {
@@ -5582,12 +5534,10 @@ app.patch("/api/data-explorer/document", async (req, res) => {
     );
     res.json({ success: true, document: serialized });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: error.message || "Could not update that field.",
-      });
+    res.status(500).json({
+      success: false,
+      message: error.message || "Could not update that field.",
+    });
   }
 });
 
@@ -5760,24 +5710,20 @@ app.post(
   publishRateLimit,
   async (req, res) => {
     if (!req.isAuthenticated() || !req.user) {
-      return res
-        .status(401)
-        .json({
-          success: false,
-          message: "Sign in first to remove templates.",
-        });
+      return res.status(401).json({
+        success: false,
+        message: "Sign in first to remove templates.",
+      });
     }
     try {
       const marketplaceItemId = String(
         req.params.marketplaceItemId || "",
       ).trim();
       if (!marketplaceItemId) {
-        return res
-          .status(400)
-          .json({
-            success: false,
-            message: "Template identifier is required.",
-          });
+        return res.status(400).json({
+          success: false,
+          message: "Template identifier is required.",
+        });
       }
       const user = await User.findById(req.user._id);
       if (!user) {
@@ -8237,12 +8183,10 @@ app.patch(
   express.json(),
   async (req, res) => {
     if (!req.isAuthenticated() || !req.user) {
-      return res
-        .status(401)
-        .json({
-          success: false,
-          message: "Sign in first to manage your sales.",
-        });
+      return res.status(401).json({
+        success: false,
+        message: "Sign in first to manage your sales.",
+      });
     }
     try {
       const item = await MarketplaceItem.findById(req.params.id);
@@ -8810,12 +8754,10 @@ app.post(
           .json({ success: false, message: "Missing project identifier." });
       }
       if (!rawLiveUrl) {
-        return res
-          .status(400)
-          .json({
-            success: false,
-            message: "Paste the Render live URL first.",
-          });
+        return res.status(400).json({
+          success: false,
+          message: "Paste the Render live URL first.",
+        });
       }
       if (rawServiceId && !/^srv-[a-z0-9]+$/i.test(rawServiceId)) {
         return res.status(400).json({
@@ -10315,12 +10257,10 @@ app.get("/api/upgrade-request/status", async (req, res) => {
     res.json({ success: true, request: request || null });
   } catch (error) {
     console.error("Upgrade request status fetch failed:", error);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Could not load upgrade request status.",
-      });
+    res.status(500).json({
+      success: false,
+      message: "Could not load upgrade request status.",
+    });
   }
 });
 
@@ -10414,12 +10354,10 @@ app.post("/api/account/withdrawals", accountRateLimit, async (req, res) => {
         .json({ success: false, message: "Minimum withdrawal is $5." });
     }
     if (amount > Number(user.accountBalance || 0)) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Withdrawal amount exceeds available balance.",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Withdrawal amount exceeds available balance.",
+      });
     }
 
     const now = Date.now();
@@ -10487,12 +10425,10 @@ app.post("/api/account/withdrawals", accountRateLimit, async (req, res) => {
     });
   } catch (error) {
     console.error("Withdrawal request failed:", error);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Could not submit withdrawal request right now.",
-      });
+    res.status(500).json({
+      success: false,
+      message: "Could not submit withdrawal request right now.",
+    });
   }
 });
 

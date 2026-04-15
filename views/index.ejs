@@ -1163,6 +1163,9 @@
         box-sizing: border-box;
         transform-origin: top left;
         will-change: left, top, width, height;
+        position: absolute;
+        backface-visibility: hidden;
+        -webkit-font-smoothing: antialiased;
       }
       .canvas-element.locked .drag-handle,
       .canvas-element.locked .resizer {
@@ -1184,39 +1187,42 @@
       .resizer.mr {
         cursor: ew-resize;
       }
+      .resizer {
+        transition: all 0.15s ease;
+      }
       .resizer.tl {
-        top: -4px;
-        left: -4px;
+        top: -5px;
+        left: -5px;
       }
       .resizer.tr {
-        top: -4px;
-        right: -4px;
+        top: -5px;
+        right: -5px;
       }
       .resizer.bl {
-        bottom: -4px;
-        left: -4px;
+        bottom: -5px;
+        left: -5px;
       }
       .resizer.br {
-        bottom: -4px;
-        right: -4px;
+        bottom: -5px;
+        right: -5px;
       }
       .resizer.mt {
-        top: -4px;
+        top: -5px;
         left: 50%;
         transform: translateX(-50%);
       }
       .resizer.mb {
-        bottom: -4px;
+        bottom: -5px;
         left: 50%;
         transform: translateX(-50%);
       }
       .resizer.ml {
-        left: -4px;
+        left: -5px;
         top: 50%;
         transform: translateY(-50%);
       }
       .resizer.mr {
-        right: -4px;
+        right: -5px;
         top: 50%;
         transform: translateY(-50%);
       }
@@ -2073,8 +2079,14 @@
         }
       }
       #builder-code-editor.magic-blur-preparing {
-        animation: mlMagicWhipperEffect 0.95s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
-        background: linear-gradient(90deg, rgba(251, 191, 36, 0.04) 0%, transparent 48%, rgba(34, 211, 238, 0.04) 100%);
+        animation: mlMagicWhipperEffect 0.95s cubic-bezier(0.34, 1.56, 0.64, 1)
+          infinite;
+        background: linear-gradient(
+          90deg,
+          rgba(251, 191, 36, 0.04) 0%,
+          transparent 48%,
+          rgba(34, 211, 238, 0.04) 100%
+        );
       }
       .ml-section-active {
         animation: mlSectionFadeIn 0.3s ease;
@@ -25926,10 +25938,10 @@ console.log("Triggered ${eventName}", { source, event });
           .join("");
         wrap.innerHTML = `
         ${handlesHTML}
-        <div class="absolute -top-10 left-0 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-all z-[60]">
-            <div class="drag-handle w-7 h-7 bg-gray-950 text-white rounded-lg border border-white/10 shadow-2xl flex items-center justify-center cursor-move pointer-events-auto"><i class="fas fa-arrows-alt text-[10px]"></i></div>
-            <button onclick="openSmartInspector('${type}', this.closest('.canvas-element'))" class="w-7 h-7 bg-gray-950 text-cyan-400 rounded-lg border border-white/10 flex items-center justify-center pointer-events-auto"><i class="fas fa-sliders-h text-[10px]"></i></button>
-            <button onclick="this.closest('.canvas-element').remove(); saveToHistory();" class="w-7 h-7 bg-gray-950 text-red-500 rounded-lg border border-white/10 flex items-center justify-center pointer-events-auto"><i class="fas fa-trash-alt text-[10px]"></i></button>
+        <div class="absolute -top-8 left-0 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-all z-[60]">
+            <div class="drag-handle w-7 h-7 bg-gradient-to-br from-cyan-500 to-blue-600 text-white rounded-lg border border-white/20 shadow-2xl flex items-center justify-center cursor-grab active:cursor-grabbing pointer-events-auto hover:shadow-cyan-500/50 transition-all"><i class="fas fa-arrows-alt text-[10px]"></i></div>
+            <button onclick="openSmartInspector('${type}', this.closest('.canvas-element'))" class="w-7 h-7 bg-gray-950 text-cyan-400 rounded-lg border border-white/10 flex items-center justify-center pointer-events-auto hover:bg-cyan-950 transition-all"><i class="fas fa-sliders-h text-[10px]"></i></button>
+            <button onclick="this.closest('.canvas-element').remove(); saveToHistory();" class="w-7 h-7 bg-gray-950 text-red-500 rounded-lg border border-white/10 flex items-center justify-center pointer-events-auto hover:bg-red-950 transition-all"><i class="fas fa-trash-alt text-[10px]"></i></button>
         </div>
         ${renderInteractionBadgeHtml()}
         <div class="element-body w-full h-full overflow-visible"></div>
@@ -28215,92 +28227,70 @@ console.log("Triggered ${eventName}", { source, event });
           Math.min(Math.max(value, min), Math.max(min, max));
         let activeLayoutPreview = null;
         let dragRafId = null;
+        const getCanvasScroll = () => ({
+          top: canvas.scrollTop || 0,
+          left: canvas.scrollLeft || 0,
+          height: Math.max(canvas.scrollHeight, canvas.clientHeight),
+          width: Math.max(canvas.scrollWidth, canvas.clientWidth),
+        });
         const onPointerMove = (ev) => {
           if (dragRafId) return;
           dragRafId = requestAnimationFrame(() => {
             dragRafId = null;
+            const scroll = getCanvasScroll();
             if (isResizer) {
-              // Resize logic unchanged
               clearLayoutDropGuides();
-              const dx = ev.clientX - startX,
-                dy = ev.clientY - startY;
+              const dx = Math.round(ev.clientX - startX);
+              const dy = Math.round(ev.clientY - startY);
               if (rType.includes("r")) {
-                const maxWidth = canvas.clientWidth - startL;
-                el.style.width =
-                  clamp(snap(startW + dx), 30, Math.max(30, maxWidth)) + "px";
+                const maxWidth = scroll.width - startL;
+                el.style.width = clamp(snap(startW + dx), 32, maxWidth) + "px";
               }
               if (rType.includes("b")) {
-                const maxHeight = canvas.scrollHeight - startT;
-                el.style.height =
-                  clamp(snap(startH + dy), 30, Math.max(30, maxHeight)) + "px";
+                const maxHeight = scroll.height - startT;
+                el.style.height = clamp(snap(startH + dy), 32, maxHeight) + "px";
               }
               if (rType.includes("l")) {
-                const nextLeft = clamp(
-                  snap(startL + dx),
-                  0,
-                  startL + startW - 30,
-                );
+                const nextLeft = clamp(snap(startL + dx), 0, startL + startW - 32);
+                const deltaLeft = startL - nextLeft;
                 el.style.left = nextLeft + "px";
-                el.style.width =
-                  Math.max(30, startW + (startL - nextLeft)) + "px";
+                el.style.width = Math.max(32, startW + deltaLeft) + "px";
               }
               if (rType.includes("t")) {
-                const nextTop = clamp(
-                  snap(startT + dy),
-                  0,
-                  startT + startH - 30,
-                );
+                const nextTop = clamp(snap(startT + dy), 0, startT + startH - 32);
+                const deltaTop = startT - nextTop;
                 el.style.top = nextTop + "px";
-                el.style.height =
-                  Math.max(30, startH + (startT - nextTop)) + "px";
+                el.style.height = Math.max(32, startH + deltaTop) + "px";
               }
             } else {
-              // Professional smooth drag: element follows grab point exactly
-              const curElRect = el.getBoundingClientRect();
               const nextLeft = snap(
-                ev.clientX -
-                  canvasRect.left +
-                  (canvas.scrollLeft || 0) -
-                  grabPointX,
+                ev.clientX - canvasRect.left + scroll.left - grabPointX,
               );
               const nextTop = snap(
-                ev.clientY -
-                  canvasRect.top +
-                  (canvas.scrollTop || 0) -
-                  grabPointY,
+                ev.clientY - canvasRect.top + scroll.top - grabPointY,
               );
-
               if (movingSelection) {
                 selectionStarts.forEach((item) => {
                   const itemNextLeft = snap(
-                    ev.clientX -
-                      canvasRect.left +
-                      (canvas.scrollLeft || 0) -
-                      item.grabX,
+                    ev.clientX - canvasRect.left + scroll.left - item.grabX,
                   );
                   const itemNextTop = snap(
-                    ev.clientY -
-                      canvasRect.top +
-                      (canvas.scrollTop || 0) -
-                      item.grabY,
+                    ev.clientY - canvasRect.top + scroll.top - item.grabY,
                   );
-
                   const clampedLeft = clamp(
                     itemNextLeft,
-                    50,
-                    canvas.clientWidth - item.el.offsetWidth,
+                    0,
+                    scroll.width - item.el.offsetWidth,
                   );
                   const clampedTop = clamp(
                     itemNextTop,
                     0,
-                    canvas.scrollHeight - item.el.offsetHeight,
+                    scroll.height - item.el.offsetHeight,
                   );
-
                   item.el.style.left = clampedLeft + "px";
                   item.el.style.top = clampedTop + "px";
                 });
               } else {
-                // Only trigger layout auto-attach when Shift is held to avoid accidental shrink/reflow.
                 if (ev.shiftKey) {
                   const layoutTargetMatch = getNearestLayoutDropTarget(ev, el);
                   if (layoutTargetMatch) {
@@ -28320,26 +28310,13 @@ console.log("Triggered ${eventName}", { source, event });
                   activeLayoutPreview = null;
                   clearLayoutDropGuides();
                 }
-
-                const clampedLeft = clamp(
-                  nextLeft,
-                  50,
-                  canvas.clientWidth - el.offsetWidth,
-                );
-                const clampedTop = clamp(
-                  nextTop,
-                  0,
-                  canvas.scrollHeight - el.offsetHeight,
-                );
-
+                const clampedLeft = clamp(nextLeft, 0, scroll.width - el.offsetWidth);
+                const clampedTop = clamp(nextTop, 0, scroll.height - el.offsetHeight);
                 el.style.left = clampedLeft + "px";
                 el.style.top = clampedTop + "px";
               }
             }
-            showBuilderGuides(
-              Math.round(el.offsetLeft),
-              Math.round(el.offsetTop),
-            );
+            showBuilderGuides(Math.round(el.offsetLeft), Math.round(el.offsetTop));
           });
         };
         scheduleCollaborationContentSync("move", 60);
@@ -28351,6 +28328,7 @@ console.log("Triggered ${eventName}", { source, event });
           hideBuilderGuides();
           clearLayoutDropGuides();
           syncLayoutScrollAssist();
+          ensureCanvasElementPositions();
           saveToHistory();
           document.removeEventListener("pointermove", onPointerMove);
           document.removeEventListener("pointerup", onPointerUp);
@@ -33069,10 +33047,10 @@ ${interactionBlock}
           .join("");
         return `
         ${handles}
-        <div class="absolute -top-7 left-0 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-all z-[60]">
-            <div class="drag-handle w-7 h-7 bg-gray-950 text-white rounded-lg border border-white/10 shadow-2xl flex items-center justify-center cursor-move pointer-events-auto"><i class="fas fa-arrows-alt text-[10px]"></i></div>
-            <button onclick="openSmartInspector('${type}', this.closest('.canvas-element'))" class="w-7 h-7 bg-gray-950 text-cyan-400 rounded-lg border border-white/10 flex items-center justify-center pointer-events-auto"><i class="fas fa-sliders-h text-[10px]"></i></button>
-            <button onclick="handleBuilderDeleteAction(this.closest('.canvas-element'))" class="w-7 h-7 bg-gray-950 text-red-500 rounded-lg border border-white/10 flex items-center justify-center pointer-events-auto"><i class="fas fa-trash-alt text-[10px]"></i></button>
+        <div class="absolute -top-8 left-0 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-all z-[60]">
+            <div class="drag-handle w-7 h-7 bg-gradient-to-br from-cyan-500 to-blue-600 text-white rounded-lg border border-white/20 shadow-2xl flex items-center justify-center cursor-grab active:cursor-grabbing pointer-events-auto hover:shadow-cyan-500/50 transition-all"><i class="fas fa-arrows-alt text-[10px]"></i></div>
+            <button onclick="openSmartInspector('${type}', this.closest('.canvas-element'))" class="w-7 h-7 bg-gray-950 text-cyan-400 rounded-lg border border-white/10 flex items-center justify-center pointer-events-auto hover:bg-cyan-950 transition-all"><i class="fas fa-sliders-h text-[10px]"></i></button>
+            <button onclick="handleBuilderDeleteAction(this.closest('.canvas-element'))" class="w-7 h-7 bg-gray-950 text-red-500 rounded-lg border border-white/10 flex items-center justify-center pointer-events-auto hover:bg-red-950 transition-all"><i class="fas fa-trash-alt text-[10px]"></i></button>
         </div>`;
       }
       function dockStarterSelection() {
