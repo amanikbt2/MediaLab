@@ -28188,123 +28188,130 @@ console.log("Triggered ${eventName}", { source, event });
           if (dragRafId) return;
           dragRafId = requestAnimationFrame(() => {
             dragRafId = null;
-          if (isResizer) {
-            // Resize logic unchanged
-            clearLayoutDropGuides();
-            const dx = ev.clientX - startX,
-              dy = ev.clientY - startY;
-            if (rType.includes("r")) {
-              const maxWidth = canvas.clientWidth - startL;
-              el.style.width =
-                clamp(snap(startW + dx), 30, Math.max(30, maxWidth)) + "px";
-            }
-            if (rType.includes("b")) {
-              const maxHeight = canvas.scrollHeight - startT;
-              el.style.height =
-                clamp(snap(startH + dy), 30, Math.max(30, maxHeight)) + "px";
-            }
-            if (rType.includes("l")) {
-              const nextLeft = clamp(
-                snap(startL + dx),
-                0,
-                startL + startW - 30,
-              );
-              el.style.left = nextLeft + "px";
-              el.style.width =
-                Math.max(30, startW + (startL - nextLeft)) + "px";
-            }
-            if (rType.includes("t")) {
-              const nextTop = clamp(snap(startT + dy), 0, startT + startH - 30);
-              el.style.top = nextTop + "px";
-              el.style.height =
-                Math.max(30, startH + (startT - nextTop)) + "px";
-            }
-          } else {
-            // Professional smooth drag: element follows grab point exactly
-            const curElRect = el.getBoundingClientRect();
-            const nextLeft = snap(
-              ev.clientX -
-                canvasRect.left +
-                (canvas.scrollLeft || 0) -
-                grabPointX,
-            );
-            const nextTop = snap(
-              ev.clientY -
-                canvasRect.top +
-                (canvas.scrollTop || 0) -
-                grabPointY,
-            );
-
-            if (movingSelection) {
-              selectionStarts.forEach((item) => {
-                const itemNextLeft = snap(
-                  ev.clientX -
-                    canvasRect.left +
-                    (canvas.scrollLeft || 0) -
-                    item.grabX,
-                );
-                const itemNextTop = snap(
-                  ev.clientY -
-                    canvasRect.top +
-                    (canvas.scrollTop || 0) -
-                    item.grabY,
-                );
-
-                const clampedLeft = clamp(
-                  itemNextLeft,
-                  50,
-                  canvas.clientWidth - item.el.offsetWidth,
-                );
-                const clampedTop = clamp(
-                  itemNextTop,
+            if (isResizer) {
+              // Resize logic unchanged
+              clearLayoutDropGuides();
+              const dx = ev.clientX - startX,
+                dy = ev.clientY - startY;
+              if (rType.includes("r")) {
+                const maxWidth = canvas.clientWidth - startL;
+                el.style.width =
+                  clamp(snap(startW + dx), 30, Math.max(30, maxWidth)) + "px";
+              }
+              if (rType.includes("b")) {
+                const maxHeight = canvas.scrollHeight - startT;
+                el.style.height =
+                  clamp(snap(startH + dy), 30, Math.max(30, maxHeight)) + "px";
+              }
+              if (rType.includes("l")) {
+                const nextLeft = clamp(
+                  snap(startL + dx),
                   0,
-                  canvas.scrollHeight - item.el.offsetHeight,
+                  startL + startW - 30,
                 );
-
-                item.el.style.left = clampedLeft + "px";
-                item.el.style.top = clampedTop + "px";
-              });
+                el.style.left = nextLeft + "px";
+                el.style.width =
+                  Math.max(30, startW + (startL - nextLeft)) + "px";
+              }
+              if (rType.includes("t")) {
+                const nextTop = clamp(
+                  snap(startT + dy),
+                  0,
+                  startT + startH - 30,
+                );
+                el.style.top = nextTop + "px";
+                el.style.height =
+                  Math.max(30, startH + (startT - nextTop)) + "px";
+              }
             } else {
-              // Only trigger layout auto-attach when Shift is held to avoid accidental shrink/reflow.
-              if (ev.shiftKey) {
-                const layoutTargetMatch = getNearestLayoutDropTarget(ev, el);
-                if (layoutTargetMatch) {
-                  activeLayoutPreview = buildLayoutDropPreview(
-                    ev,
-                    el,
-                    layoutTargetMatch.target,
-                    layoutTargetMatch.layoutType,
+              // Professional smooth drag: element follows grab point exactly
+              const curElRect = el.getBoundingClientRect();
+              const nextLeft = snap(
+                ev.clientX -
+                  canvasRect.left +
+                  (canvas.scrollLeft || 0) -
+                  grabPointX,
+              );
+              const nextTop = snap(
+                ev.clientY -
+                  canvasRect.top +
+                  (canvas.scrollTop || 0) -
+                  grabPointY,
+              );
+
+              if (movingSelection) {
+                selectionStarts.forEach((item) => {
+                  const itemNextLeft = snap(
+                    ev.clientX -
+                      canvasRect.left +
+                      (canvas.scrollLeft || 0) -
+                      item.grabX,
                   );
-                  showLayoutDropGuides(activeLayoutPreview);
-                  maybeAutoScrollLayoutHost(activeLayoutPreview, ev);
+                  const itemNextTop = snap(
+                    ev.clientY -
+                      canvasRect.top +
+                      (canvas.scrollTop || 0) -
+                      item.grabY,
+                  );
+
+                  const clampedLeft = clamp(
+                    itemNextLeft,
+                    50,
+                    canvas.clientWidth - item.el.offsetWidth,
+                  );
+                  const clampedTop = clamp(
+                    itemNextTop,
+                    0,
+                    canvas.scrollHeight - item.el.offsetHeight,
+                  );
+
+                  item.el.style.left = clampedLeft + "px";
+                  item.el.style.top = clampedTop + "px";
+                });
+              } else {
+                // Only trigger layout auto-attach when Shift is held to avoid accidental shrink/reflow.
+                if (ev.shiftKey) {
+                  const layoutTargetMatch = getNearestLayoutDropTarget(ev, el);
+                  if (layoutTargetMatch) {
+                    activeLayoutPreview = buildLayoutDropPreview(
+                      ev,
+                      el,
+                      layoutTargetMatch.target,
+                      layoutTargetMatch.layoutType,
+                    );
+                    showLayoutDropGuides(activeLayoutPreview);
+                    maybeAutoScrollLayoutHost(activeLayoutPreview, ev);
+                  } else {
+                    activeLayoutPreview = null;
+                    clearLayoutDropGuides();
+                  }
                 } else {
                   activeLayoutPreview = null;
                   clearLayoutDropGuides();
                 }
-              } else {
-                activeLayoutPreview = null;
-                clearLayoutDropGuides();
+
+                const clampedLeft = clamp(
+                  nextLeft,
+                  50,
+                  canvas.clientWidth - el.offsetWidth,
+                );
+                const clampedTop = clamp(
+                  nextTop,
+                  0,
+                  canvas.scrollHeight - el.offsetHeight,
+                );
+
+                el.style.left = clampedLeft + "px";
+                el.style.top = clampedTop + "px";
               }
-
-              const clampedLeft = clamp(
-                nextLeft,
-                50,
-                canvas.clientWidth - el.offsetWidth,
-              );
-              const clampedTop = clamp(
-                nextTop,
-                0,
-                canvas.scrollHeight - el.offsetHeight,
-              );
-
-              el.style.left = clampedLeft + "px";
-              el.style.top = clampedTop + "px";
             }
-          }
-          showBuilderGuides(Math.round(el.offsetLeft), Math.round(el.offsetTop));
+            showBuilderGuides(
+              Math.round(el.offsetLeft),
+              Math.round(el.offsetTop),
+            );
           });
         };
-          scheduleCollaborationContentSync("move", 60);
+        scheduleCollaborationContentSync("move", 60);
         const onPointerUp = () => {
           if (dragRafId) cancelAnimationFrame(dragRafId);
           if (activeLayoutPreview && !isResizer && !movingSelection) {
@@ -32183,10 +32190,10 @@ ${interactionBlock}
       }
       function ensureCanvasElementPositions(html) {
         const parser = new DOMParser();
-        const doc = parser.parseFromString(html, 'text/html');
-        const elements = doc.querySelectorAll('.canvas-element');
+        const doc = parser.parseFromString(html, "text/html");
+        const elements = doc.querySelectorAll(".canvas-element");
         elements.forEach((el) => {
-          const style = el.getAttribute('style') || '';
+          const style = el.getAttribute("style") || "";
           const hasLeft = /left\s*:/.test(style);
           const hasTop = /top\s*:/.test(style);
           const hasWidth = /width\s*:/.test(style);
@@ -32194,7 +32201,7 @@ ${interactionBlock}
           const hasPosition = /position\s*:/.test(style);
           let newStyle = style;
           if (!hasPosition) {
-            newStyle = 'position: absolute; ' + newStyle;
+            newStyle = "position: absolute; " + newStyle;
           }
           if (!hasLeft) {
             const rect = el.getBoundingClientRect();
@@ -32210,11 +32217,14 @@ ${interactionBlock}
           }
           if (!hasHeight) {
             const rect = el.getBoundingClientRect();
-            newStyle = newStyle + `; height: ${Math.round(rect.height || 50)}px`;
+            newStyle =
+              newStyle + `; height: ${Math.round(rect.height || 50)}px`;
           }
-          el.setAttribute('style', newStyle.replace(/;\s*;/g, ';').trim());
+          el.setAttribute("style", newStyle.replace(/;\s*;/g, ";").trim());
         });
-        return new XMLSerializer().serializeToString(doc).replace(/^[^<]*<body[^>]*>|<\/body>.*$/gi, '');
+        return new XMLSerializer()
+          .serializeToString(doc)
+          .replace(/^[^<]*<body[^>]*>|<\/body>.*$/gi, "");
       }
       function stripAgentActionBlocks(responseText = "") {
         return String(responseText || "")
