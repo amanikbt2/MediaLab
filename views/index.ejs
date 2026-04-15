@@ -26035,7 +26035,7 @@ console.log("Triggered ${eventName}", { source, event });
         wrap.innerHTML = `
         ${handlesHTML}
         <div class="absolute -top-8 left-0 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-all z-[60]">
-            <div class="drag-handle w-7 h-7 bg-gradient-to-br from-cyan-500 to-blue-600 text-white rounded-lg border border-white/20 shadow-2xl flex items-center justify-center cursor-grab active:cursor-grabbing pointer-events-auto hover:shadow-cyan-500/50 transition-all select-none" ondblclick="arguments[0].stopPropagation();"><i class="fas fa-arrows-alt text-[10px]"></i></div>
+            <div class="drag-handle w-7 h-7 bg-gradient-to-br from-cyan-500 to-blue-600 text-white rounded-lg border border-white/20 shadow-2xl flex items-center justify-center cursor-grab active:cursor-grabbing pointer-events-auto hover:shadow-cyan-500/50 transition-all select-none"><i class="fas fa-arrows-alt text-[10px]"></i></div>
             <button onclick="openSmartInspector('${type}', this.closest('.canvas-element'))" class="w-7 h-7 bg-gray-950 text-cyan-400 rounded-lg border border-white/10 flex items-center justify-center pointer-events-auto hover:bg-cyan-950 transition-all"><i class="fas fa-sliders-h text-[10px]"></i></button>
             <button onclick="this.closest('.canvas-element').remove(); saveToHistory();" class="w-7 h-7 bg-gray-950 text-red-500 rounded-lg border border-white/10 flex items-center justify-center pointer-events-auto hover:bg-red-950 transition-all"><i class="fas fa-trash-alt text-[10px]"></i></button>
         </div>
@@ -28312,6 +28312,13 @@ console.log("Triggered ${eventName}", { source, event });
         e.preventDefault();
         const isResizer = e.target.classList.contains("resizer");
         const isDragHandle = e.target.closest(".drag-handle");
+        // Ignore drag-handle double-clicks entirely to avoid accidental
+        // second-click drag math applying stale coordinates.
+        if (isDragHandle && Number(e.detail || 0) > 1) {
+          e.stopPropagation();
+          e.preventDefault();
+          return;
+        }
         const isToolbarControl = e.target.closest(".absolute.-top-10");
         const isInteractiveControl = Boolean(
           e.target?.closest?.(
@@ -29207,6 +29214,11 @@ console.log("Triggered ${eventName}", { source, event });
           e.stopPropagation();
         };
         el.ondblclick = (e) => {
+          if (e.target?.closest?.(".drag-handle")) {
+            e.stopPropagation();
+            e.preventDefault();
+            return;
+          }
           e.stopPropagation();
           e.preventDefault();
         };
