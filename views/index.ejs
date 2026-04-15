@@ -33382,25 +33382,69 @@
           }
         }
 
-        if (!/\b(insert|add|create)\b/.test(text)) return null;
+        if (!/\b(insert|add|create|drop|put|place)\b/.test(text)) return null;
 
-        // SMART AI ANALYSIS FIRST - Try to handle creative descriptions like "bouncing neon ring with border left"
+        // TRY NATURAL LANGUAGE PARSING FIRST - For complex multi-attribute commands
+        // Detects: "drop a button with left and top outline slightly bigger and yellow with text saying click me at top of canvas"
+        if (typeof workflowBrain !== "undefined" && workflowBrain) {
+          // Check if it looks like a complex natural language command
+          const hasComplexAttributes =
+            /\b(?:text|saying|with|outline|border|sides?)\b/i.test(text) &&
+            (/\band\b/i.test(text) || /,/i.test(text)) &&
+            /\b(?:button|input|text|link|card|box|element)\b/i.test(text);
+
+          if (hasComplexAttributes) {
+            try {
+              const naturalParsed = workflowBrain.parseNaturalCommand(text);
+              const naturalSpec =
+                workflowBrain.generateNaturalElementSpec(naturalParsed);
+              if (naturalSpec) {
+                return naturalSpec;
+              }
+            } catch (e) {
+              // Fall through to other parsing methods
+            }
+          }
+        }
+
+        // SMART AI ANALYSIS - Try to handle creative descriptions like "bouncing neon ring with border left"
         // Only do smart analysis if it doesn't match predefined keywords exactly
         const hasPredefinedKeyword =
-          /\b(slider|toggle|switch|spinner|loader|modal|dialog|badge|tag|alert|notification|navbar|menu|checkbox|radio|dropdown|tabs|pagination|search|button|feature|hero|contact|pricing|dashboard|login|text|image|input|field|ball|circle|box|button|slider)\b/.test(
+          /\b(slider|toggle|switch|spinner|loader|modal|dialog|badge|tag|alert|notification|navbar|menu|checkbox|radio|dropdown|tabs|pagination|search|button|feature|hero|contact|pricing|dashboard|login|text|image|input|field|circle|box|button|slider)\b/.test(
             text,
           );
         if (!hasPredefinedKeyword) {
-          const smartAnalysis = analyzeSmartInsertDescription(text);
-          // Check if it looks like a natural description (not just garbage)
-          if (
-            smartAnalysis.animations.length > 0 ||
-            smartAnalysis.effects.length > 0 ||
-            smartAnalysis.hasBorder ||
-            smartAnalysis.shape !== "box"
-          ) {
-            const smartSpec = generateSmartCanvasElementSpec(smartAnalysis);
-            if (smartSpec) return smartSpec;
+          // USE WORKFLOWBRAIN FOR ADVANCED ANIMATION SUPPORT
+          let smartAnalysis, smartSpec;
+
+          if (typeof workflowBrain !== "undefined" && workflowBrain) {
+            // Use WorkflowBrain's advanced animation parser and generation
+            smartAnalysis = workflowBrain.analyzeSmartInsertDescription(text);
+            // Check if it looks like a natural description (not just garbage)
+            if (
+              smartAnalysis.animations.length > 0 ||
+              smartAnalysis.effects.length > 0 ||
+              smartAnalysis.hasBorder ||
+              smartAnalysis.shape !== "box"
+            ) {
+              smartSpec =
+                workflowBrain.generateSmartCanvasElementSpec(smartAnalysis);
+              // Note: smartSpec already includes advanced animations via generateSmartCanvasElementSpec
+              if (smartSpec) return smartSpec;
+            }
+          } else {
+            // FALLBACK: Use local analyzeSmartInsertDescription if WorkflowBrain not ready
+            smartAnalysis = analyzeSmartInsertDescription(text);
+            // Check if it looks like a natural description (not just garbage)
+            if (
+              smartAnalysis.animations.length > 0 ||
+              smartAnalysis.effects.length > 0 ||
+              smartAnalysis.hasBorder ||
+              smartAnalysis.shape !== "box"
+            ) {
+              smartSpec = generateSmartCanvasElementSpec(smartAnalysis);
+              if (smartSpec) return smartSpec;
+            }
           }
         }
 

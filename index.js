@@ -43,9 +43,26 @@ import {
   createRenderBlueprintInstance,
   extractRenderDeploySuccessPayload,
 } from "./controllers/renderBlueprintController.js";
+import WorkflowBrain from "./WorkflowBrain.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Initialize WorkflowBrain for natural language command processing
+const workflowBrain = new WorkflowBrain({
+  setAiAgentStage: (stage) => {
+    // Used for internal state tracking
+    console.log(`[WorkflowBrain] Agent stage: ${stage}`);
+  },
+  runDeterministicBuilderCommand: (command) => {
+    // Fallback for deterministic commands (can be extended)
+    return null;
+  },
+  getCanvasElement: () => {
+    // Server-side doesn't have DOM, this is for client-side
+    return null;
+  },
+});
 
 const app = express();
 const httpServer = createServer(app);
@@ -55,21 +72,53 @@ const ADMIN_EMAIL = String(process.env.ADMIN_EMAIL || "dev@gmail.com")
   .toLowerCase();
 const AI_MODEL_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const AI_MODEL_REGISTRY = [
-  // Production Models (100% Guaranteed) - Fastest & Most Reliable
-  { modelId: "openai/gpt-oss-120b", provider: "groq", priority: 1 },
-  { modelId: "openai/gpt-oss-20b", provider: "groq", priority: 2 },
-  { modelId: "llama-3.3-70b-versatile", provider: "groq", priority: 3 },
-  { modelId: "llama-3.1-8b-instant", provider: "groq", priority: 4 },
-  // Agentic Systems (Compound AI)
-  { modelId: "groq/compound", provider: "groq", priority: 5 },
-  { modelId: "groq/compound-mini", provider: "groq", priority: 6 },
-  // Preview Models (Latest with Excellent Performance)
+  // ========== WORKFLOW-ONLY SYSTEM ==========
+  // These models are EXCLUSIVELY for the internal Workflow engine
+  // NEVER fallback to online AI
+  // NEVER shared with external AI chat
+  {
+    modelId: "openai/gpt-oss-120b",
+    provider: "groq",
+    priority: 1,
+    type: "workflow",
+  },
+  {
+    modelId: "openai/gpt-oss-20b",
+    provider: "groq",
+    priority: 2,
+    type: "workflow",
+  },
+  {
+    modelId: "llama-3.3-70b-versatile",
+    provider: "groq",
+    priority: 3,
+    type: "workflow",
+  },
+  {
+    modelId: "llama-3.1-8b-instant",
+    provider: "groq",
+    priority: 4,
+    type: "workflow",
+  },
+
+  // ========== ONLINE EXCLUSIVE SYSTEM ==========
+  // These models are EXCLUSIVELY for external online AI interactions
+  // NEVER fallback to workflow algorithms
+  // NEVER uses workflow parsing/processing
+  { modelId: "groq/compound", provider: "groq", priority: 5, type: "online" },
+  {
+    modelId: "groq/compound-mini",
+    provider: "groq",
+    priority: 6,
+    type: "online",
+  },
   {
     modelId: "meta-llama/llama-4-scout-17b-16e-instruct",
     provider: "groq",
     priority: 7,
+    type: "online",
   },
-  { modelId: "qwen/qwen3-32b", provider: "groq", priority: 8 },
+  { modelId: "qwen/qwen3-32b", provider: "groq", priority: 8, type: "online" },
 ];
 const AI_MODEL_PREFERRED_ORDER = [
   "openai/gpt-oss-120b",
@@ -144,6 +193,52 @@ function buildEligibleAiModels(models = []) {
   if (ordered.length) return ordered;
   // If everything is cooling down, still probe all candidates to avoid deadlock.
   return Array.isArray(models) ? models : [];
+}
+
+/**
+ * Build WORKFLOW-ONLY models (completely independent)
+ * These models NEVER fallback to online AI
+ * Workflow system is 100% autonomous
+ */
+function buildWorkflowOnlyModels(models = []) {
+  const now = Date.now();
+  const workflowModels = [];
+  for (const model of Array.isArray(models) ? models : []) {
+    const modelId = String(model?.modelId || "").trim();
+    if (!modelId) continue;
+    // Workflow uses models marked as "workflow" type
+    const modelType = String(model?.type || "online").toLowerCase();
+    if (modelType !== "workflow") continue; // SKIP offline/online models
+    const coolUntil = Number(aiModelCooldownUntil.get(modelId) || 0);
+    if (coolUntil > now) continue;
+    if (String(model?.status || "").toLowerCase() === "online") {
+      workflowModels.push(model);
+    }
+  }
+  return workflowModels.length > 0 ? workflowModels : [];
+}
+
+/**
+ * Build ONLINE-ONLY models (completely independent)
+ * These models NEVER use workflow algorithms/fallback
+ * Online AI system is 100% autonomous
+ */
+function buildOnlineOnlyModels(models = []) {
+  const now = Date.now();
+  const onlineModels = [];
+  for (const model of Array.isArray(models) ? models : []) {
+    const modelId = String(model?.modelId || "").trim();
+    if (!modelId) continue;
+    // Online AI uses models that are NOT marked as "workflow" type
+    const modelType = String(model?.type || "online").toLowerCase();
+    if (modelType === "workflow") continue; // SKIP workflow-only models
+    const coolUntil = Number(aiModelCooldownUntil.get(modelId) || 0);
+    if (coolUntil > now) continue;
+    if (String(model?.status || "").toLowerCase() === "online") {
+      onlineModels.push(model);
+    }
+  }
+  return onlineModels.length > 0 ? onlineModels : [];
 }
 
 function getAiContextExpiryDate() {
@@ -4231,6 +4326,240 @@ app.use(
 app.use(passport.initialize());
 app.use(passport.session());
 
+/**
+ * ========== WORKFLOW SYSTEM (COMPLETELY INDEPENDENT) ==========
+ * /api/workflow/process - Workflow-ONLY processing
+ *
+ * - Uses ONLY workflow-marked models
+ * - NEVER uses online AI models
+ * - NEVER falls back to external systems
+ * - 100% autonomous workflow engine
+ */
+app.post("/api/workflow/process", async (req, res) => {
+  try {
+    await refreshAIModelsRegistryIfNeeded(false);
+    if (!req.isAuthenticated?.() || !req.user?._id) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Login required." });
+    }
+    if (!GROQ_API_KEY) {
+      return res.status(500).json({
+        success: false,
+        message: "Missing GROQ_API_KEY configuration.",
+      });
+    }
+
+    const prompt = String(req.body?.prompt || "").trim();
+    const mode = String(req.body?.mode || "workflow")
+      .trim()
+      .toLowerCase();
+    const currentCode = String(req.body?.currentCode || "").trim();
+
+    if (!prompt) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Prompt is required." });
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found." });
+    }
+
+    if (!user.aiQuota) {
+      user.aiQuota = { dailyLimit: 10, usedToday: 0, lastUsed: null };
+    }
+
+    const now = new Date();
+    if (!isSameCalendarDay(user.aiQuota.lastUsed, now)) {
+      user.aiQuota.usedToday = 0;
+    }
+    const hasUnlimitedAi = isUnlimitedAiUser(user);
+    const dailyLimit = Number(user.aiQuota.dailyLimit ?? 10);
+    const usedToday = Number(user.aiQuota.usedToday ?? 0);
+    if (!hasUnlimitedAi && usedToday >= dailyLimit) {
+      return res.status(403).json({
+        success: false,
+        limitReached: true,
+        message: "Daily AI credits reached. Upgrade to MediaLab Pro.",
+      });
+    }
+
+    // === WORKFLOW-ONLY MODEL SELECTION ===
+    // CRITICAL: Use ONLY workflow models, NEVER fall back to online AI
+    let models = await AIModel.find({ isActive: true })
+      .sort({ priority: 1, status: -1, modelId: 1 })
+      .lean();
+    models = buildWorkflowOnlyModels(models); // WORKFLOW ONLY - NO ONLINE AI
+
+    if (!models.length) {
+      // Self-heal: force a fresh model sync
+      await refreshAIModelsRegistryIfNeeded(true);
+      models = await AIModel.find({ isActive: true })
+        .sort({ priority: 1, status: -1, modelId: 1 })
+        .lean();
+      models = buildWorkflowOnlyModels(models); // STILL WORKFLOW ONLY
+    }
+
+    if (!models.length) {
+      return res.status(503).json({
+        success: false,
+        message:
+          "No workflow models available. Workflow system is independent and cannot use online AI.",
+      });
+    }
+
+    let workflowResult = "";
+    let modelUsed = "";
+    let lastError = null;
+
+    // Try each workflow-exclusive model in priority order
+    for (const model of models) {
+      try {
+        const groqResponse = await nodeFetch(
+          "https://api.groq.com/openai/v1/chat/completions",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${GROQ_API_KEY}`,
+            },
+            body: JSON.stringify({
+              model: model.modelId,
+              temperature: 0.3, // Lower temp for workflow consistency
+              messages: [
+                {
+                  role: "system",
+                  content: `You are the MediaLab Workflow Engine - operating completely independently from external AI systems.
+
+Your role:
+- Process natural language commands from users
+- Parse element creation requests: shapes, colors, animations, positions
+- Generate HTML/CSS/animated specifications
+- Return structured JSON for canvas element generation
+
+You have access to WorkflowBrain parsing methods:
+- detectInsertIntent(): Identify element creation commands
+- parseNaturalLanguageIntent(): Extract semantic intent
+- analyzeSmartInsertDescription(): Parse design specifications
+- generateSmartCanvasElementSpec(): Create element specs
+
+CRITICAL: You are COMPLETELY INDEPENDENT. You do NOT:
+- Use online AI models
+- Fall back to external systems
+- Share data with online AI Chat
+- Use online AI algorithms
+
+You are a standalone autonomous system.`,
+                },
+                {
+                  role: "user",
+                  content: prompt,
+                },
+              ],
+            }),
+          },
+        );
+
+        if (!groqResponse.ok) {
+          const errText = await groqResponse.text();
+          throw new Error(errText || `Workflow model failed: ${model.modelId}`);
+        }
+
+        const payload = await groqResponse.json();
+        const content = String(
+          payload?.choices?.[0]?.message?.content || "",
+        ).trim();
+
+        if (!content) {
+          throw new Error(
+            `Empty response from workflow model ${model.modelId}`,
+          );
+        }
+
+        workflowResult = content;
+        modelUsed = model.modelId;
+
+        // Mark model as successful
+        await AIModel.updateOne(
+          { _id: model._id },
+          { $set: { status: "online", lastTested: new Date() } },
+        );
+
+        break; // Success - stop trying other models
+      } catch (modelError) {
+        console.error(
+          `[WORKFLOW] Model ${model.modelId} failed:`,
+          modelError.message,
+        );
+        lastError = modelError;
+
+        // Mark as offline
+        await AIModel.updateOne(
+          { _id: model._id },
+          { $set: { status: "offline", lastTested: new Date() } },
+        );
+      }
+    }
+
+    if (!workflowResult) {
+      console.error(
+        "[WORKFLOW] All workflow models exhausted. No online AI fallback available.",
+        lastError,
+      );
+      return res.status(503).json({
+        success: false,
+        message:
+          "Workflow system error: No models available. Workflow does not fall back to online AI.",
+        details: lastError?.message || "Unknown error",
+      });
+    }
+
+    // Update usage
+    user.aiQuota.usedToday = Number(user.aiQuota.usedToday || 0) + 1;
+    user.aiQuota.lastUsed = now;
+    await user.save();
+
+    await createUsageLog({
+      user,
+      action: "workflow-process",
+      summary: `Workflow processing via ${modelUsed}`,
+      source: "workflow",
+      metadata: {
+        modelUsed,
+        mode,
+        usedToday: Number(user.aiQuota.usedToday || 0),
+        dailyLimit: Number(user.aiQuota.dailyLimit || 10),
+      },
+    });
+
+    return res.json({
+      success: true,
+      workflowResult,
+      modelUsed,
+      mode: "workflow",
+      system: "WORKFLOW_ONLY",
+      creditsRemaining: hasUnlimitedAi
+        ? null
+        : Math.max(
+            0,
+            Number(user.aiQuota.dailyLimit || 10) -
+              Number(user.aiQuota.usedToday || 0),
+          ),
+    });
+  } catch (error) {
+    console.error("[WORKFLOW] Endpoint error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Workflow processing failed.",
+      system: "WORKFLOW_ONLY",
+    });
+  }
+});
+
 app.post("/api/ai/chat-edit", async (req, res) => {
   try {
     await refreshAIModelsRegistryIfNeeded(false);
@@ -4277,6 +4606,16 @@ app.post("/api/ai/chat-edit", async (req, res) => {
         .json({ success: false, message: "User not found." });
     }
 
+    // === NO WORKFLOW PROCESSING IN ONLINE AI ===
+    // This is the ONLINE-ONLY AI Chat route
+    // It does NOT use WorkflowBrain algorithms
+    // It does NOT process natural language parsing
+    // It is COMPLETELY INDEPENDENT from the Workflow system
+    // Workflow processing goes to /api/workflow/process instead
+
+    let nlPreprocessingResult = null;
+    let enrichedPrompt = prompt;
+
     if (!user.aiQuota) {
       user.aiQuota = { dailyLimit: 10, usedToday: 0, lastUsed: null };
     }
@@ -4311,7 +4650,9 @@ app.post("/api/ai/chat-edit", async (req, res) => {
     let models = await AIModel.find({ isActive: true })
       .sort({ priority: 1, status: -1, modelId: 1 })
       .lean();
-    models = buildEligibleAiModels(models);
+    // === ONLINE-ONLY MODELS ===
+    // Chat-edit uses ONLY online exclusive models, NEVER workflow models
+    models = buildOnlineOnlyModels(models);
     if (!models.length) {
       // Self-heal: force a fresh model sync, then probe active models anyway.
       modelRecoveryUsed = true;
@@ -4319,12 +4660,14 @@ app.post("/api/ai/chat-edit", async (req, res) => {
       models = await AIModel.find({ isActive: true })
         .sort({ priority: 1, status: -1, modelId: 1 })
         .lean();
-      models = buildEligibleAiModels(models);
+      // Again, use ONLINE-ONLY models
+      models = buildOnlineOnlyModels(models);
     }
     if (!models.length) {
       return res.status(503).json({
         success: false,
-        message: "No active AI models are available right now.",
+        message:
+          "No active online AI models available. Online system is independent and cannot use workflow.",
       });
     }
 
@@ -4352,14 +4695,14 @@ app.post("/api/ai/chat-edit", async (req, res) => {
                   role: "system",
                   content:
                     mode === "chat"
-                      ? "You are the MediaLab AI Copilot (a smart mini coding assistant). Be concise, warm, and practical. Return plain text only.\n\nYou will often be given:\n- ActiveFileName\n- ActiveFileContent\n- CanvasCode (exported HTML)\n\nWhen present, ground your answers in that context (explain what the current file does, point out relevant parts, suggest next steps). Do NOT perform, imply, or apply code changes unless the user explicitly asks for implementation/fixes."
+                      ? "You are the MediaLab Online AI Copilot - a COMPLETELY INDEPENDENT external AI system.\n\n**CRITICAL: You are isolated from the Workflow system:**\n- You do NOT use WorkflowBrain algorithms\n- You do NOT process natural language parsing\n- You do NOT access Workflow methods\n- You are 100% autonomous online AI\n- Natural language element creation is handled by /api/workflow/process, not by you\n\nYour role:\n- Provide general coding assistance\n- Answer questions about web development\n- Help with HTML/CSS/JavaScript\n- Be concise, warm, and practical\n- Return plain text only\n\nWhen given code context, ground your answers in that context. Do NOT apply code changes unless the user explicitly asks."
                       : mode === "agent"
                         ? agentPhase === "search"
-                          ? "You are the MediaLab Agent in SEARCH phase. Return only one line in this exact format: SEARCH_FILES: path/a.js, path/b.css. Select the minimum file set needed to implement the request. Use only files present in WorkspaceIndex."
+                          ? "You are the MediaLab Online Agent in SEARCH phase - COMPLETELY INDEPENDENT from Workflow.\n\nReturn only one line in this exact format: SEARCH_FILES: path/a.js, path/b.css\n\nCRITICAL: You are isolated from Workflow system:\n- Do NOT reference WorkflowBrain\n- Do NOT use Workflow parsing\n- You are standalone online AI only\n- Do NOT fall back to Workflow algorithms"
                           : agentPhase === "plan"
-                            ? "You are the MediaLab Agent in PLAN phase. Return only a concise proposal in plain text, prefixed with 'Proposal:'. Explain which files you will change and why. No code blocks."
-                            : 'You are the MediaLab System Agent in EXECUTION phase.\n\nOutput format:\n1) One short, friendly user-facing line.\n2) One or more hidden machine blocks wrapped exactly as: [ACTION]{...}[/ACTION]. Never expose raw code outside [ACTION].\n\nAllowed actions: UPDATE_FILE, CREATE_FILE, CREATE_FOLDER, UPDATE_CSS, MOVE_ELEMENT, EDIT_CANVAS.\n\nNon-destructive rules:\n- For small edits (insert/move/remove/style/background), DO NOT use UPDATE_FILE. Preserve existing canvas elements and IDs. Prefer:\n  - UPDATE_CSS for background/page-level styles\n  - MOVE_ELEMENT for precise positioning\n  - EDIT_CANVAS with ops[] for inserts/removes/style tweaks\n- Only use UPDATE_FILE when the user explicitly requests a full rewrite/new template/replace-everything.\n\nEDIT_CANVAS schema (must use ops):\n[ACTION]{"type":"EDIT_CANVAS","ops":[\n {"op":"insert","elementType":"div","attrs":{...},"styles":{...},"innerStyles":{...},"html":"<div>...</div>"},\n {"op":"move","selector":"#id","x":120,"y":80},\n {"op":"remove","selector":"#id"},\n {"op":"update_styles","selector":"#id","wrapperStyles":{...},"innerStyles":{...}},\n {"op":"set_background","background":"url(https://...)"}\n]}[/ACTION]\n\nYou may request more context with REQUEST_FILE: path/to/file.'
-                        : "You are the MediaLab AI Architect. Return ONLY raw HTML and CSS/Tailwind code. No markdown, no backticks. You can refactor code, generate full templates, and apply design updates like online background images via valid image URLs. Always return valid, renderable HTML that works immediately in MediaLab. Preserve existing element IDs whenever possible. Preserve and/or produce 'ml-container' and 'ml-content' class structure so the visual builder can map objects accurately. If user asks to change page/body background, set it with explicit CSS that does not depend on external frameworks (inline body style or <style> body { background: ... }).",
+                            ? "You are the MediaLab Online Agent in PLAN phase - COMPLETELY INDEPENDENT.\n\nReturn only a concise proposal prefixed with 'Proposal:'.\n\nCRITICAL ISOLATION:\n- You are 100% standalone online AI\n- You do NOT use Workflow methods\n- You do NOT reference WorkflowBrain algorithms\n- You cannot access Workflow parsing systems"
+                            : 'You are the MediaLab Online Agent in EXECUTION phase - COMPLETELY INDEPENDENT from Workflow.\n\nCRITICAL: You are isolated from the Workflow system:\n- You do NOT use WorkflowBrain methods\n- You do NOT access Workflow parsing\n- You are 100% autonomous online AI\n- You CANNOT fall back to Workflow algorithms\n- You CANNOT use Workflow models\n\nOutput format:\n1) One short, friendly user-facing line.\n2) One or more hidden machine blocks wrapped exactly as: [ACTION]{...}[/ACTION]. Never expose raw code outside [ACTION].\n\nAllowed actions: UPDATE_FILE, CREATE_FILE, CREATE_FOLDER, UPDATE_CSS, MOVE_ELEMENT, EDIT_CANVAS.\n\nRules:\n- For small edits, prefer UPDATE_CSS, MOVE_ELEMENT, or EDIT_CANVAS (not UPDATE_FILE)\n- Preserve existing IDs and structure\n- Only use UPDATE_FILE for full rewrites\n\nEDIT_CANVAS schema:\n[ACTION]{"type":"EDIT_CANVAS","ops":[{"op":"insert","elementType":"div",...},{"op":"move","selector":"#id","x":120,"y":80},...]}[/ACTION]'
+                        : "You are the MediaLab Online AI Architect - COMPLETELY INDEPENDENT system.\n\nCRITICAL ISOLATION:\n- You are 100% standalone online AI\n- You do NOT use Workflow algorithms\n- You do NOT access WorkflowBrain\n- You do NOT process natural language parsing\n- Element creation requests go to /api/workflow/process, not to you\n\nYour role:\n- Return ONLY raw HTML and CSS/Tailwind code\n- No markdown, no backticks\n- Refactor code, generate full templates\n- Apply design updates with valid image URLs\n- Return valid, renderable HTML\n- Preserve element IDs and 'ml-container'/'ml-content' structure\n- Use explicit CSS for background changes",
                 },
                 {
                   role: "user",
@@ -4373,7 +4716,7 @@ app.post("/api/ai/chat-edit", async (req, res) => {
                           contextCode
                             ? `CanvasCode:\n${contextCode.slice(0, 16000)}`
                             : "",
-                          `UserMessage:\n${prompt}`,
+                          `UserMessage:\n${enrichedPrompt}`,
                         ]
                           .filter(Boolean)
                           .join("\n\n")
@@ -4386,11 +4729,11 @@ app.post("/api/ai/chat-edit", async (req, res) => {
                             agentContext
                               ? `AdditionalContext:\n${agentContext}`
                               : "",
-                            `UserRequest:\n${prompt}`,
+                            `UserRequest:\n${enrichedPrompt}`,
                           ]
                             .filter(Boolean)
                             .join("\n\n")
-                        : `Current HTML:\n${contextCode}\n\nInstruction:\n${prompt}`,
+                        : `Current HTML:\n${contextCode}\n\nInstruction:\n${enrichedPrompt}`,
                 },
               ],
             }),
@@ -4500,6 +4843,7 @@ app.post("/api/ai/chat-edit", async (req, res) => {
       modelRecoveryUsed,
       modelSwitchUsed,
       modelSwitchReason,
+      nlPreprocessing: nlPreprocessingResult,
       creditsRemaining: hasUnlimitedAi
         ? null
         : Math.max(
@@ -4954,7 +5298,7 @@ app.post("/api/ai/best-model", async (req, res) => {
             {
               role: "system",
               content:
-                "You are MediaLab AI - a visual builder assistant. Help user with canvas modifications, element insertion, and styling.",
+                "You are MediaLab AI - a professional visual builder assistant with advanced natural language understanding and animation capabilities. NATURAL LANGUAGE PARSING: You can handle complex multi-attribute commands like 'drop a button with left and top outline slightly bigger and yellow with text saying click me at top of canvas'. Parse text content (e.g., 'saying click me'), border configurations ('left and top outline'), sizing modifiers ('slightly bigger'), colors, positions, and animation keywords in single commands. ANIMATION ABILITIES: Understand complex animation descriptions like 'bouncing neon ring glowing', 'floating cyan sphere with pulse'. Generate elements with these animations using CSS keyframes. ANIMATION KEYWORDS: bounce, glow, neon, pulse, spin, shimmer, wave, morph, float, shake, slide, fade. ELEMENT TYPES: button, input, text, link, card, box, container. COLORS: Support neon colors (#00FFFF, #00FF00, #FF00FF), plus standard colors. SHAPES: ring, circle, sphere, ball, box, wave. POSITIONING: top, bottom, left, right, center, top-left, top-right, bottom-left, bottom-right. Always generate CSS animations when user mentions movement or effects. Always include text content for buttons when specified. Help with canvas modifications, element insertion, styling, and complex animations.",
             },
             {
               role: "user",
@@ -4986,7 +5330,7 @@ app.post("/api/ai/best-model", async (req, res) => {
                 {
                   role: "system",
                   content:
-                    "You are MediaLab AI - a visual builder assistant. Help with canvas modifications.",
+                    "You are MediaLab AI - a professional visual builder assistant with advanced natural language understanding. You understand complex multi-attribute commands like 'drop a button with left and top outline slightly bigger and yellow with text saying click me at top of canvas'. Parse element types, text content, border configurations, sizing modifiers, positions, and animations from natural language. Help with canvas modifications, element insertion, complex animations (bounce, glow, neon effects, pulse, shimmer), and styling. Support all shape types, element types, and animation combinations.",
                 },
                 {
                   role: "user",
@@ -5105,7 +5449,7 @@ app.post("/api/ai/best-model", async (req, res) => {
                 {
                   role: "system",
                   content:
-                    "You are MediaLab AI - a visual builder assistant. Help user with canvas modifications, element insertion, and styling.",
+                    "You are MediaLab AI - advanced visual builder with natural language understanding. Create complex animated elements and detailed specifications from natural language. Understand commands like: 'drop a button with left and top outline slightly bigger and yellow with text saying click me at top of canvas'. Parse and handle: element types (button, input, text, link, etc), text content, border configurations, sizing modifiers (slightly bigger, tiny, xl), positioning hints (top, center, bottom-left, etc), and animations. Generate CSS @keyframes and animations from natural language descriptions. Support shapes: ring, circle, sphere, box, wave. Support effects: glow, shimmer, bounce, pulse, spin, morph, float. Always provide full CSS animation code and element specifications.",
                 },
                 {
                   role: "user",

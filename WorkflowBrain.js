@@ -1,8 +1,15 @@
 /**
- * WorkflowBrain.js
+ * WorkflowBrain.js - Advanced Animation & Element Generation AI
  *
- * Core AI-powered insert and processing system for MediaLab
- * Handles intelligent element generation, background detection, and command normalization
+ * Core AI-powered insert, animation, and processing system for MediaLab
+ * Handles intelligent element generation, complex animations, background detection, and command normalization
+ *
+ * Advanced Animation Capabilities:
+ * - Neon rings with glowing effects
+ * - Complex bounce, pulse, glow combinations
+ * - Shimmer, wave, morph animations
+ * - CSS keyframe generation from natural language
+ * - Multi-effect composition
  *
  * Dependencies: None (pure functions - external dependencies injected)
  * Usage: Import and configure with external functions (setAiAgentStage, runDeterministicBuilderCommand)
@@ -16,68 +23,403 @@ class WorkflowBrain {
       config.runDeterministicBuilderCommand || (() => null);
     this.getCanvasElement =
       config.getCanvasElement || (() => document.getElementById("web-canvas"));
+
+    // Advanced animation library
+    this.animationLibrary = this.initializeAnimationLibrary();
+  }
+
+  /**
+   * Initialize comprehensive animation effects library
+   * Provides advanced CSS keyframes and effect compositions
+   */
+  initializeAnimationLibrary() {
+    return {
+      // Basic animations
+      bounce: {
+        keyframes: `@keyframes bounce {
+          0%, 100% { transform: translateY(0) scale(1); }
+          50% { transform: translateY(-25px) scale(1.05); }
+        }`,
+        duration: "0.8s",
+        timingFunction: "cubic-bezier(0.68, -0.55, 0.265, 1.55)",
+      },
+
+      // Neon glow animation with intensity pulse
+      neonGlow: {
+        keyframes: `@keyframes neonGlow {
+          0%, 100% { 
+            filter: brightness(1) drop-shadow(0 0 5px currentColor);
+            text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+          }
+          50% { 
+            filter: brightness(1.3) drop-shadow(0 0 15px currentColor);
+            text-shadow: 0 0 20px rgba(0, 255, 255, 0.8), 0 0 30px rgba(0, 255, 255, 0.5);
+          }
+        }`,
+        duration: "1.5s",
+        timingFunction: "ease-in-out",
+      },
+
+      // Ring/circle neon effect with box-shadow glow
+      neonRingGlow: {
+        keyframes: `@keyframes neonRingGlow {
+          0%, 100% { 
+            box-shadow: 0 0 10px var(--glow-color, #00FFFF), 
+                        inset 0 0 10px rgba(0, 255, 255, 0.2);
+          }
+          50% { 
+            box-shadow: 0 0 20px var(--glow-color, #00FFFF),
+                        0 0 30px var(--glow-color, #00FFFF),
+                        inset 0 0 20px rgba(0, 255, 255, 0.4);
+          }
+        }`,
+        duration: "1.5s",
+        timingFunction: "ease-in-out",
+      },
+
+      // Complex bounce with glow composition
+      bouncingGlow: {
+        keyframes: `@keyframes bouncingGlow {
+          0%, 100% { 
+            transform: translateY(0) scale(1);
+            filter: brightness(1);
+          }
+          50% { 
+            transform: translateY(-30px) scale(1.08);
+            filter: brightness(1.4);
+          }
+        }`,
+        duration: "1s",
+        timingFunction: "cubic-bezier(0.34, 1.56, 0.64, 0.58)",
+      },
+
+      // Shimmer effect (moving highlight)
+      shimmer: {
+        keyframes: `@keyframes shimmer {
+          0% { background-position: -1000px 0; }
+          100% { background-position: 1000px 0; }
+        }`,
+        duration: "3s",
+        timingFunction: "linear",
+      },
+
+      // Pulsing glow (size + opacity)
+      pulseGlow: {
+        keyframes: `@keyframes pulseGlow {
+          0%, 100% { 
+            opacity: 0.7;
+            transform: scale(1);
+            filter: brightness(1);
+          }
+          50% { 
+            opacity: 1;
+            transform: scale(1.15);
+            filter: brightness(1.3);
+          }
+        }`,
+        duration: "2s",
+        timingFunction: "ease-in-out",
+      },
+
+      // Wave/ripple effect
+      waveRipple: {
+        keyframes: `@keyframes waveRipple {
+          0%, 100% { transform: scale(1); opacity: 0.8; }
+          50% { transform: scale(1.2); opacity: 0.4; }
+        }`,
+        duration: "2s",
+        timingFunction: "ease-in-out",
+      },
+
+      // Rotating glow (spin + brightness)
+      rotatingGlow: {
+        keyframes: `@keyframes rotatingGlow {
+          0% { 
+            transform: rotate(0deg);
+            filter: brightness(1);
+          }
+          50% { 
+            filter: brightness(1.3);
+          }
+          100% { 
+            transform: rotate(360deg);
+            filter: brightness(1);
+          }
+        }`,
+        duration: "2s",
+        timingFunction: "linear",
+      },
+
+      // Floating animation
+      floating: {
+        keyframes: `@keyframes floating {
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-20px); }
+        }`,
+        duration: "3s",
+        timingFunction: "ease-in-out",
+      },
+
+      // Shake effect
+      shake: {
+        keyframes: `@keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          25% { transform: translateX(-10px); }
+          75% { transform: translateX(10px); }
+        }`,
+        duration: "0.5s",
+        timingFunction: "ease-in-out",
+      },
+
+      // Slide animation
+      slide: {
+        keyframes: `@keyframes slide {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
+        }`,
+        duration: "2s",
+        timingFunction: "ease-in-out",
+      },
+
+      // Fade pulse
+      fadePulse: {
+        keyframes: `@keyframes fadePulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.3; }
+        }`,
+        duration: "2s",
+        timingFunction: "ease-in-out",
+      },
+
+      // Morph animation (3D perspective)
+      morph: {
+        keyframes: `@keyframes morph {
+          0%, 100% { 
+            border-radius: 50%;
+            transform: scale(1) rotateX(0deg);
+          }
+          50% { 
+            border-radius: 20%;
+            transform: scale(1.1) rotateX(180deg);
+          }
+        }`,
+        duration: "3s",
+        timingFunction: "ease-in-out",
+      },
+    };
+  }
+
+  /**
+   * Parse complex animation descriptions and compose effects
+   * "bouncing neon ring glowing" → combines bounce + neon-glow + ring-glow
+   */
+  parseAdvancedAnimation(description = "") {
+    const desc = String(description || "").toLowerCase();
+    const effects = [];
+
+    // Detect animation keywords and map to library
+    if (/bouncy|bounce|bouncing|jump|hopping/.test(desc)) {
+      if (/glow|glowing|neon/.test(desc)) {
+        effects.push("bouncingGlow");
+      } else {
+        effects.push("bounce");
+      }
+    }
+
+    if (/neon|glow|glowing|light|bright|shine|shimmer/.test(desc)) {
+      if (/ring/.test(desc) || /circle/.test(desc)) {
+        effects.push("neonRingGlow");
+      } else {
+        effects.push("neonGlow");
+      }
+    }
+
+    if (/pulse|pulsing|pulsate|throb/.test(desc)) {
+      if (/glow|bright/.test(desc)) {
+        effects.push("pulseGlow");
+      } else {
+        effects.push("fadePulse");
+      }
+    }
+
+    if (/wave|ripple|water|ocean/.test(desc)) {
+      effects.push("waveRipple");
+    }
+
+    if (/spin|rotate|rotating|rotation|twirl|whirl/.test(desc)) {
+      if (/glow/.test(desc)) {
+        effects.push("rotatingGlow");
+      } else {
+        effects.push("bounce"); // fallback
+      }
+    }
+
+    if (/shimmer|glitter|sparkle/.test(desc)) {
+      effects.push("shimmer");
+    }
+
+    if (/float|floating|hover|levitate|drift/.test(desc)) {
+      effects.push("floating");
+    }
+
+    if (/shake|tremor|vibrate|jitter/.test(desc)) {
+      effects.push("shake");
+    }
+
+    if (/slide|slide-in|slide-out/.test(desc)) {
+      effects.push("slide");
+    }
+
+    if (/morph|transform|shape-shift/.test(desc)) {
+      effects.push("morph");
+    }
+
+    // If no effects detected, default to bouncing glow for "complex" animations
+    if (
+      effects.length === 0 &&
+      /complex|cool|awesome|crazy|advanced|pro/.test(desc)
+    ) {
+      effects.push("bouncingGlow");
+    }
+
+    return effects.length > 0 ? effects : ["bounce"];
+  }
+
+  /**
+   * Generate CSS animations with composition support
+   * Takes array of animation names and produces combined CSS
+   */
+  generateAnimationCSS(animationNames = [], customDuration = null) {
+    let keyframes = "";
+    const animations = [];
+
+    for (const animName of animationNames) {
+      const anim = this.animationLibrary[animName];
+      if (anim) {
+        keyframes += anim.keyframes + "\n";
+        animations.push({
+          name: animName,
+          duration: customDuration || anim.duration,
+          timing: anim.timingFunction,
+        });
+      }
+    }
+
+    // Compose animation property
+    const animationStr = animations
+      .map((a) => `${a.name} ${a.duration} ${a.timing} infinite`)
+      .join(", ");
+
+    return {
+      keyframes,
+      animation: animationStr,
+    };
+  }
+
+  /**
+   * Create neon ring element with advanced glow
+   * Highly customizable neon effect for "bouncing neon ring" type requests
+   */
+  createNeonRing(options = {}) {
+    const {
+      size = 150,
+      color = "#00FFFF",
+      glowIntensity = 25,
+      animations = ["neonRingGlow", "bouncingGlow"],
+      thickness = 3,
+      additionalEffects = [],
+    } = options;
+
+    const glowColor = color === "neon" ? "#00FFFF" : color;
+    const innerRadius = (size - thickness * 2) / 2;
+
+    // Generate animation CSS
+    const { keyframes, animation } = this.generateAnimationCSS(animations);
+
+    // Create SVG-based neon ring for crisp rendering
+    const html = `<div class="neon-ring-container" style="
+      width: ${size}px;
+      height: ${size}px;
+      position: relative;
+      --glow-color: ${glowColor};
+      animation: ${animation};
+    ">
+      <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" style="filter: blur(${additionalEffects.includes("blur") ? 0.5 : 0}px);">
+        <circle 
+          cx="${size / 2}" 
+          cy="${size / 2}" 
+          r="${size / 2 - thickness / 2}"
+          fill="none"
+          stroke="${glowColor}"
+          stroke-width="${thickness}"
+          opacity="0.9"
+          style="filter: drop-shadow(0 0 ${glowIntensity}px ${glowColor});"
+        />
+      </svg>
+    </div>`;
+
+    return {
+      type: "neon-ring",
+      html,
+      css: keyframes,
+      animations,
+      svgBased: true,
+      style: {
+        position: "relative",
+        display: "inline-block",
+      },
+    };
+  }
+
+  /**
+   * Create glowing sphere/ball with advanced effects
+   * Perfect for "bouncing glowing neon ball"
+   */
+  createGlowingSphere(options = {}) {
+    const {
+      size = 100,
+      color = "#00FFFF",
+      glowIntensity = 30,
+      animations = ["bouncingGlow"],
+      innerGlow = true,
+    } = options;
+
+    const { keyframes, animation } = this.generateAnimationCSS(
+      animations,
+      "1s",
+    );
+
+    const html = `<div class="glowing-sphere" style="
+      width: ${size}px;
+      height: ${size}px;
+      background: radial-gradient(circle at 35% 35%, ${color}, rgba(0, 255, 255, 0.3));
+      border-radius: 50%;
+      box-shadow: 
+        0 0 ${glowIntensity}px ${color},
+        ${innerGlow ? `inset 0 0 ${glowIntensity / 2}px rgba(255, 255, 255, 0.3),` : ""}
+        0 0 ${glowIntensity * 2}px ${color}66;
+      animation: ${animation};
+      position: relative;
+      cursor: grab;
+    "></div>`;
+
+    return {
+      type: "glowing-sphere",
+      html,
+      css: keyframes,
+      animations,
+      simple: true,
+    };
   }
 
   /**
    * Extract color from user input
-   * Supports named colors, hex codes, rgb(), etc.
+   * Supports named colors, hex codes, rgb(), neon colors, gradients
    */
   extractColorFromPrompt(prompt = "", fallback = "#3b82f6") {
     const text = String(prompt || "").toLowerCase();
     const colorMap = {
-      blue: "#3b82f6",
-      red: "#ef4444",
-      green: "#22c55e",
-      yellow: "#eab308",
-      orange: "#f97316",
-      purple: "#a855f7",
-      pink: "#ec4899",
-      cyan: "#06b6d4",
-      teal: "#14b8a6",
-      white: "#ffffff",
-      black: "#111827",
-      gray: "#6b7280",
-      grey: "#6b7280",
-    };
-    for (const key of Object.keys(colorMap)) {
-      if (text.includes(key)) return colorMap[key];
-    }
-    const hex = text.match(/#([0-9a-f]{3}|[0-9a-f]{6})\b/i);
-    if (hex) return `#${hex[1]}`;
-    return fallback;
-  }
-
-  /**
-   * Analyze user input to extract shape, animations, colors, effects, etc.
-   * Used for creative element generation like "bouncing neon ring with border left"
-   */
-  analyzeSmartInsertDescription(userInput) {
-    const input = String(userInput || "")
-      .toLowerCase()
-      .trim();
-
-    // Extract shape/type
-    const shapeMatch = input.match(
-      /\b(ring|circle|box|square|wave|line|dot|ball|card|container|shape)\b/,
-    );
-    const shape = shapeMatch ? shapeMatch[1] : "box";
-
-    // Extract animations
-    const animations = [];
-    if (/bouncy|bounce|bouncing/.test(input)) animations.push("bounce");
-    if (/spin|spinning|rotate|rotating|rotation/.test(input))
-      animations.push("spin");
-    if (/pulse|pulsing|pulsate/.test(input)) animations.push("pulse");
-    if (/wave|waves|waving/.test(input)) animations.push("wave");
-    if (/glow|glowing|glowEffect/.test(input)) animations.push("glow");
-    if (/slide|sliding|slide/.test(input)) animations.push("slide");
-    if (/fade|fading|fadeIn|fadeOut/.test(input)) animations.push("fade");
-    if (/shake|shaking|tremor/.test(input)) animations.push("shake");
-    if (/float|floating|hover/.test(input)) animations.push("float");
-
-    // Extract colors - comprehensive color detection
-    const colorMap = {
-      neon: "neon",
+      neon: "#00FFFF",
       cyan: "#00FFFF",
       lime: "#00FF00",
       magenta: "#FF00FF",
@@ -92,37 +434,129 @@ class WorkflowBrain {
       black: "#000000",
       gold: "#FFD700",
       silver: "#C0C0C0",
-      gradient: "gradient",
-      rainbow: "rainbow",
+      teal: "#008080",
+      indigo: "#4B0082",
+      navy: "#000080",
+      maroon: "#800000",
+      khaki: "#F0E68C",
+      salmon: "#FA8072",
+      coral: "#FF7F50",
+      turquoise: "#40E0D0",
+      violet: "#EE82EE",
+      scarlet: "#FF2400",
+      crimson: "#DC143C",
     };
 
-    let color = "#0066FF"; // default blue
     for (const [keyword, colorValue] of Object.entries(colorMap)) {
-      if (input.includes(keyword)) {
-        color = colorValue;
-        break;
-      }
+      if (text.includes(keyword)) return colorValue;
     }
+
+    const hex = text.match(/#([0-9a-f]{3}|[0-9a-f]{6})\b/i);
+    if (hex) return `#${hex[1]}`;
+
+    const rgbMatch = text.match(
+      /rgb\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/,
+    );
+    if (rgbMatch) {
+      const r = parseInt(rgbMatch[1]);
+      const g = parseInt(rgbMatch[2]);
+      const b = parseInt(rgbMatch[3]);
+      return `rgb(${r}, ${g}, ${b})`;
+    }
+
+    return fallback;
+  }
+
+  /**
+   * Analyze user input to extract shape, animations, colors, effects, etc.
+   * Used for creative element generation like "bouncing neon ring with border left"
+   */
+  /**
+   * Analyze user input to extract shape, animations, colors, effects, etc.
+   * Uses advanced animation parsing for "bouncing neon ring with border left" type requests
+   * Enhanced to handle natural variations: "red button", "outline at left and right", etc.
+   */
+  analyzeSmartInsertDescription(userInput) {
+    const input = String(userInput || "")
+      .toLowerCase()
+      .trim();
+
+    // Extract shape/type with better support for common shape references
+    const shapeMatch = input.match(
+      /\b(button|ring|circle|round|rounded|box|square|wave|line|dot|ball|card|container|shape|sphere|neon|bubble)\b/,
+    );
+    let shape = shapeMatch ? shapeMatch[1] : "box";
+
+    // Normalize shape references
+    if (shape === "button") shape = "box"; // buttons are typically box-shaped
+    if (shape === "round" || shape === "rounded") shape = "circle"; // round = circle
+
+    // Use advanced animation parser for complex animations
+    const animations = this.parseAdvancedAnimation(input);
+
+    // Extract color - comprehensive detection
+    const color = this.extractColorFromPrompt(input, "#0066FF");
 
     // Extract size
     let size = "medium"; // small, medium, large
     if (/\b(small|tiny|mini|xs)\b/.test(input)) size = "small";
-    if (/\b(large|big|xl|huge)\b/.test(input)) size = "large";
+    if (/\b(large|big|xl|huge|enormous|massive)\b/.test(input)) size = "large";
     if (/\b(medium|md)\b/.test(input)) size = "medium";
 
-    // Extract border info
-    const borderMatch = input.match(
-      /border\s+(left|right|top|bottom|all|none)?/,
-    );
-    const borderPosition = borderMatch ? borderMatch[1] || "all" : null;
-    const hasBorder = /border|outline|stroke/.test(input);
+    // Enhanced border extraction that handles "outline at left and right"
+    let borderPosition = null;
+    const hasBorder = /border|outline|stroke|edge/.test(input);
 
-    // Extract effects
+    if (hasBorder) {
+      // Check for specific sides mentioned with border/outline
+      const sides = [];
+      if (
+        /\b(?:outline|border).*\bleft\b|\bleft\b.*(?:outline|border)/i.test(
+          input,
+        )
+      )
+        sides.push("left");
+      if (
+        /\b(?:outline|border).*\bright\b|\bright\b.*(?:outline|border)/i.test(
+          input,
+        )
+      )
+        sides.push("right");
+      if (
+        /\b(?:outline|border).*\btop\b(?![\s\w]*canvas)|\btop\b(?:[\s+side\s]*|[\s+at\s]*|[\s+outline\s]*|[\s+border\s]*)/i.test(
+          input,
+        ) &&
+        !/top\s+of\s+(?:the\s+)?(?:canvas|page)/i.test(input)
+      )
+        sides.push("top");
+      if (
+        /\b(?:outline|border).*\bbottom\b|\bbottom\b.*(?:outline|border)/i.test(
+          input,
+        )
+      )
+        sides.push("bottom");
+
+      // Use sides if found, otherwise default to "all"
+      if (sides.length > 0) {
+        borderPosition = sides.length === 1 ? sides[0] : sides.join("_");
+      } else {
+        borderPosition = "all";
+      }
+    }
+
+    // Extract effects with advanced support
     const effects = [];
-    if (/shadow|glow|blur|effect/.test(input)) effects.push("shadow");
-    if (/gradient/.test(input)) effects.push("gradient");
-    if (/blur/.test(input)) effects.push("blur");
-    if (/frosted|glass|transparent/.test(input)) effects.push("frosted");
+    if (/shadow|shade|dark/.test(input)) effects.push("shadow");
+    if (/gradient|linear|radial/.test(input)) effects.push("gradient");
+    if (/blur|hazy|soft/.test(input)) effects.push("blur");
+    if (/frosted|glass|transparent|translucent/.test(input))
+      effects.push("frosted");
+    if (/neon|glow|bright|shine|luminous/.test(input)) effects.push("glow");
+
+    // Detect if complex animation is requested (for behavior tuning)
+    const isComplex =
+      /complex|pro|crazy|advanced|cool|awesome|epic|boss/.test(input) &&
+      animations.length > 1;
 
     return {
       shape,
@@ -132,6 +566,7 @@ class WorkflowBrain {
       borderPosition,
       hasBorder,
       effects,
+      isComplex,
       originalInput: userInput,
     };
   }
@@ -299,6 +734,24 @@ class WorkflowBrain {
       css += `.smart-element { animation: ${animationNames.join(", ")} ${animDuration} infinite ease-in-out; }`;
     }
 
+    // CHECK FOR ADVANCED ANIMATIONS (from parseAdvancedAnimation) and use generateAnimationCSS
+    const hasAdvancedAnimations = animations.some(
+      (anim) => this.animationLibrary && this.animationLibrary[anim],
+    );
+
+    if (hasAdvancedAnimations) {
+      // Use the advanced animation generator for professional animations
+      const { keyframes: advKeyframes, animation: advAnimation } =
+        this.generateAnimationCSS(animations);
+      if (advKeyframes) {
+        animations_css = advKeyframes;
+      }
+      if (advAnimation) {
+        // Apply animation to smart-element class
+        css = `.smart-element { animation: ${advAnimation}; }\n` + css;
+      }
+    }
+
     return {
       type: "div",
       label: label,
@@ -447,23 +900,314 @@ class WorkflowBrain {
   }
 
   /**
-   * Detect if user input is an insert intent
-   * Handles misspellings, casual English, different phrasing
+   * Extract text content from natural language command
+   * Handles: "with text saying click me", "button 'click me'", quoted text, etc.
    */
-  detectInsertIntent(userInput = "") {
-    const text = String(userInput || "")
+  extractTextFromCommand(userInput) {
+    const text = String(userInput || "").toLowerCase();
+
+    // Check for quoted text: "button 'Click Me'" or 'button "Submit"'
+    const quotedMatch = text.match(/['"`]([^'"`]+)['"`]/);
+    if (quotedMatch) {
+      return quotedMatch[1].trim();
+    }
+
+    // Check for "saying text": "with text saying click me"
+    const sayingMatch = text.match(
+      /(?:saying|says|with text)\s+([a-z\s]+?)(?:\s+and|\s+with|$)/i,
+    );
+    if (sayingMatch) {
+      return sayingMatch[1].trim();
+    }
+
+    // Check for "text: something": "button text: Submit"
+    const colonMatch = text.match(/text:?\s+([a-z\s]+?)(?:\s+and|\s+with|$)/i);
+    if (colonMatch) {
+      return colonMatch[1].trim();
+    }
+
+    return null;
+  }
+
+  /**
+   * Parse position keywords from natural language
+   * "top", "bottom", "left", "right", "top-left", "center", etc.
+   */
+  extractPositionFromCommand(userInput) {
+    const text = String(userInput || "").toLowerCase();
+
+    // Check for canvas/body positioning
+    const positionKeywords = {
+      "top-left": { x: "5%", y: "5%" },
+      "top-center": { x: "50%", y: "5%" },
+      "top-right": { x: "95%", y: "5%" },
+      "middle-left": { x: "5%", y: "50%" },
+      center: { x: "50%", y: "50%" },
+      "middle-right": { x: "95%", y: "50%" },
+      "bottom-left": { x: "5%", y: "90%" },
+      "bottom-center": { x: "50%", y: "90%" },
+      "bottom-right": { x: "95%", y: "90%" },
+      top: { x: "50%", y: "5%" },
+      bottom: { x: "50%", y: "90%" },
+      left: { x: "5%", y: "50%" },
+      right: { x: "95%", y: "50%" },
+    };
+
+    for (const [keyword, position] of Object.entries(positionKeywords)) {
+      const regex = new RegExp(
+        `(?:place|put|at|position|top of|bottom of|left of|right of|center of|middle of)?\\s+${keyword}`,
+        "i",
+      );
+      if (regex.test(text)) {
+        return { position: keyword, ...position };
+      }
+    }
+
+    // Default: center
+    return { position: "center", x: "50%", y: "50%" };
+  }
+
+  /**
+   * Parse border/outline specifications
+   * "left and top outline", "border all sides", etc.
+   */
+  extractBorderFromCommand(userInput) {
+    const text = String(userInput || "").toLowerCase();
+
+    const borderConfig = {
+      sides: [],
+      width: 2,
+      style: "solid",
+    };
+
+    // Check for specific sides
+    if (
+      /\bleft\b.*(?:border|outline)|\b(?:border|outline).*\bleft\b/i.test(text)
+    )
+      borderConfig.sides.push("left");
+    if (
+      /\bright\b.*(?:border|outline)|\b(?:border|outline).*\bright\b/i.test(
+        text,
+      )
+    )
+      borderConfig.sides.push("right");
+    if (/\btop\b.*(?:border|outline)|\b(?:border|outline).*\btop\b/i.test(text))
+      borderConfig.sides.push("top");
+    if (
+      /\bbottom\b.*(?:border|outline)|\b(?:border|outline).*\bbottom\b/i.test(
+        text,
+      )
+    )
+      borderConfig.sides.push("bottom");
+
+    // If specific sides mentioned, keep them; otherwise check for "all"
+    if (borderConfig.sides.length === 0) {
+      if (/\bborder\b|\boutline\b|\bedge\b/i.test(text)) {
+        borderConfig.sides = ["all"];
+      }
+    }
+
+    // Check for width specifications
+    if (/\bthick\b/) borderConfig.width = 4;
+    if (/\bthion|thin\b/) borderConfig.width = 1;
+    if (/\b(\d+)\s*px\s*(?:border|outline)/)
+      borderConfig.width = parseInt(RegExp.$1);
+
+    return borderConfig;
+  }
+
+  /**
+   * Parse size modifiers from natural language
+   * "slightly bigger", "a bit larger", "way bigger", etc.
+   */
+  extractSizeModifierFromCommand(userInput) {
+    const text = String(userInput || "").toLowerCase();
+
+    // Start with default "medium"
+    let sizeCategory = "medium";
+
+    // Check for size keywords
+    if (/\b(?:tiny|mini|x?small)\b/) sizeCategory = "small";
+    if (/\b(?:large|big|x?large|xl|huge|enormous)\b/) sizeCategory = "large";
+    if (/\bmedium|md\b/) sizeCategory = "medium";
+
+    // Check for modifiers
+    let sizeMultiplier = 1.0;
+    if (/\bslightly\s+(?:bigger|larger)/) sizeMultiplier = 1.15;
+    if (/\ba\s+bit\s+(?:bigger|larger)/) sizeMultiplier = 1.2;
+    if (/\bquite\s+(?:bigger|larger)/) sizeMultiplier = 1.4;
+    if (/\bmuch\s+(?:bigger|larger)|\bway\s+(?:bigger|larger)/)
+      sizeMultiplier = 1.6;
+    if (/\bslightly\s+(?:smaller|smaller)/) sizeMultiplier = 0.85;
+    if (/\ba\s+bit\s+(?:smaller|smaller)/) sizeMultiplier = 0.8;
+
+    return { sizeCategory, sizeMultiplier };
+  }
+
+  /**
+   * Parse natural command for comprehensive element specification
+   * Handles: "drop a button with left and top outline slightly bigger and yellow with text saying click me at top of canvas"
+   */
+  parseNaturalCommand(userInput) {
+    const input = String(userInput || "")
       .toLowerCase()
       .trim();
-    if (!text) return false;
 
-    // Insert intent keywords (covers misspellings, casual English, different phrasing)
-    const intentPatterns = [
-      /\b(insert|add|create|make|put|place|build|design|generate|render|draw|show|display|give me|fetch|produce|craft|construct|arrange|set|setup|get)\b/i,
-      /\b(a|an|one|some)\s+(button|card|input|slider|toggle|spinner|modal|form|text|heading|image|circle|ball|box|container|element)\b/i,
-      /^(can you|could you|please|would you|can i|give|put|show|insert|add|create)/i,
-    ];
+    // Extract element type
+    const elementMatch = input.match(
+      /\b(button|input|text|link|card|box|container|div|section|image|heading|label|form)\b/i,
+    );
+    const elementType = elementMatch ? elementMatch[1].toLowerCase() : "button";
 
-    return intentPatterns.some((pattern) => pattern.test(text));
+    // Extract text content (for buttons, headings, etc.)
+    const textContent = this.extractTextFromCommand(input);
+
+    // Extract styling
+    const color = this.extractColorFromPrompt(input, "#3b82f6");
+    const { sizeCategory, sizeMultiplier } =
+      this.extractSizeModifierFromCommand(input);
+
+    // Extract border/outline
+    const borderInfo = this.extractBorderFromCommand(input);
+
+    // Extract positioning
+    const positionInfo = this.extractPositionFromCommand(input);
+
+    // Extract animations
+    const animations = this.parseAdvancedAnimation(input);
+
+    return {
+      elementType,
+      textContent,
+      color,
+      sizeCategory,
+      sizeMultiplier,
+      borderInfo,
+      positionInfo,
+      animations,
+      originalInput: userInput,
+    };
+  }
+
+  /**
+   * Generate natural element spec with all details
+   * Creates button with text, specific outline sides, position, size, color
+   */
+  generateNaturalElementSpec(naturalParsed) {
+    const {
+      elementType,
+      textContent,
+      color,
+      sizeCategory,
+      sizeMultiplier,
+      borderInfo,
+      positionInfo,
+    } = naturalParsed;
+
+    // Size base mappings
+    const sizeMap = {
+      small: { w: 80, h: 40 },
+      medium: { w: 120, h: 50 },
+      large: { w: 200, h: 70 },
+    };
+
+    let baseSize = sizeMap[sizeCategory] || sizeMap.medium;
+    const w = Math.round(baseSize.w * sizeMultiplier);
+    const h = Math.round(baseSize.h * sizeMultiplier);
+
+    // Build border CSS
+    let borderCSS = "";
+    if (borderInfo.sides.length > 0) {
+      const borderWidth = borderInfo.width;
+      const borderStyle = borderInfo.style;
+      const borderColor = color === "gradient" ? "#3b82f6" : color;
+
+      if (borderInfo.sides.includes("all")) {
+        borderCSS = `border: ${borderWidth}px ${borderStyle} ${borderColor};`;
+      } else {
+        borderInfo.sides.forEach((side) => {
+          borderCSS += `border-${side}: ${borderWidth}px ${borderStyle} ${borderColor};`;
+        });
+      }
+    }
+
+    // Position calculation (convert percentages to pixels for canvas)
+    // Assuming 1200x700 canvas (typical)
+    const canvasW = 1200;
+    const canvasH = 700;
+    let left = canvasW * 0.5 - w / 2; // center x
+    let top = canvasH * 0.5 - h / 2; // center y
+
+    if (positionInfo.x && positionInfo.x.includes("%")) {
+      left = (canvasW * parseInt(positionInfo.x)) / 100 - w / 2;
+    }
+    if (positionInfo.y && positionInfo.y.includes("%")) {
+      top = (canvasH * parseInt(positionInfo.y)) / 100 - h / 2;
+    }
+
+    // Generate HTML based on element type
+    let html = "";
+    const btnText = textContent || "Click Me";
+
+    if (elementType === "button" || elementType === "link") {
+      html = `<button class="natural-element" style="
+        width: ${w}px;
+        height: ${h}px;
+        background-color: ${color === "gradient" ? "#3b82f6" : color};
+        color: white;
+        font-weight: bold;
+        font-size: 14px;
+        padding: 10px;
+        cursor: pointer;
+        border-radius: 4px;
+        ${borderCSS}
+      ">${btnText}</button>`;
+    } else if (elementType === "text" || elementType === "heading") {
+      html = `<div class="natural-element" style="
+        width: ${w}px;
+        height: ${h}px;
+        color: ${color};
+        font-weight: bold;
+        font-size: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        ${borderCSS}
+      ">${btnText}</div>`;
+    } else {
+      html = `<div class="natural-element" style="
+        width: ${w}px;
+        height: ${h}px;
+        background-color: ${color === "gradient" ? "linear-gradient(135deg, #3b82f6, #8b5cf6)" : color};
+        ${borderCSS}
+      "></div>`;
+    }
+
+    // Generate CSS for animations if any
+    let css = "";
+    let animations_css = "";
+    if (naturalParsed.animations && naturalParsed.animations.length > 0) {
+      const { keyframes, animation } = this.generateAnimationCSS(
+        naturalParsed.animations,
+      );
+      if (keyframes) animations_css = keyframes;
+      if (animation) css = `.natural-element { animation: ${animation}; }`;
+    }
+
+    return {
+      type: "div",
+      label: `${elementType} with text "${btnText}"`,
+      html,
+      css,
+      animations: animations_css,
+      styles: {
+        width: `${w}px`,
+        height: `${h}px`,
+        position: "absolute",
+        left: `${Math.round(left)}px`,
+        top: `${Math.round(top)}px`,
+      },
+    };
   }
 
   /**
@@ -533,6 +1277,265 @@ class WorkflowBrain {
   }
 
   /**
+   * Detect if user input is an insert/element creation intent
+   * Returns confidence level for intent detection
+   */
+  detectInsertIntent(userInput = "") {
+    const text = String(userInput || "").toLowerCase();
+
+    // Strong insert intent keywords
+    const strongIntentPatterns = [
+      /\b(insert|add|drop|place|create|make)\s+(?:a|an|the)?\s*\b(button|input|text|card|box|circle|image|heading|form|modal)\b/,
+      /\b(button|box|card|circle|shape|element)\b.*\b(with|and|having|using)\b/,
+      /\b(put|place).*\b(button|box|text|element|shape)\b/,
+      /bouncing|neon|glowing|animated.*(?:button|box|circle|element)/,
+    ];
+
+    // Medium intent patterns (partial matches)
+    const mediumIntentPatterns = [
+      /\b(with|add|insert).*\b(text|color|border|animation|glow)\b/,
+      /\b(button|link|input|field|card|box|container)\b.*\b(text|saying|labeled)\b/,
+      /\b(drop|create).*(?:element|component|widget)\b/,
+    ];
+
+    // Element type detection
+    const elementTypes = [
+      "button",
+      "card",
+      "input",
+      "field",
+      "slider",
+      "toggle",
+      "spinner",
+      "modal",
+      "form",
+      "text",
+      "heading",
+      "title",
+      "label",
+      "image",
+      "circle",
+      "ball",
+      "dot",
+      "sphere",
+      "box",
+      "container",
+      "div",
+      "section",
+      "badge",
+      "tag",
+      "chip",
+      "alert",
+      "tooltip",
+      "navbar",
+      "link",
+      "search",
+      "dropdown",
+      "select",
+      "checkbox",
+      "radio",
+    ];
+    const hasElementType = elementTypes.some((type) =>
+      new RegExp(`\\b${type}\\b`, "i").test(text),
+    );
+
+    // Animation/style keywords that suggest element creation
+    const styleKeywords = [
+      "glow",
+      "bounce",
+      "neon",
+      "shadow",
+      "gradient",
+      "animation",
+      "animate",
+      "border",
+      "color",
+      "brighter",
+      "with text",
+      "saying",
+      "glowing",
+      "bouncing",
+      "rotating",
+      "pulsing",
+    ];
+    const hasStyleKeywords = styleKeywords.some((keyword) =>
+      text.includes(keyword),
+    );
+
+    // Strong intent = very confident
+    for (const pattern of strongIntentPatterns) {
+      if (pattern.test(text)) {
+        return {
+          isIntent: true,
+          confidence: 0.95,
+          type: "strong",
+        };
+      }
+    }
+
+    // Medium intent = confident + element type
+    for (const pattern of mediumIntentPatterns) {
+      if (pattern.test(text) && hasElementType) {
+        return {
+          isIntent: true,
+          confidence: 0.75,
+          type: "medium",
+        };
+      }
+    }
+
+    // Element type + style = probable intent
+    if (hasElementType && hasStyleKeywords) {
+      return {
+        isIntent: true,
+        confidence: 0.7,
+        type: "probable",
+      };
+    }
+
+    // Standalone element type mentions
+    if (hasElementType) {
+      return {
+        isIntent: true,
+        confidence: 0.5,
+        type: "weak",
+      };
+    }
+
+    return {
+      isIntent: false,
+      confidence: 0,
+      type: "none",
+    };
+  }
+
+  /**
+   * Parse natural language intent with detailed command extraction
+   * Handles multi-intent commands and provides semantic understanding
+   */
+  parseNaturalLanguageIntent(userInput = "") {
+    const text = String(userInput || "").toLowerCase();
+
+    // Detect multiple intent types
+    const intents = {
+      insert: /\b(insert|add|drop|place|create|make)\b/,
+      modify: /\b(change|update|edit|modify|adjust|set)\b/,
+      background: /\b(background|bg|body|page)\b/,
+      animate: /\b(animate|animation|bounce|glow|pulse|spin|rotate)\b/,
+      position: /\b(top|bottom|left|right|center|position|place|at|move)\b/,
+      color: /\b(color|colored|colored|tint|hue)\b/,
+      text: /\b(text|saying|labeled|with name|titled)\b/,
+      size: /\b(big|small|large|tiny|huge|medium|xl|xs)\b/,
+      special: /\b(glow|neon|shadow|gradient|blur|frosted|glass)\b/,
+    };
+
+    // Extract detected intents
+    const detectedIntents = Object.entries(intents)
+      .filter(([key, pattern]) => pattern.test(text))
+      .map(([key]) => key);
+
+    // Extract semantic values
+    const semantic = {
+      elementType: this.extractElementType(text),
+      colors: this.extractAllColors(text),
+      animations: this.parseAdvancedAnimation(text),
+      position: this.extractPositionFromCommand(text),
+      textContent: this.extractTextFromCommand(text),
+      size: this.extractSizeModifierFromCommand(text),
+      specialEffects: this.extractSpecialEffects(text),
+      borderInfo: this.extractBorderFromCommand(text),
+    };
+
+    return {
+      originalInput: userInput,
+      detectedIntents,
+      primaryIntent: detectedIntents[0] || null,
+      semantic,
+      confidence: this.detectInsertIntent(userInput).confidence,
+    };
+  }
+
+  /**
+   * Extract element type from command with extended support
+   */
+  extractElementType(text) {
+    const elementMatch = text.match(
+      /\b(button|card|input|field|slider|toggle|spinner|modal|form|text|heading|title|h\d|label|image|photo|picture|circle|ball|dot|sphere|box|container|div|section|header|footer|navbar|menu|dropdown|tab|badge|tag|chip|alert|tooltip|popover|calendar|date|time|color|checkbox|radio|select|textarea|search|pagination|breadcrumb|section|article|nav|aside|main|link|anchor|span|paragraph|p)\b/i,
+    );
+    return elementMatch ? elementMatch[1].toLowerCase() : null;
+  }
+
+  /**
+   * Extract all colors mentioned in the command
+   */
+  extractAllColors(text) {
+    const colors = [];
+    const colorMap = {
+      red: "#FF0000",
+      blue: "#0066FF",
+      green: "#00CC00",
+      yellow: "#FFD700",
+      purple: "#9500FF",
+      pink: "#FF1493",
+      orange: "#FF6600",
+      cyan: "#00FFFF",
+      lime: "#00FF00",
+      white: "#FFFFFF",
+      black: "#000000",
+      gray: "#808080",
+      grey: "#808080",
+      gold: "#FFD700",
+      silver: "#C0C0C0",
+      navy: "#000080",
+      magenta: "#FF00FF",
+      teal: "#008080",
+      indigo: "#4B0082",
+      neon: "#00FFFF",
+    };
+
+    // Named colors
+    for (const [name, hex] of Object.entries(colorMap)) {
+      if (text.includes(name)) colors.push({ name, value: hex });
+    }
+
+    // Hex colors
+    const hexMatches = text.match(/#[0-9a-f]{6}/gi);
+    if (hexMatches)
+      colors.push(...hexMatches.map((h) => ({ name: "custom", value: h })));
+
+    // RGB colors
+    const rgbMatch = text.match(
+      /rgb\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/,
+    );
+    if (rgbMatch) colors.push({ name: "custom", value: rgbMatch[0] });
+
+    return colors.length > 0 ? colors : null;
+  }
+
+  /**
+   * Extract special visual effects from natural language
+   */
+  extractSpecialEffects(text) {
+    const effects = [];
+    const effectPatterns = {
+      glow: /\b(glow|glowing|luminous|bright|shine|shining)\b/,
+      shadow: /\b(shadow|shadowed|dark|shade)\b/,
+      gradient: /\b(gradient|gradual|blend)\b/,
+      blur: /\b(blur|blurred|soft|fuzzy|hazy)\b/,
+      frosted: /\b(frosted|glass|transparent|translucent|frosty)\b/,
+      shimmer: /\b(shimmer|sparkle|glitter|twinkle)\b/,
+      neon: /\b(neon|electrical|electric)\b/,
+      depth: /\b(depth|3d|shadow|inset)\b/,
+    };
+
+    for (const [effect, pattern] of Object.entries(effectPatterns)) {
+      if (pattern.test(text)) effects.push(effect);
+    }
+
+    return effects.length > 0 ? effects : null;
+  }
+
+  /**
    * Process smart insert command
    * Detects intent, normalizes, and executes
    */
@@ -540,10 +1543,13 @@ class WorkflowBrain {
     const text = String(userInput || "").trim();
 
     // First check: is this an insert-related command?
-    const isInsertIntent = this.detectInsertIntent(text);
-    if (!isInsertIntent) {
+    const intentResult = this.detectInsertIntent(text);
+    if (!intentResult.isIntent) {
       return null; // Not an insert command, return to normal chat
     }
+
+    // Parse full natural language intent for richer context
+    const naturalIntent = this.parseNaturalLanguageIntent(text);
 
     // Normalize the command to clean format
     const normalized = this.normalizeInsertCommand(text);
@@ -556,6 +1562,7 @@ class WorkflowBrain {
       return {
         success: true,
         normalized,
+        naturalIntent,
         message: result.message || "Element inserted successfully",
         applied: result.applied,
         actions: result.actions,
@@ -566,8 +1573,11 @@ class WorkflowBrain {
     return {
       success: false,
       normalized,
+      naturalIntent,
       message: "Normalized command - will use AI agent",
       requiresAI: true,
+      confidence: intentResult.confidence,
+      intentType: intentResult.type,
     };
   }
 
@@ -683,6 +1693,9 @@ class WorkflowBrain {
 if (typeof module !== "undefined" && module.exports) {
   module.exports = WorkflowBrain;
 }
+
+// ES6 module export
+export default WorkflowBrain;
 
 // Make available globally in browser
 if (typeof window !== "undefined") {
