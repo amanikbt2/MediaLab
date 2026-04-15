@@ -32418,6 +32418,60 @@ ${interactionBlock}
         );
         return String(match?.[1] || "").trim();
       }
+      /**
+       * SUPPORTED AI AGENT ACTION BLOCKS
+       * 
+       * Format: [ACTION]{TYPE}JSON_PAYLOAD[/ACTION]
+       * or: [ACTION]{"type":"TYPE", ...}[/ACTION]
+       * 
+       * Supported Actions:
+       * 1. UPDATE_FILE / CREATE_FILE
+       *    {type: "UPDATE_FILE", path: "index.html", content: "..."}
+       * 
+       * 2. CREATE_FOLDER
+       *    {type: "CREATE_FOLDER", path: "src/"}
+       * 
+       * 3. EDIT_CANVAS (incremental ops)
+       *    {type: "EDIT_CANVAS", ops: [{op: "insert", html: "..."}, {op: "remove", selector: "..."}]}
+       * 
+       * 4. UPDATE_CSS
+       *    {type: "UPDATE_CSS", selector: "body", styles: {backgroundColor: "#fff"}}
+       * 
+       * 5. MOVE_ELEMENT / UPDATE_POSITION
+       *    {type: "MOVE_ELEMENT", selector: "#elem", x: 100, y: 50}
+       * 
+       * 6. INSERT_ELEMENT_SPEC - FLEXIBLE ELEMENT INSERT (NEW!)
+       *    {type: "INSERT_ELEMENT_SPEC", 
+       *     html: "<button>Click me</button>",
+       *     css: "@keyframes glow {...}",
+       *     style: {width: "200px", fontSize: "16px"},
+       *     className: "my-button",
+       *     attributes: {onclick: "alert('hi!')", "data-id": "123"},
+       *     animations: "@keyframes bounce {...}",
+       *     width: "200px", height: "50px",
+       *     x: 100, y: 50}
+       * 
+       * Example INSERT_ELEMENT_SPEC for glowing button:
+       *   {
+       *     "type": "INSERT_ELEMENT_SPEC",
+       *     "html": "<button>Submit</button>",
+       *     "css": "@keyframes glow { 0%,100% { box-shadow: 0 0 5px #0ff; } 50% { box-shadow: 0 0 20px #0ff; } }",
+       *     "style": {
+       *       "width": "180px",
+       *       "height": "50px",
+       *       "backgroundColor": "#0ff",
+       *       "color": "#000",
+       *       "borderRadius": "25px",
+       *       "border": "2px solid #0ff",
+       *       "fontSize": "16px",
+       *       "fontWeight": "bold",
+       *       "animation": "glow 2s ease-in-out infinite"
+       *     },
+       *     "x": 100,
+       *     "y": 200,
+       *     "attributes": {"onclick": "console.log('clicked')"}
+       *   }
+       */
       function extractAgentActionBlocks(responseText = "") {
         const actions = [];
         const regex = /\[ACTION\]\s*([\s\S]*?)\s*\[\/ACTION\]/gi;
@@ -32714,9 +32768,109 @@ ${interactionBlock}
           top: clamp(top, 0, maxTop),
         };
       }
+      /**
+       * Parse and apply INSERT_ELEMENT_SPEC action from AI agent.
+       * Supports full HTML/CSS/attributes for flexible element creation.
+       * Format: INSERT_ELEMENT_SPEC {...JSON...}
+       * Allows: html, css, style, class, width, height, x, y, attributes, animations, etc.
+       */
+      function applyInsertElementSpec(specJson = {}) {
+        try {
+          const spec = typeof specJson === 'string' ? JSON.parse(specJson) : specJson;
+          const {
+            html = '',
+            css = '',
+            style = {},
+            className = '',
+            width = '260px',
+            height = '120px',
+            x = null,
+            y = null,
+            attributes = {},
+            animations = '',
+            text = '',
+            id = '',
+          } = spec;
+
+          // Create container wrapper
+          const wrapper = document.createElement('div');
+          wrapper.id = id || `ml-inserted-${Date.now()}`;
+          wrapper.className = `canvas-element ml-inserted-element ${className}`.trim();
+          
+          // Apply positioning
+          const styles = {
+            position: 'absolute',
+            width,
+            height,
+            ...(typeof style === 'object' ? style : {}),
+          };
+          
+          if (x !== null && x !== undefined) {
+            styles.left = typeof x === 'number' ? `${x}px` : String(x);
+          }
+          if (y !== null && y !== undefined) {
+            styles.top = typeof y === 'number' ? `${y}px` : String(y);
+          }
+          
+          Object.assign(wrapper.style, styles);
+          
+          // Set inner HTML
+          if (html) {
+            wrapper.innerHTML = String(html).trim();
+          } else if (text) {
+            wrapper.textContent = String(text);
+          }
+          
+          // Apply attributes (data-*, aria-*, onclick, etc.)
+          if (typeof attributes === 'object') {
+            Object.entries(attributes).forEach(([key, value]) => {
+              wrapper.setAttribute(key, String(value));
+            });
+          }
+          
+          // Inject CSS into page if provided
+          if (css) {
+            const styleEl = document.createElement('style');
+            styleEl.textContent = String(css);
+            document.head.appendChild(styleEl);
+          }
+          
+          // Add animations if provided
+          if (animations) {
+            const animStyle = document.createElement('style');
+            animStyle.textContent = String(animations);
+            document.head.appendChild(animStyle);
+          }
+          
+          // Add to canvas
+          const canvas = document.getElementById('web-canvas');
+          if (canvas) {
+            canvas.appendChild(wrapper);
+          }
+          
+          return {
+            success: true,
+            elementId: wrapper.id,
+            message: `Inserted element with ID: ${wrapper.id}`,
+          };
+        } catch (err) {
+          console.error('Insert element spec failed:', err);
+          return {
+            success: false,
+            message: `Failed to insert element: ${err.message}`,
+          };
+        }
+      }
+
       function buildDeterministicInsertSpec(prompt = "") {
         const text = String(prompt || "").toLowerCase();
         if (!/\b(insert|add|create)\b/.test(text)) return null;
+        
+        // First try to match complex style descriptions
+        const complexSpec = parseComplexInsertDescription(text);
+        if (complexSpec) return complexSpec;
+        
+        // Then fall back to predefined starters
         if (/\bfeature(?:\s+block|\s+row|\s+section)?\b/.test(text)) {
           return { starter: "feature", label: "feature block" };
         }
@@ -32842,6 +32996,167 @@ ${interactionBlock}
             boxShadow: "0 14px 34px rgba(15,23,42,0.12)",
           },
         };
+      }
+      function parseComplexInsertDescription(prompt = "") {
+        const text = String(prompt || "").toLowerCase();
+        
+        // Determine element type
+        let elementType = "div";
+        let baseLabel = "element";
+        let defaultText = "";
+        
+        if (/\bbutton\b/.test(text)) {
+          elementType = "button";
+          baseLabel = "button";
+          defaultText = extractTextFromPrompt(text) || "Click";
+        } else if (/\b(heading|title|h\d)\b/.test(text)) {
+          elementType = "text";
+          baseLabel = "heading";
+          defaultText = extractTextFromPrompt(text) || "Heading";
+        } else if (/\b(text|label|paragraph)\b/.test(text)) {
+          elementType = "text";
+          baseLabel = "text";
+          defaultText = extractTextFromPrompt(text) || "Text content";
+        } else if (/\b(image|img|photo)\b/.test(text)) {
+          elementType = "img";
+          baseLabel = "image";
+        } else if (/\b(input|field)\b/.test(text)) {
+          elementType = "input";
+          baseLabel = "input";
+        } else if (/\b(card|box|container)\b/.test(text)) {
+          elementType = "div";
+          baseLabel = "card";
+        }
+        
+        // Extract colors
+        const primaryColor = extractColorFromPrompt(text, "#3b82f6");
+        const textColor = /white|light|bright/.test(text) ? "#ffffff" : /dark|black|gray/.test(text) ? "#1a1a1a" : "#000000";
+        
+        // Extract effects - enhanced with more variations
+        const hasGlow = /glow|shadow|luminous|radiant|bright|neon|shiny|glint|sparkle|shimmer|radiance/.test(text);
+        const hasGradient = /gradient|multi-color|colorful|rainbow|blend|fade/.test(text);
+        const hasRounded = /round|circular|pill|rounded|smooth|curve/.test(text);
+        const hasBorder = /border|outline|stroke|edge|frame/.test(text);
+        const hasBlur = /blur|frosted|glass|transparent|see-through/.test(text);
+        const hasAnimation = /animat|spin|bounce|pulse|float|wave|vibrat|shake|rotate|scale/.test(text);
+        
+        // Extract border/outline
+        let borderWidth = "0px";
+        let borderColor = primaryColor;
+        if (hasBorder) {
+          const borderMatch = text.match(/(\d+)\s*(?:px\s*)?border/);
+          borderWidth = borderMatch ? `${borderMatch[1]}px` : "2px";
+          const borderColorMatch = text.match(/border\s+([\w#]+)/);
+          if (borderColorMatch) borderColor = borderColorMatch[1];
+        }
+        
+        // Extract sizes
+        const sizeMatch = text.match(/(tiny|small|medium|large|huge|big|xl|2xl|3xl|compact|mini)/);
+        const sizeMap = {
+          tiny: { w: 60, h: 30 },
+          mini: { w: 80, h: 40 },
+          small: { w: 140, h: 60 },
+          compact: { w: 160, h: 70 },
+          medium: { w: 240, h: 100 },
+          large: { w: 320, h: 140 },
+          xl: { w: 380, h: 160 },
+          huge: { w: 400, h: 180 },
+          big: { w: 360, h: 160 },
+          '2xl': { w: 440, h: 200 },
+          '3xl': { w: 500, h: 240 },
+        };
+        const baseSize = sizeMap[sizeMatch?.[1]] || (elementType === "button" ? { w: 190, h: 56 } : { w: 260, h: 120 });
+        
+        // Build styles
+        const styles = {
+          width: `${baseSize.w}px`,
+          height: `${baseSize.h}px`,
+          backgroundColor: primaryColor,
+          backgroundColorSecondary: primaryColor,
+          backgroundMode: hasGradient ? "gradient" : "solid",
+          color: textColor,
+          borderRadius: hasRounded ? "9999px" : "12px",
+          fontWeight: /bold|heavy|thick/.test(text) ? "800" : /light|thin|narrow/.test(text) ? "300" : "600",
+          borderWidth,
+          borderColor,
+        };
+        
+        // Add glow effect if mentioned - more dramatic
+        if (hasGlow) {
+          const glowIntensity = /intense|strong|powerful|heavy|thick/.test(text) ? 60 : 30;
+          const glowColor = primaryColor.replace(")", ", 0.6)").replace("#", "rgba(");
+          if (primaryColor.startsWith("#")) {
+            const hex = primaryColor;
+            const rgb = parseInt(hex.slice(1), 16);
+            const r = (rgb >> 16) & 255;
+            const g = (rgb >> 8) & 255;
+            const b = rgb & 255;
+            styles.boxShadow = `0 0 ${glowIntensity}px rgba(${r},${g},${b},0.8), 0 0 ${glowIntensity * 2}px rgba(${r},${g},${b},0.4), inset 0 0 ${glowIntensity / 2}px rgba(${r},${g},${b},0.3)`;
+          } else {
+            styles.boxShadow = `0 0 ${glowIntensity}px ${primaryColor}, 0 0 ${glowIntensity * 2}px ${primaryColor}`;
+          }
+        } else {
+          styles.boxShadow = "0 8px 16px rgba(0,0,0,0.1)";
+        }
+        
+        // Add blur/frosted glass effect
+        if (hasBlur) {
+          styles.backdropFilter = "blur(10px)";
+          styles.backgroundColor = primaryColor + "aa";
+        }
+        
+        if (elementType === "button" || elementType === "text") {
+          const fontSizeMatch = text.match(/([\d]+)s\b/);
+          if (fontSizeMatch) {
+            styles.fontSize = `${fontSizeMatch[1]}px`;
+          } else {
+            styles.fontSize = /small|mini/.test(text) ? "12px" : /large|huge|big|xl|2xl|3xl/.test(text) ? "32px" : "16px";
+          }
+        }
+        
+        // Add animation keyframes if needed
+        let animationCss = "";
+        if (hasAnimation) {
+          if (/spin|rotate/.test(text)) {
+            animationCss = `@keyframes spin { to { transform: rotate(360deg); } }`;
+            styles.animation = "spin 2s linear infinite";
+          } else if (/bounce/.test(text)) {
+            animationCss = `@keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }`;
+            styles.animation = "bounce 1s ease-in-out infinite";
+          } else if (/pulse|glow/.test(text)) {
+            animationCss = `@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }`;
+            styles.animation = "pulse 2s ease-in-out infinite";
+          }
+        }
+        
+        // Only return spec if we detected complex styling
+        if (hasGlow || hasGradient || hasBorder || hasBlur || hasAnimation || sizeMatch || hasRounded || /white|light|dark|black|red|blue|green|pink|purple|cyan|magenta|orange|yellow/i.test(text)) {
+          const spec = {
+            type: elementType,
+            label: baseLabel,
+            attrs: elementType === "img" ? { src: "https://source.unsplash.com/800x600/?design" } : { text: defaultText },
+            styles,
+          };
+          
+          if (animationCss) {
+            spec.animationCss = animationCss;
+          }
+          
+          return spec;
+        }
+        
+        return null;
+      }
+      function extractTextFromPrompt(text = "") {
+        // Extract quoted text or text after "text" keyword
+        const quotedMatch = text.match(/["']([^"']+)["']/);
+        if (quotedMatch) return quotedMatch[1];
+        
+        // Extract text after "with text" or "says"
+        const withTextMatch = text.match(/(?:with text|says|label|text)\s+["']?([^,."]+)["']?/);
+        if (withTextMatch) return withTextMatch[1].trim();
+        
+        return null;
       }
       function runDeterministicBuilderCommand(userPrompt = "") {
         const prompt = String(userPrompt || "")
@@ -33266,6 +33581,15 @@ ${interactionBlock}
           const type = String(action?.type || "")
             .trim()
             .toUpperCase();
+          if (type === "INSERT_ELEMENT_SPEC") {
+            // Flexible element insert with full HTML/CSS/attributes support
+            const result = applyInsertElementSpec(action);
+            if (result.success) {
+              applied.push(`INSERT_ELEMENT_SPEC ${action.id || result.elementId}`);
+              syncActiveBuilderFileFromCanvas({ skipHistory: true });
+            }
+            return;
+          }
           if (type === "CREATE_FOLDER") {
             const folderPath = normalizeBuilderFilePath(action.path || "");
             if (folderPath && !findBuilderNodeByPath(folderPath)) {
