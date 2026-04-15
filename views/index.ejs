@@ -20051,6 +20051,8 @@
                     <div id="builder-panel-insert" class="builder-popover hidden">
                         <div class="builder-popover-grid">
                             <button id="insert-elements-trigger" onclick="toggleElementPicker(event); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-plus-circle text-cyan-400"></i><span>Elements<small>Open element library</small></span></button>
+                            <button onclick="insertStarterBlock('hero'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-wand-magic-sparkles text-cyan-400"></i><span>Hero Block<small>Premium landing hero</small></span></button>
+                            <button onclick="insertStarterBlock('feature'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-layer-group text-cyan-400"></i><span>Feature Row<small>Three-card section</small></span></button>
                         </div>
                     </div>
                     <div id="builder-panel-file" class="builder-popover hidden">
@@ -20096,8 +20098,14 @@
                         <div class="builder-popover-grid">
                             <button id="builder-template-candycrush" onclick="handleCandyCrushTemplateSelection(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-candy-cane text-pink-400"></i><span>Candy Crush Game<small>Playable free game template</small></span></button>
                             <button id="builder-template-login" onclick="insertStarterBlock('login'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-right-to-bracket text-cyan-400"></i><span>Login Form<small>Auth page starter</small></span></button>
+                            <button onclick="loadBuilderSiteTemplate('portfolio'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-user-astronaut text-cyan-400"></i><span>Portfolio Site<small>Personal brand website</small></span></button>
+                            <button onclick="loadBuilderSiteTemplate('arcade'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-gamepad text-cyan-400"></i><span>Game Launch<small>Arcade landing page</small></span></button>
+                            <button onclick="loadBuilderSiteTemplate('studio'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-bezier-curve text-cyan-400"></i><span>Creative Studio<small>Agency homepage starter</small></span></button>
+                            <button onclick="insertStarterBlock('hero'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-panorama text-cyan-400"></i><span>Landing Hero<small>Marketing homepage</small></span></button>
+                            <button onclick="insertStarterBlock('feature'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-th-large text-cyan-400"></i><span>Features Section<small>Service showcase</small></span></button>
                             <button onclick="insertStarterBlock('contact'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-envelope text-cyan-400"></i><span>Contact Form<small>Lead capture layout</small></span></button>
                             <button onclick="insertStarterBlock('pricing'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-tags text-cyan-400"></i><span>Pricing Cards<small>Product pricing section</small></span></button>
+                            <button onclick="insertStarterBlock('dashboard'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-chart-line text-cyan-400"></i><span>Dashboard Hero<small>SaaS product starter</small></span></button>
                             <div id="builder-community-template-list" class="contents"></div>
                         </div>
                     </div>
@@ -22543,7 +22551,7 @@
       };
       let builderInteractionDraft = null;
       let builderInteractionPickMode = false;
-      let currentActiveSectionId = "";
+      let currentActiveSectionId = "section_main";
       let builderImportedGlobalCss = "";
       let builderLastSavedFingerprint = "";
       let aiChatMessages = [];
@@ -29326,7 +29334,6 @@ console.log("Triggered ${eventName}", { source, event });
           quickRunButton.title = "Run site";
         }
         if (canvas) {
-          repairAccidentalSectionState();
           canvas.classList.toggle("builder-grid", builderSnapEnabled);
           refreshCanvasBackground();
           applyBuilderViewportToCanvas();
@@ -29334,7 +29341,12 @@ console.log("Triggered ${eventName}", { source, event });
             "collaboration-view-only",
             isCollaborationViewOnly(),
           );
-          renderBuilderViewSwitcher();
+          // CRITICAL: Ensure sections are initialized and visible
+          ensureBuilderSections({ skipHistory: true });
+          // Force render the section switcher after section setup
+          requestAnimationFrame(() => {
+            renderBuilderViewSwitcher();
+          });
           syncBuilderImportedGlobalStyle();
           scheduleSyncStyleTag();
         }
@@ -29422,28 +29434,8 @@ console.log("Triggered ${eventName}", { source, event });
       }
       function getCanvasSectionElements() {
         return getCanvasTopLevelElements().filter(
-          (el) =>
-            String(el.dataset?.mlRole || "") === "section" &&
-            String(el.id || "").toLowerCase().startsWith("section_"),
+          (el) => String(el.dataset?.mlRole || "") === "section",
         );
-      }
-      function repairAccidentalSectionState() {
-        const elements = getCanvasTopLevelElements();
-        elements.forEach((el) => {
-          const isMarkedSection = String(el.dataset?.mlRole || "") === "section";
-          const hasSectionId = String(el.id || "")
-            .toLowerCase()
-            .startsWith("section_");
-          if (!isMarkedSection || hasSectionId) return;
-          delete el.dataset.mlRole;
-          delete el.dataset.sectionName;
-          if (el.style.display === "none") el.style.display = "block";
-          if (el.style.visibility === "hidden") el.style.visibility = "visible";
-          if ((parseFloat(el.style.opacity || "1") || 1) <= 0.06) {
-            el.style.opacity = "1";
-          }
-          if (el.style.pointerEvents === "none") el.style.pointerEvents = "auto";
-        });
       }
       function getBuilderSectionDisplayName(sectionEl) {
         if (!sectionEl) return "Section";
@@ -29526,13 +29518,88 @@ console.log("Triggered ${eventName}", { source, event });
         return currentActiveSectionId;
       }
       function ensureBuilderSections(options = {}) {
-        renderBuilderViewSwitcher();
+        const canvas = document.getElementById("web-canvas");
+        if (!canvas) return;
+        let sections = getCanvasSectionElements();
+        if (!sections.length) {
+          const promoteCandidates = getCanvasTopLevelElements().filter(
+            (el) =>
+              String(el.getAttribute("data-type") || "").toLowerCase() ===
+              "div",
+          );
+          promoteCandidates.forEach((el, index) => {
+            el.dataset.mlRole = "section";
+            if (!el.dataset.sectionName) {
+              el.dataset.sectionName =
+                index === 0 ? "Main" : `Section ${index + 1}`;
+            }
+          });
+          sections = getCanvasSectionElements();
+          if (!sections.length) {
+            const main = createBuilderSectionElement("section_main", "Main");
+            canvas.appendChild(main);
+            sections = [main];
+          }
+        }
+        sections.forEach((section, index) => {
+          if (!section.id)
+            section.id = index === 0 ? "section_main" : `section_${index + 1}`;
+          section.dataset.mlRole = "section";
+          if (!section.dataset.sectionName) {
+            section.dataset.sectionName =
+              section.id === "section_main" ? "Main" : `Section ${index + 1}`;
+          }
+        });
+        if (
+          !sections.some((section) => section.id === currentActiveSectionId)
+        ) {
+          currentActiveSectionId =
+            sections.find((section) => section.id === "section_main")?.id ||
+            sections[0].id;
+        }
+        setActiveBuilderSection(currentActiveSectionId, {
+          skipHistory: true,
+          ...options,
+        });
       }
       function renderBuilderViewSwitcher() {
         const shell = document.getElementById("builder-view-switcher");
         if (!shell) return;
-        shell.classList.add("hidden");
-        shell.innerHTML = "";
+        const sections = getCanvasSectionElements();
+        if (!sections.length) {
+          shell.classList.add("hidden");
+          shell.innerHTML = "";
+          return;
+        }
+        shell.classList.remove("hidden");
+        let html =
+          '<span class="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400 px-1">Sections</span>';
+        sections.forEach((section) => {
+          const isActive = section.id === currentActiveSectionId;
+          const label = escapeHtmlText(getBuilderSectionDisplayName(section));
+          const sectionId = escapeInlineJsString(section.id);
+          const activeClass = isActive ? " is-active" : "";
+          html +=
+            '<button type="button" onclick="setActiveBuilderSection(\'' +
+            sectionId +
+            '\', { skipHistory: true })" class="builder-view-switcher-chip' +
+            activeClass +
+            '"><span>' +
+            label +
+            "</span>";
+          if (isActive) {
+            html +=
+              '<div class="flex gap-1"><button class="builder-view-switcher-btn" onclick="event.stopPropagation(); renameBuilderSection(\'' +
+              sectionId +
+              '\');"><i class="fas fa-edit"></i></button><button class="builder-view-switcher-btn" onclick="event.stopPropagation(); deleteBuilderSection(\'' +
+              sectionId +
+              '\');"><i class="fas fa-trash"></i></button></div>';
+          }
+          html += "</button>";
+        });
+        html +=
+          '<button type="button" class="builder-view-switcher-chip" onclick="createNewBuilderSectionFromUI()" style="gap: 0.2rem; padding: 0.38rem 0.5rem;"><i class="fas fa-plus" style="font-size: 9px;"></i>New</button>';
+        shell.innerHTML = html;
       }
       function renameBuilderSection(sectionId) {
         const section = document.getElementById(sectionId);
@@ -29685,7 +29752,6 @@ console.log("Triggered ${eventName}", { source, event });
         });
       }
       function shiftSelectedLayer(direction) {
-        repairAccidentalSectionState();
         const targets = Array.from(
           new Set(
             getSelectedBuilderTargets()
@@ -29730,7 +29796,7 @@ console.log("Triggered ${eventName}", { source, event });
           el.style.zIndex = String(index + 1);
         });
         syncSelectedElementState();
-        saveToHistory({ skipUiRefresh: true });
+        saveToHistory();
       }
       function toggleSelectedLock() {
         const targets =
@@ -34852,9 +34918,8 @@ ${interactionBlock}
           saveToHistory();
         }
       }
-      function saveToHistory(options = {}) {
+      function saveToHistory() {
         const canvas = document.getElementById("web-canvas");
-        const skipUiRefresh = Boolean(options?.skipUiRefresh);
         syncStyleTag();
         persistActiveBuilderFileContent();
         const snapshot = {
@@ -34873,7 +34938,7 @@ ${interactionBlock}
         historyStack.push(snapshot);
         historyIndex++;
         if (builderCodeMode) refreshBuilderCodeMode();
-        if (!skipUiRefresh) updateBuilderUI();
+        updateBuilderUI();
         scheduleCollaborationContentSync("history", 120);
       }
       function changeInspectorPage(dir) {
