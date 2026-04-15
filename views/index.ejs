@@ -31798,6 +31798,7 @@ ${interactionBlock}
           applying: "applying",
           normalizing: "normalizing for canvas",
           implementing: "implementing changes",
+          responding: "responding",
           done: "done",
         };
         const stageText = stageTextMap[aiAgentStage] || "standby";
@@ -31842,6 +31843,7 @@ ${interactionBlock}
             applying: "Agent is applying changes",
             normalizing: "Agent is making canvas-ready structure",
             implementing: "Agent is implementing changes",
+            responding: `Agent is answering about ${activeFile}`,
             done: "Agent update complete",
           };
           const isBusy = !["idle", "done"].includes(aiAgentStage);
@@ -32264,14 +32266,14 @@ ${interactionBlock}
           );
           const created = selectedElements?.[0] || selectedEl;
           if (created) {
-            created.dataset.mlInnerStyle = JSON.stringify({
-              ...(JSON.parse(created.dataset.mlInnerStyle || "{}") || {}),
-              borderRadius: "9999px",
-              background: color,
-            });
+            const inner = getElementInnerNode(created);
+            if (inner) {
+              inner.style.borderRadius = "9999px";
+              inner.style.background = color;
+            }
             scheduleSyncStyleTag();
           }
-          applyCodeModeToCanvas();
+          syncActiveBuilderFileFromCanvas({ skipHistory: true });
           return {
             applied: true,
             message: "Inserted a round blue ball and rendered it on canvas.",
@@ -32279,6 +32281,200 @@ ${interactionBlock}
           };
         }
         return null;
+      }
+      function shouldTreatAsFullReplacePrompt(prompt = "") {
+        const text = String(prompt || "").toLowerCase();
+        if (
+          /\b(start over|reset|clear canvas|new template|replace (everything|the whole|entire)|rewrite (everything|the whole|entire)|regenerate (everything|the whole|entire))\b/i.test(
+            text,
+          )
+        )
+          return true;
+        return false;
+      }
+      function shouldPreserveExistingCanvas(prompt = "") {
+        const text = String(prompt || "").toLowerCase();
+        if (shouldTreatAsFullReplacePrompt(text)) return false;
+        if (/\b(delete|remove|clear)\b/i.test(text)) return false;
+        return true;
+      }
+      function collectCanvasIdsFromHtml(html = "") {
+        const ids = new Set();
+        const text = String(html || "").trim();
+        if (!text) return ids;
+        const doc = new DOMParser().parseFromString(text, "text/html");
+        doc
+          .querySelectorAll(
+            ".canvas-element[id], .ml-container[id], [data-ml-role][id]",
+          )
+          .forEach((node) => {
+            const id = String(node?.id || "").trim();
+            if (id) ids.add(id);
+          });
+        return ids;
+      }
+      function syncActiveBuilderFileFromCanvas(options = {}) {
+        const { skipHistory = false } = options || {};
+        const activePath =
+          normalizeBuilderFilePath(activeBuilderFilePath || "index.html") ||
+          "index.html";
+        if (!isBuilderHtmlFile(activePath)) return false;
+        const html = buildCodeModeDocument();
+        if (!String(html || "").trim()) return false;
+        updateBuilderFileContent(activePath, html);
+        const editor = document.getElementById("builder-code-editor");
+        if (editor) {
+          editor.value = html;
+          handleBuilderCodeInput();
+        }
+        if (!skipHistory) saveToHistory();
+        return true;
+      }
+      function applyStyleObjectToElement(target, styleObj = {}) {
+        if (!target || !styleObj || typeof styleObj !== "object") return;
+        Object.entries(styleObj).forEach(([rawKey, rawValue]) => {
+          if (rawValue == null) return;
+          const key = String(rawKey || "").trim();
+          if (!key) return;
+          const value = String(rawValue);
+          const cssProp = key.includes("-")
+            ? key.toLowerCase()
+            : key.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`);
+          try {
+            target.style.setProperty(cssProp, value);
+          } catch (_error) {
+            // ignore invalid style keys
+          }
+        });
+      }
+      function resolveCanvasTarget(selector = "") {
+        const raw = String(selector || "").trim();
+        if (!raw) return null;
+        const id = raw.startsWith("#") ? raw.slice(1) : raw;
+        const byId = document.getElementById(id);
+        if (byId?.classList?.contains("canvas-element")) return byId;
+        const canvas = document.getElementById("web-canvas");
+        if (!canvas) return null;
+        try {
+          const found = canvas.querySelector(raw);
+          if (found?.classList?.contains("canvas-element")) return found;
+          const closest = found?.closest?.(".canvas-element");
+          return closest || null;
+        } catch {
+          return null;
+        }
+      }
+      function applyCanvasOps(ops = []) {
+        const safeOps = Array.isArray(ops) ? ops : [];
+        const applied = [];
+        const canvas = document.getElementById("web-canvas");
+        if (!canvas || !safeOps.length) return applied;
+        safeOps.forEach((op) => {
+          const kind = String(op?.op || op?.type || "")
+            .trim()
+            .toLowerCase();
+          if (!kind) return;
+          if (kind === "set_background" || kind === "background") {
+            const background = String(op?.background || op?.value || "").trim();
+            if (background) {
+              applyCanvasPageBackground(background, true);
+              applied.push("SET_BACKGROUND");
+            }
+            return;
+          }
+          if (kind === "remove" || kind === "delete") {
+            const target = resolveCanvasTarget(op?.selector || op?.id || "");
+            if (target) {
+              target.remove();
+              applied.push(`REMOVE ${target.id || "element"}`);
+            }
+            return;
+          }
+          if (kind === "move" || kind === "position") {
+            const selector = String(op?.selector || op?.id || "").trim();
+            const x = op?.x ?? op?.left ?? null;
+            const y = op?.y ?? op?.top ?? null;
+            const dx = op?.dx ?? null;
+            const dy = op?.dy ?? null;
+            if (dx != null || dy != null) {
+              const target = resolveCanvasTarget(selector);
+              if (!target) return;
+              const startL = parseFloat(target.style.left) || target.offsetLeft;
+              const startT = parseFloat(target.style.top) || target.offsetTop;
+              const nextX =
+                dx != null ? startL + (Number(dx) || 0) : startL;
+              const nextY =
+                dy != null ? startT + (Number(dy) || 0) : startT;
+              if (applyElementPositionMove(selector, nextX, nextY)) {
+                applied.push(`MOVE ${selector}`);
+              }
+              return;
+            }
+            if (applyElementPositionMove(selector, x, y)) {
+              applied.push(`MOVE ${selector}`);
+            }
+            return;
+          }
+          if (kind === "update_styles" || kind === "style") {
+            const target = resolveCanvasTarget(op?.selector || op?.id || "");
+            if (!target) return;
+            const wrapperStyles =
+              op?.wrapperStyles && typeof op.wrapperStyles === "object"
+                ? op.wrapperStyles
+                : op?.styles && typeof op.styles === "object"
+                  ? op.styles
+                  : {};
+            const innerStyles =
+              op?.innerStyles && typeof op.innerStyles === "object"
+                ? op.innerStyles
+                : {};
+            applyStyleObjectToElement(target, wrapperStyles);
+            const inner = getElementInnerNode(target);
+            if (inner) applyStyleObjectToElement(inner, innerStyles);
+            applied.push(`STYLE ${target.id || "element"}`);
+            return;
+          }
+          if (kind === "insert" || kind === "add" || kind === "create") {
+            const elementType = String(op?.elementType || op?.tag || "div")
+              .trim()
+              .toLowerCase();
+            const attrs =
+              op?.attrs && typeof op.attrs === "object" ? { ...op.attrs } : {};
+            if (op?.id && !attrs.id) attrs.id = String(op.id);
+            const styles =
+              op?.styles && typeof op.styles === "object" ? op.styles : {};
+            addObject(elementType, styles, attrs);
+            const created = selectedElements?.[0] || selectedEl;
+            if (created) {
+              const html = String(op?.html || op?.innerHtml || "").trim();
+              if (html) {
+                const body = created.querySelector(":scope > .element-body");
+                if (body) {
+                  body.innerHTML = html;
+                  body
+                    .querySelectorAll("[contenteditable]")
+                    .forEach((node) =>
+                      node.removeAttribute("contenteditable"),
+                    );
+                }
+              }
+              const inner = getElementInnerNode(created);
+              if (op?.innerStyles && typeof op.innerStyles === "object" && inner) {
+                applyStyleObjectToElement(inner, op.innerStyles);
+              }
+              applied.push(`INSERT ${created.id || elementType}`);
+            } else {
+              applied.push(`INSERT ${elementType}`);
+            }
+            return;
+          }
+        });
+        if (applied.length) {
+          scheduleSyncStyleTag();
+          syncActiveBuilderFileFromCanvas({ skipHistory: true });
+          saveToHistory();
+        }
+        return applied;
       }
       async function forceImplementAiCanvasSync(options = {}) {
         const { allowNormalizer = true } = options || {};
@@ -32432,6 +32628,7 @@ ${interactionBlock}
         const response = String(responseText || "");
         const promptText = String(userPrompt || "").trim();
         const applied = [];
+        const safety = { skipped: false, message: "" };
         let shouldRefreshCanvas = false;
         let renderTargetPath = "";
         const markRenderTarget = (path = "") => {
@@ -32440,6 +32637,11 @@ ${interactionBlock}
           if (!renderTargetPath) renderTargetPath = normalized;
           shouldRefreshCanvas = true;
         };
+        const activePath =
+          normalizeBuilderFilePath(activeBuilderFilePath || "index.html") ||
+          "index.html";
+        const preserveExisting = shouldPreserveExistingCanvas(promptText);
+        const allowFullReplace = shouldTreatAsFullReplacePrompt(promptText);
         const jsonActions = extractAgentActionBlocks(response);
         jsonActions.forEach((action) => {
           const type = String(action?.type || "")
@@ -32457,6 +32659,29 @@ ${interactionBlock}
             const targetPath = normalizeBuilderFilePath(action.path || "");
             const content = String(action.content || "");
             if (!targetPath) return;
+            if (
+              preserveExisting &&
+              targetPath === activePath &&
+              /<html[\s>]/i.test(content)
+            ) {
+              const beforeHtml =
+                getBuilderFileContent(activePath) || buildCodeModeDocument() || "";
+              const beforeIds = collectCanvasIdsFromHtml(beforeHtml);
+              const afterIds = collectCanvasIdsFromHtml(content);
+              if (beforeIds.size) {
+                const missing = Array.from(beforeIds).filter(
+                  (id) => !afterIds.has(id),
+                );
+                const missingRatio =
+                  beforeIds.size > 0 ? missing.length / beforeIds.size : 0;
+                if (missing.length && missingRatio >= 0.2) {
+                  safety.skipped = true;
+                  safety.message =
+                    "Skipped a risky full-file replace that would remove existing canvas elements. Retrying with a safer incremental patch...";
+                  return;
+                }
+              }
+            }
             if (
               isBuilderHtmlFile(targetPath) &&
               /\[\/?ACTION\]/i.test(content) &&
@@ -32520,33 +32745,36 @@ ${interactionBlock}
             ) {
               applyCanvasPageBackground(resolvedBg, true);
               applied.push("UPDATE_CSS body");
-              markRenderTarget(
-                normalizeBuilderFilePath(
-                  activeBuilderFilePath || "index.html",
-                ) || "index.html",
-              );
+              syncActiveBuilderFileFromCanvas({ skipHistory: true });
             }
             return;
           }
           if (type === "EDIT_CANVAS") {
+            const ops = Array.isArray(action.ops) ? action.ops : null;
+            if (ops && ops.length) {
+              const opApplied = applyCanvasOps(ops);
+              if (opApplied.length) applied.push(...opApplied);
+              return;
+            }
             const html = String(action.html || action.code || "").trim();
-            if (html) {
-              const activePath = normalizeBuilderFilePath(
-                activeBuilderFilePath || "index.html",
-              );
+            if (html && allowFullReplace) {
               updateBuilderFileContent(activePath, html);
               const editor = document.getElementById("builder-code-editor");
               if (editor) {
                 editor.value = html;
                 handleBuilderCodeInput();
               }
+              applied.push("EDIT_CANVAS replace");
+              markRenderTarget(activePath);
+              return;
             }
-            applied.push("EDIT_CANVAS");
-            shouldRefreshCanvas = true;
-            markRenderTarget(
-              normalizeBuilderFilePath(activeBuilderFilePath || "index.html") ||
-                "index.html",
-            );
+            if (html && !allowFullReplace) {
+              safety.skipped = true;
+              safety.message =
+                "Skipped a destructive EDIT_CANVAS full replace. Please re-try with incremental ops (insert/move/remove/background).";
+              return;
+            }
+            return;
           }
           if (type === "MOVE_ELEMENT" || type === "UPDATE_POSITION") {
             const selector = String(action.selector || action.id || "").trim();
@@ -32554,11 +32782,7 @@ ${interactionBlock}
             const y = action.y ?? action.top ?? null;
             if (applyElementPositionMove(selector, x, y)) {
               applied.push(`MOVE_ELEMENT ${selector}`);
-              markRenderTarget(
-                normalizeBuilderFilePath(
-                  activeBuilderFilePath || "index.html",
-                ) || "index.html",
-              );
+              syncActiveBuilderFileFromCanvas({ skipHistory: true });
             }
           }
         });
@@ -32690,8 +32914,12 @@ ${interactionBlock}
               "[AI Agent]: Element moved successfully.",
               "success",
             );
-            applyCodeModeToCanvas();
-            return [`MOVE_ELEMENT ${moveIntent.selector}`];
+            syncActiveBuilderFileFromCanvas({ skipHistory: true });
+            return {
+              applied: [`MOVE_ELEMENT ${moveIntent.selector}`],
+              safety,
+              shouldRefreshCanvas: false,
+            };
           }
           const fallbackActions = runIntentSafetyFallback(promptText);
           if (fallbackActions.length) {
@@ -32699,10 +32927,10 @@ ${interactionBlock}
               "[AI Agent]: Applied recovery patch to canvas.",
               "success",
             );
-            return fallbackActions;
+            return { applied: fallbackActions, safety, shouldRefreshCanvas };
           }
         }
-        return applied;
+        return { applied, safety, shouldRefreshCanvas };
       }
       async function runBuilderAiAgent(prompt = "", currentCode = "") {
         let responseText = "";
@@ -32832,6 +33060,47 @@ ${interactionBlock}
         }
         return responseText;
       }
+      async function runBuilderAiChatResponse(prompt = "") {
+        const latestCode = buildLatestAiCodeSnapshot();
+        const activeFileName =
+          normalizeBuilderFilePath(activeBuilderFilePath || "index.html") ||
+          "index.html";
+        const activeFileContent =
+          getBuilderFileContent(activeFileName) ||
+          latestCode ||
+          buildCodeModeDocument() ||
+          "";
+        const res = await fetch("/api/ai/chat-edit", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mode: "chat",
+            prompt,
+            currentCode: latestCode,
+            activeFileName,
+            activeFileContent,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) {
+          if (data.limitReached) {
+            openUpgradeModal();
+            throw new Error(
+              "Daily AI credits reached. Upgrade to MediaLab Pro to continue.",
+            );
+          }
+          throw new Error(data.message || "AI chat request failed.");
+        }
+        aiActiveModel = String(data.modelUsed || "").trim() || aiActiveModel;
+        if (data.modelRecoveryUsed) aiModelRecoveryInFlight = true;
+        if (data.modelSwitchUsed && data.modelSwitchReason === "rate_limit") {
+          aiModelSwitchingInFlight = true;
+        }
+        if (data.creditsRemaining !== undefined)
+          aiCreditsRemaining = data.creditsRemaining;
+        return String(data.assistantReply || "").trim();
+      }
       async function sendBuilderAiChat() {
         if (aiChatSending) return;
         const input = document.getElementById("ai-chat-input");
@@ -32887,7 +33156,8 @@ ${interactionBlock}
             setAiAgentStage("parsing");
             const agentReply = await runBuilderAiAgent(prompt, currentCode);
             setAiAgentStage("parsing");
-            const actions = executeAIActions(agentReply, prompt);
+            let actionResult = executeAIActions(agentReply, prompt);
+            const actions = actionResult?.applied || [];
             const visibleReply = stripAgentActionBlocks(agentReply);
             if (actions.length) {
               setAiAgentStage("applying");
@@ -32903,20 +33173,55 @@ ${interactionBlock}
                   "Ready. Tell me what you want to build or fix next.",
               });
             }
-            setAiAgentStage("implementing");
-            const syncResult = await forceImplementAiCanvasSync({
-              allowNormalizer: true,
-            });
-            if (syncResult?.normalized) {
+            if (actionResult?.safety?.skipped) {
               aiChatMessages.push({
                 role: "assistant",
-                text: "Canvas updated. Elements are ready for editing.",
+                text:
+                  actionResult.safety.message ||
+                  "Skipped an unsafe action to avoid losing existing canvas work.",
               });
+              renderBuilderAiChat();
+              // One strict retry: force non-destructive ops when the model attempted a risky replace.
+              setAiAgentStage("thinking");
+              const retryReply = await runBuilderAiAgent(
+                [
+                  prompt,
+                  "STRICT_RULE: Do NOT use UPDATE_FILE for small edits. Preserve existing canvas elements and IDs. Use UPDATE_CSS for background, MOVE_ELEMENT for position, and EDIT_CANVAS with ops[] for insert/remove/style tweaks.",
+                ]
+                  .filter(Boolean)
+                  .join("\n\n"),
+                currentCode,
+              );
+              const retryResult = executeAIActions(retryReply, prompt);
+              if (retryResult?.applied?.length) {
+                aiChatMessages.push({
+                  role: "assistant",
+                  text:
+                    stripAgentActionBlocks(retryReply) ||
+                    "Applied a safer incremental patch.",
+                });
+                actionResult = retryResult;
+              }
+            }
+            setAiAgentStage("implementing");
+            if (actionResult?.shouldRefreshCanvas) {
+              const syncResult = await forceImplementAiCanvasSync({
+                allowNormalizer: true,
+              });
+              if (syncResult?.normalized) {
+                aiChatMessages.push({
+                  role: "assistant",
+                  text: "Canvas updated. Elements are ready for editing.",
+                });
+              }
+            } else {
+              // Incremental ops already applied to canvas; keep it smooth (no full re-import).
+              syncActiveBuilderFileFromCanvas({ skipHistory: true });
             }
           } else {
             setAiAgentStage("responding");
-            const chatResponse = await runBuilderAiAgent(prompt, "");
-            const visibleResponse = stripAgentActionBlocks(chatResponse);
+            const chatResponse = await runBuilderAiChatResponse(prompt);
+            const visibleResponse = String(chatResponse || "").trim();
             aiChatMessages.push({
               role: "assistant",
               text:

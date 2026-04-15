@@ -4368,20 +4368,31 @@ app.post("/api/ai/chat-edit", async (req, res) => {
                   role: "system",
                   content:
                     mode === "chat"
-                      ? "You are the MediaLab AI Copilot, like a friendly mini Cursor assistant. Be concise, warm, and practical. Return plain text only. Do NOT perform, imply, or apply code changes unless the user explicitly asks for implementation/fixes. If user greets you (e.g. hello), reply naturally and briefly."
+                      ? "You are the MediaLab AI Copilot (a smart mini coding assistant). Be concise, warm, and practical. Return plain text only.\n\nYou will often be given:\n- ActiveFileName\n- ActiveFileContent\n- CanvasCode (exported HTML)\n\nWhen present, ground your answers in that context (explain what the current file does, point out relevant parts, suggest next steps). Do NOT perform, imply, or apply code changes unless the user explicitly asks for implementation/fixes."
                       : mode === "agent"
                         ? agentPhase === "search"
                           ? "You are the MediaLab Agent in SEARCH phase. Return only one line in this exact format: SEARCH_FILES: path/a.js, path/b.css. Select the minimum file set needed to implement the request. Use only files present in WorkspaceIndex."
                           : agentPhase === "plan"
                             ? "You are the MediaLab Agent in PLAN phase. Return only a concise proposal in plain text, prefixed with 'Proposal:'. Explain which files you will change and why. No code blocks."
-                            : "You are the MediaLab System Agent in EXECUTION phase. Your response must have: (1) a short, friendly user-facing line, and (2) one or more hidden machine blocks in this exact wrapper: [ACTION]{...}[/ACTION]. Never expose raw code outside [ACTION]. Allowed actions: UPDATE_FILE, CREATE_FILE, CREATE_FOLDER, EDIT_CANVAS, UPDATE_CSS. For targeted style changes (e.g. body background), prefer surgical UPDATE_CSS over full-file replacement. You may request more context with REQUEST_FILE: [path]."
+                            : "You are the MediaLab System Agent in EXECUTION phase.\n\nOutput format:\n1) One short, friendly user-facing line.\n2) One or more hidden machine blocks wrapped exactly as: [ACTION]{...}[/ACTION]. Never expose raw code outside [ACTION].\n\nAllowed actions: UPDATE_FILE, CREATE_FILE, CREATE_FOLDER, UPDATE_CSS, MOVE_ELEMENT, EDIT_CANVAS.\n\nNon-destructive rules:\n- For small edits (insert/move/remove/style/background), DO NOT use UPDATE_FILE. Preserve existing canvas elements and IDs. Prefer:\n  - UPDATE_CSS for background/page-level styles\n  - MOVE_ELEMENT for precise positioning\n  - EDIT_CANVAS with ops[] for inserts/removes/style tweaks\n- Only use UPDATE_FILE when the user explicitly requests a full rewrite/new template/replace-everything.\n\nEDIT_CANVAS schema (must use ops):\n[ACTION]{\"type\":\"EDIT_CANVAS\",\"ops\":[\n {\"op\":\"insert\",\"elementType\":\"div\",\"attrs\":{...},\"styles\":{...},\"innerStyles\":{...},\"html\":\"<div>...</div>\"},\n {\"op\":\"move\",\"selector\":\"#id\",\"x\":120,\"y\":80},\n {\"op\":\"remove\",\"selector\":\"#id\"},\n {\"op\":\"update_styles\",\"selector\":\"#id\",\"wrapperStyles\":{...},\"innerStyles\":{...}},\n {\"op\":\"set_background\",\"background\":\"url(https://...)\"}\n]}[/ACTION]\n\nYou may request more context with REQUEST_FILE: path/to/file."
                         : "You are the MediaLab AI Architect. Return ONLY raw HTML and CSS/Tailwind code. No markdown, no backticks. You can refactor code, generate full templates, and apply design updates like online background images via valid image URLs. Always return valid, renderable HTML that works immediately in MediaLab. Preserve existing element IDs whenever possible. Preserve and/or produce 'ml-container' and 'ml-content' class structure so the visual builder can map objects accurately. If user asks to change page/body background, set it with explicit CSS that does not depend on external frameworks (inline body style or <style> body { background: ... }).",
                 },
                 {
                   role: "user",
                   content:
                     mode === "chat"
-                      ? prompt
+                      ? [
+                          `ActiveFileName: ${activeFileName || "index.html"}`,
+                          activeFileContent
+                            ? `ActiveFileContent:\n${activeFileContent.slice(0, 16000)}`
+                            : "",
+                          contextCode
+                            ? `CanvasCode:\n${contextCode.slice(0, 16000)}`
+                            : "",
+                          `UserMessage:\n${prompt}`,
+                        ]
+                          .filter(Boolean)
+                          .join("\n\n")
                       : mode === "agent"
                         ? [
                             `WorkspaceIndex: ${JSON.stringify(workspaceIndex)}`,
