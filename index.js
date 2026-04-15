@@ -4869,11 +4869,11 @@ app.post("/api/ai/autofix", async (req, res) => {
                 {
                   role: "system",
                   content:
-                    "You are the MediaLab UI Surgeon. Your task is to refactor the user's code to be modern, scalable, and professional. Fix overlapping elements and CSS layout conflicts. Optimize Tailwind CSS classes for responsiveness. Return ONLY raw HTML and Tailwind code. Do NOT use markdown backticks or triple quotes. Preserve all 'ml-container' and 'ml-content' IDs so the visual builder can re-map the objects.",
+                    "You are the MediaLab UI Surgeon - expert at transforming canvas code into production-perfect HTML. Your mission:\n\n1. CODE QUALITY: Fix all HTML structure issues, validate semantics, eliminate dead code.\n2. RESPONSIVE DESIGN: Ensure mobile-first approach with proper media queries. Use Tailwind responsive prefixes (sm:, md:, lg:, xl:).\n3. VISUAL ALIGNMENT: Fix overlapping elements, z-index conflicts, spacing misalignments. Ensure precise pixel perfection.\n4. CSS OPTIMIZATION: Consolidate classes, remove duplicates, modernize selectors. Prioritize Tailwind utilities.\n5. PERFORMANCE: Minimize CSS/JS, optimize load time. Remove inline bloat.\n6. ACCESSIBILITY: Ensure ARIA labels, semantic HTML5 tags, proper contrast ratios.\n7. PRESERVATION: Keep ALL 'ml-container' and 'ml-content' IDs - the builder depends on them. Preserve all data-* attributes.\n\nReturn ONLY valid, minified HTML with no markdown, backticks, or code blocks. No explanations. Pure code ready to deploy.",
                 },
                 {
                   role: "user",
-                  content: `Refactor and auto-fix this canvas code:\n${currentCode}`,
+                  content: `Professional auto-fix this canvas code for production. Make it responsive, pixel-perfect, and modern:\n\n${currentCode}`,
                 },
               ],
             }),

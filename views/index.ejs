@@ -2045,6 +2045,37 @@
           filter: blur(1.1px);
         }
       }
+      @keyframes mlMagicWhipperEffect {
+        0% {
+          transform: skewX(0deg) scaleX(1);
+          opacity: 0;
+          filter: blur(0px);
+        }
+        8% {
+          transform: skewX(-3deg) scaleX(0.94) translateX(-12px);
+          opacity: 0.6;
+          filter: blur(1.2px);
+        }
+        16% {
+          transform: skewX(3deg) scaleX(0.92) translateX(8px);
+          opacity: 0.75;
+          filter: blur(0.8px);
+        }
+        24% {
+          transform: skewX(-2deg) scaleX(0.96) translateX(-6px);
+          opacity: 0.65;
+          filter: blur(1px);
+        }
+        100% {
+          transform: skewX(0deg) scaleX(1) translateX(0px);
+          opacity: 0;
+          filter: blur(0px);
+        }
+      }
+      #builder-code-editor.magic-blur-preparing {
+        animation: mlMagicWhipperEffect 0.95s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
+        background: linear-gradient(90deg, rgba(251, 191, 36, 0.04) 0%, transparent 48%, rgba(34, 211, 238, 0.04) 100%);
+      }
       .ml-section-active {
         animation: mlSectionFadeIn 0.3s ease;
       }
@@ -20247,7 +20278,7 @@
                             <pre id="builder-code-lines" class="code-line-gutter"></pre>
                             <div class="code-editor-pane">
                                 <pre id="builder-code-highlight" class="code-editor-highlight"></pre>
-                                <textarea id="builder-code-editor" class="code-editor-input" spellcheck="false" wrap="soft" oninput="handleBuilderCodeInput()" onscroll="syncCodeEditorScroll()"></textarea>
+                                <textarea id="builder-code-editor" class="code-editor-input" spellcheck="false" wrap="soft" oninput="handleBuilderCodeInput()" onscroll="syncCodeEditorScroll()" onblur="triggerSmartMagicAutoFix()"></textarea>
                             </div>
                         </div>
                     </div>
@@ -32882,7 +32913,30 @@ ${interactionBlock}
           if (canvas) canvas.classList.remove("magic-fix-active");
           if (magicBtn) magicBtn.disabled = false;
           if (magicIcon) magicIcon.classList.remove("is-spinning");
+          const editor = document.getElementById("builder-code-editor");
+          if (editor) editor.classList.remove("magic-blur-preparing");
         }
+      }
+      let autoFixBlurThrottleTimer = null;
+      let autoFixBlurLastTrigger = 0;
+      function triggerSmartMagicAutoFix() {
+        const now = Date.now();
+        if (now - autoFixBlurLastTrigger < 2000) return;
+        autoFixBlurLastTrigger = now;
+        const editor = document.getElementById("builder-code-editor");
+        if (!editor || !editor.value?.trim()) return;
+        if (aiMagicFixRunning) return;
+        editor.classList.add("magic-blur-preparing");
+        clearTimeout(autoFixBlurThrottleTimer);
+        autoFixBlurThrottleTimer = setTimeout(async () => {
+          if (editor.classList.contains("magic-blur-preparing")) {
+            editor.classList.remove("magic-blur-preparing");
+            const magicBtn = document.getElementById("btn-magic-fix");
+            if (magicBtn && !magicBtn.disabled) {
+              magicBtn.click();
+            }
+          }
+        }, 480);
       }
       window.addEventListener("error", (event) => {
         const message = String(event?.message || "").trim();
