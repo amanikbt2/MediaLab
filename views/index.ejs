@@ -20062,21 +20062,23 @@
                         </div>
                     </div>
                     <div id="builder-panel-insert" class="builder-popover hidden">
-                        <div class="grid gap-3 sm:grid-cols-2">
-                            <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-                                <p class="text-[9px] font-black uppercase tracking-[0.2em] text-cyan-300">Element</p>
-                                <div class="builder-popover-grid mt-3">
-                                    <button id="insert-elements-trigger" onclick="toggleElementPicker(event); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-plus-circle text-cyan-400"></i><span>Elements<small>Open element library</small></span></button>
-                                    <button onclick="insertStarterBlock('hero'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-wand-magic-sparkles text-cyan-400"></i><span>Hero Block<small>Premium landing hero</small></span></button>
-                                </div>
+                        <div class="space-y-3">
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                <button id="builder-insert-tab-element" onclick="setBuilderInsertMiniTab('element')" class="builder-cmd"><i class="fas fa-plus-circle text-cyan-400"></i><span>Element<small>Open element library</small></span></button>
+                                <button id="builder-insert-tab-feature" onclick="setBuilderInsertMiniTab('feature')" class="builder-cmd"><i class="fas fa-layer-group text-cyan-400"></i><span>Feature Block<small>Insert a features section</small></span></button>
+                                <button id="builder-insert-tab-background" onclick="setBuilderInsertMiniTab('background')" class="builder-cmd"><i class="fas fa-image text-cyan-400"></i><span>Background<small>Open background options</small></span></button>
                             </div>
-                            <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-                                <p class="text-[9px] font-black uppercase tracking-[0.2em] text-cyan-300">Background</p>
-                                <div class="builder-popover-grid mt-3">
-                                    <button id="builder-insert-background-templates-trigger" onclick="openDesignModal('templates'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-swatchbook text-cyan-400"></i><span>Templates<small>Professional page background presets</small></span></button>
-                                    <button onclick="openDesignModal('color'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-fill-drip text-cyan-400"></i><span>Color<small>Pick a clean custom page color</small></span></button>
-                                    <button onclick="openDesignModal('image'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-image text-cyan-400"></i><span>Upload Image<small>Use a real page background image</small></span></button>
-                                </div>
+                            <div id="builder-insert-mini-panel-element" class="builder-popover-grid">
+                                <button id="insert-elements-trigger" onclick="toggleElementPicker(event); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-plus-circle text-cyan-400"></i><span>Elements<small>Open element library</small></span></button>
+                                <button onclick="insertStarterBlock('hero'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-wand-magic-sparkles text-cyan-400"></i><span>Hero Block<small>Premium landing hero</small></span></button>
+                            </div>
+                            <div id="builder-insert-mini-panel-feature" class="builder-popover-grid hidden">
+                                <button onclick="insertStarterBlock('feature'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-th-large text-cyan-400"></i><span>Feature Row<small>Three-card section</small></span></button>
+                            </div>
+                            <div id="builder-insert-mini-panel-background" class="builder-popover-grid hidden">
+                                <button id="builder-insert-background-templates-trigger" onclick="openDesignModal('templates'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-swatchbook text-cyan-400"></i><span>Templates<small>Professional page background presets</small></span></button>
+                                <button onclick="openDesignModal('color'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-fill-drip text-cyan-400"></i><span>Color<small>Pick a clean custom page color</small></span></button>
+                                <button onclick="openDesignModal('image'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-image text-cyan-400"></i><span>Upload Image<small>Use a real page background image</small></span></button>
                             </div>
                         </div>
                     </div>
@@ -20395,8 +20397,8 @@
                                 <i class="fas fa-chevron-down text-[10px]"></i>
                             </button>
                             <div id="builder-canvas-size-label" class="hidden text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Desktop Canvas</div>
-                            <div id="builder-viewport-panel" class="hidden flex-col items-start gap-2 rounded-lg border border-white/10 bg-[#071122]/95 px-2.5 py-2 shadow-[0_18px_38px_rgba(2,6,23,0.45)]">
-                                <select id="builder-device-select" onchange="setBuilderViewportMode(this.value)" class="w-[210px] rounded-md border border-white/15 bg-slate-950 px-2.5 py-2 text-[11px] font-semibold text-slate-100 outline-none focus:border-cyan-400">
+                            <div id="builder-viewport-panel" class="hidden flex-col items-start">
+                                <select id="builder-device-select" onchange="setBuilderViewportMode(this.value)" class="w-[210px] rounded-md border border-cyan-400/45 bg-transparent px-2 py-1.5 text-[11px] font-semibold text-slate-100 outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/80">
                                     <option value="desktop">Desktop</option>
                                     <option value="laptop">Laptop 1440</option>
                                     <option value="tablet">iPad 1024</option>
@@ -22545,6 +22547,7 @@
       let builderViewportMode = "laptop";
       let builderResponsiveWidth = 1280;
       let builderViewportPanelOpen = false;
+      let builderInsertMiniTab = "element";
       let builderCanvasSizeRaf = 0;
       let builderCanvasMutationObserver = null;
       let builderCanvasResizeObserver = null;
@@ -25641,8 +25644,25 @@
         if (name === "templates") {
           fetchBuilderCommunityTemplates().catch(() => {});
         }
+        if (name === "insert") {
+          setBuilderInsertMiniTab(builderInsertMiniTab || "element");
+        }
         queueBuilderPanelAutoHide();
         handleBuilderTutorialEvent("builder-tab-opened", { tab: name });
+      }
+      function setBuilderInsertMiniTab(name = "element") {
+        const allowedTabs = ["element", "feature", "background"];
+        const safeTab = allowedTabs.includes(name) ? name : "element";
+        builderInsertMiniTab = safeTab;
+        allowedTabs.forEach((tab) => {
+          const tabButton = document.getElementById(`builder-insert-tab-${tab}`);
+          const panel = document.getElementById(`builder-insert-mini-panel-${tab}`);
+          const active = tab === safeTab;
+          tabButton?.classList.toggle("bg-cyan-500/20", active);
+          tabButton?.classList.toggle("border-cyan-400/30", active);
+          tabButton?.classList.toggle("text-cyan-100", active);
+          panel?.classList.toggle("hidden", !active);
+        });
       }
       document.addEventListener("mousedown", (e) => {
         const toolbarShell = document.getElementById("builder-toolbar-shell");
@@ -26148,10 +26168,25 @@ console.log("Triggered ${eventName}", { source, event });
           left: normalizedStyles.left,
           top: normalizedStyles.top,
           zIndex: normalizedStyles.zIndex,
-          opacity: normalizedStyles.opacity,
+          opacity: normalizedStyles.opacity ?? "1",
           mixBlendMode: normalizedStyles.mixBlendMode,
           transform: `rotate(${normalizedStyles.rotate})`,
+          visibility: "visible",
         });
+        // Ensure styles are persisted as style attribute string for export
+        const styleString = [
+          `position: absolute`,
+          `left: ${normalizedStyles.left || "0px"}`,
+          `top: ${normalizedStyles.top || "0px"}`,
+          `width: ${normalizedStyles.width || "260px"}`,
+          `height: ${normalizedStyles.height || "100px"}`,
+          `opacity: ${normalizedStyles.opacity ?? "1"}`,
+          `visibility: visible`,
+          normalizedStyles.zIndex ? `z-index: ${normalizedStyles.zIndex}` : "",
+          normalizedStyles.mixBlendMode ? `mix-blend-mode: ${normalizedStyles.mixBlendMode}` : "",
+          normalizedStyles.rotate ? `transform: rotate(${normalizedStyles.rotate})` : "",
+        ].filter(Boolean).join("; ");
+        wrap.setAttribute("style", styleString);
         applyElementContentStyles(wrap, type, normalizedStyles, mergedAttrs);
         applyCustomCssRulesToElement(wrap, mergedAttrs.customCssRules);
         applyDataBindingAttributes(wrap, mergedAttrs.dataBinding);
@@ -31359,6 +31394,11 @@ console.log("Triggered ${eventName}", { source, event });
         cleanNode
           .querySelectorAll("[contenteditable]")
           .forEach((editable) => editable.removeAttribute("contenteditable"));
+        
+        // IMPORTANT: Preserve wrapper positioning styles for canvas elements
+        const wrapperStyle = String(sourceNode.getAttribute("style") || "").trim();
+        const preservedWrapperStyles = extractPositioningStyles(wrapperStyle);
+        
         const wrapperClasses = filterExportClasses(cleanNode.classList);
         const type = sourceNode.getAttribute("data-type") || "div";
         const body = cleanNode.querySelector(".element-body");
@@ -31396,12 +31436,36 @@ console.log("Triggered ${eventName}", { source, event });
         return {
           node: contentNode,
           type,
-          wrapperStyle: "",
+          wrapperStyle: preservedWrapperStyles,
           contentStyle: "",
           interactions: normalizeElementInteractions(
             JSON.parse(sourceNode.dataset.interactions || "{}"),
           ),
         };
+      }
+      function extractPositioningStyles(styleStr = "") {
+        const styles = {};
+        const styleMap = {};
+        String(styleStr).split(";").forEach((rule) => {
+          const [key, value] = rule.split(":").map((s) => s.trim());
+          if (key && value) styleMap[key] = value;
+        });
+        
+        // Preserve only positioning-critical styles
+        const positioningKeys = [
+          "position", "left", "top", "right", "bottom", 
+          "width", "height", "z-index", "visibility", "opacity",
+          "transform", "transform-origin"
+        ];
+        
+        positioningKeys.forEach((key) => {
+          if (styleMap[key]) styles[key] = styleMap[key];
+        });
+        
+        if (!Object.keys(styles).length) return "";
+        return Object.entries(styles)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join("; ");
       }
       function escapeJsString(value = "") {
         return String(value || "")
@@ -32585,43 +32649,235 @@ ${interactionBlock}
         if (hex) return `#${hex[1]}`;
         return fallback;
       }
+      function resolveCanvasInsertPosition(prompt = "", width = 260, height = 120) {
+        const text = String(prompt || "").toLowerCase();
+        const canvas = document.getElementById("web-canvas");
+        const canvasWidth = Math.max(
+          320,
+          canvas?.scrollWidth || canvas?.clientWidth || 1280,
+        );
+        const canvasHeight = Math.max(
+          320,
+          canvas?.scrollHeight || canvas?.clientHeight || 720,
+        );
+        const clamp = (value, min, max) =>
+          Math.max(min, Math.min(max, Number(value) || 0));
+        const maxLeft = Math.max(0, canvasWidth - width);
+        const maxTop = Math.max(0, canvasHeight - height);
+        const pairMatch = text.match(
+          /\b(?:at|to|position(?:ed)?(?: at)?)\s+(-?\d{1,5})\s*,\s*(-?\d{1,5})\b/i,
+        );
+        const xMatch = text.match(/\b(?:x|left)\s*[:=]?\s*(-?\d{1,5})\b/i);
+        const yMatch = text.match(/\b(?:y|top)\s*[:=]?\s*(-?\d{1,5})\b/i);
+        if (pairMatch || xMatch || yMatch) {
+          const left = pairMatch
+            ? Number(pairMatch[1])
+            : xMatch
+              ? Number(xMatch[1])
+              : Math.round((canvasWidth - width) / 2);
+          const top = pairMatch
+            ? Number(pairMatch[2])
+            : yMatch
+              ? Number(yMatch[1])
+              : Math.round((canvasHeight - height) / 2);
+          return {
+            left: clamp(left, 0, maxLeft),
+            top: clamp(top, 0, maxTop),
+          };
+        }
+        const wantsCenter =
+          /\b(center|centre|middle)\b/.test(text) ||
+          /\bcenter of (?:body|canvas|page)\b/.test(text);
+        const wantsTop = /\btop\b/.test(text);
+        const wantsBottom = /\bbottom\b/.test(text);
+        const wantsLeft = /\bleft\b/.test(text);
+        const wantsRight = /\bright\b/.test(text);
+        if (wantsCenter && !wantsTop && !wantsBottom && !wantsLeft && !wantsRight) {
+          return {
+            left: Math.round((canvasWidth - width) / 2),
+            top: Math.round((canvasHeight - height) / 2),
+          };
+        }
+        const edgePadding = 28;
+        const left = wantsLeft
+          ? edgePadding
+          : wantsRight
+            ? maxLeft - edgePadding
+            : Math.round((canvasWidth - width) / 2);
+        const top = wantsTop
+          ? edgePadding
+          : wantsBottom
+            ? maxTop - edgePadding
+            : Math.round((canvasHeight - height) / 2);
+        return {
+          left: clamp(left, 0, maxLeft),
+          top: clamp(top, 0, maxTop),
+        };
+      }
+      function buildDeterministicInsertSpec(prompt = "") {
+        const text = String(prompt || "").toLowerCase();
+        if (!/\b(insert|add|create)\b/.test(text)) return null;
+        if (/\bfeature(?:\s+block|\s+row|\s+section)?\b/.test(text)) {
+          return { starter: "feature", label: "feature block" };
+        }
+        if (/\bhero\b/.test(text)) {
+          return { starter: "hero", label: "hero block" };
+        }
+        if (/\bcontact\b/.test(text)) {
+          return { starter: "contact", label: "contact form block" };
+        }
+        if (/\bpricing\b/.test(text)) {
+          return { starter: "pricing", label: "pricing block" };
+        }
+        if (/\bdashboard\b/.test(text)) {
+          return { starter: "dashboard", label: "dashboard block" };
+        }
+        if (/\blogin\b/.test(text)) {
+          return { starter: "login", label: "login block" };
+        }
+        const color = extractColorFromPrompt(text, "#3b82f6");
+        if (/\b(ball|circle|dot|sphere)\b/.test(text)) {
+          return {
+            type: "div",
+            label: "ball",
+            attrs: { text: "" },
+            styles: {
+              width: "120px",
+              height: "120px",
+              borderRadius: "9999px",
+              backgroundColor: color,
+              backgroundColorSecondary: color,
+              backgroundMode: "solid",
+              boxShadow: "0 18px 36px rgba(15,23,42,0.25)",
+            },
+          };
+        }
+        if (/\b(button|cta)\b/.test(text)) {
+          return {
+            type: "button",
+            label: "button",
+            attrs: { text: "Click Me" },
+            styles: {
+              width: "190px",
+              height: "56px",
+              backgroundMode: "solid",
+              backgroundColor: color,
+              backgroundColorSecondary: color,
+              color: "#ffffff",
+              borderRadius: "14px",
+              fontWeight: "700",
+            },
+          };
+        }
+        if (/\b(text|heading|title)\b/.test(text)) {
+          return {
+            type: "text",
+            label: "text",
+            attrs: { text: "New heading" },
+            styles: {
+              width: "320px",
+              height: "72px",
+              color: "#0f172a",
+              fontSize: "36px",
+              fontWeight: "800",
+              lineHeight: "1.1",
+            },
+          };
+        }
+        if (/\b(image|photo|picture)\b/.test(text)) {
+          return {
+            type: "img",
+            label: "image",
+            attrs: { src: "https://source.unsplash.com/800x600/?design" },
+            styles: {
+              width: "320px",
+              height: "220px",
+              borderRadius: "18px",
+              backgroundSize: "cover",
+              borderWidth: "1px",
+              borderColor: "#cbd5e1",
+            },
+          };
+        }
+        if (/\b(input|field)\b/.test(text)) {
+          return {
+            type: "input",
+            label: "input field",
+            attrs: { placeholder: "Type here..." },
+            styles: {
+              width: "300px",
+              height: "52px",
+              borderRadius: "12px",
+            },
+          };
+        }
+        if (/\b(textarea|message box)\b/.test(text)) {
+          return {
+            type: "textarea",
+            label: "textarea",
+            attrs: { placeholder: "Write your message..." },
+            styles: {
+              width: "360px",
+              height: "120px",
+              borderRadius: "14px",
+            },
+          };
+        }
+        if (/\b(form)\b/.test(text)) {
+          return { starter: "contact", label: "contact form block" };
+        }
+        return {
+          type: "div",
+          label: "container",
+          attrs: { text: "" },
+          styles: {
+            width: "320px",
+            height: "180px",
+            borderRadius: "18px",
+            backgroundMode: "solid",
+            backgroundColor: "#ffffff",
+            backgroundColorSecondary: "#ffffff",
+            borderWidth: "1px",
+            borderColor: "#cbd5e1",
+            boxShadow: "0 14px 34px rgba(15,23,42,0.12)",
+          },
+        };
+      }
       function runDeterministicBuilderCommand(userPrompt = "") {
         const prompt = String(userPrompt || "")
           .toLowerCase()
           .trim();
         if (!prompt) return null;
-        if (
-          /\b(insert|add|create)\b/.test(prompt) &&
-          /\b(ball|circle|dot|sphere)\b/.test(prompt)
-        ) {
-          const color = extractColorFromPrompt(prompt, "#3b82f6");
-          addObject(
-            "div",
-            {
-              width: "120px",
-              height: "120px",
-              borderRadius: "9999px",
-              background: color,
-              boxShadow: "0 18px 36px rgba(15,23,42,0.25)",
-            },
-            {
-              text: "",
-            },
-          );
-          const created = selectedElements?.[0] || selectedEl;
-          if (created) {
-            const inner = getElementInnerNode(created);
-            if (inner) {
-              inner.style.borderRadius = "9999px";
-              inner.style.background = color;
-            }
-            scheduleSyncStyleTag();
-          }
+        const insertSpec = buildDeterministicInsertSpec(prompt);
+        if (insertSpec?.starter) {
+          insertStarterBlock(insertSpec.starter);
           syncActiveBuilderFileFromCanvas({ skipHistory: true });
           return {
             applied: true,
-            message: "Inserted a round blue ball and rendered it on canvas.",
-            actions: ["INSERT_BALL"],
+            message: `Inserted ${insertSpec.label || "starter block"} on canvas.`,
+            actions: [`INSERT_STARTER ${insertSpec.starter}`],
+          };
+        }
+        if (insertSpec?.type) {
+          const width =
+            Number.parseFloat(String(insertSpec.styles?.width || "260")) || 260;
+          const height =
+            Number.parseFloat(String(insertSpec.styles?.height || "120")) || 120;
+          const placement = resolveCanvasInsertPosition(prompt, width, height);
+          addObject(
+            insertSpec.type,
+            {
+              ...(insertSpec.styles || {}),
+              left: `${Math.round(placement.left)}px`,
+              top: `${Math.round(placement.top)}px`,
+            },
+            insertSpec.attrs || {},
+          );
+          syncActiveBuilderFileFromCanvas({ skipHistory: true });
+          return {
+            applied: true,
+            message: `Inserted ${insertSpec.label || "element"} at x:${Math.round(placement.left)}, y:${Math.round(placement.top)} on canvas.`,
+            actions: [`INSERT_ELEMENT ${insertSpec.type}`],
           };
         }
         return null;
@@ -32658,7 +32914,7 @@ ${interactionBlock}
         return ids;
       }
       function syncActiveBuilderFileFromCanvas(options = {}) {
-        const { skipHistory = false } = options || {};
+        const { skipHistory = false, skipCodeApply = true } = options || {};
         const activePath =
           normalizeBuilderFilePath(activeBuilderFilePath || "index.html") ||
           "index.html";
@@ -32669,7 +32925,22 @@ ${interactionBlock}
         const editor = document.getElementById("builder-code-editor");
         if (editor) {
           editor.value = html;
-          handleBuilderCodeInput();
+          // Clear any pending auto-apply timer to prevent canvas re-render
+          if (skipCodeApply) {
+            clearTimeout(codeApplyTimer);
+            codeApplyTimer = null;
+          }
+          // Still update highlighting but don't trigger auto-apply
+          const highlight = document.getElementById("builder-code-highlight");
+          const lineGutter = document.getElementById("builder-code-lines");
+          if (highlight) {
+            highlight.innerHTML = highlightBuilderCode(editor.value);
+            highlight.scrollTop = editor.scrollTop;
+          }
+          if (lineGutter) {
+            lineGutter.textContent = buildCodeLineNumbers(editor.value);
+            lineGutter.scrollTop = editor.scrollTop;
+          }
         }
         if (!skipHistory) saveToHistory();
         return true;
@@ -32815,8 +33086,12 @@ ${interactionBlock}
         });
         if (applied.length) {
           scheduleSyncStyleTag();
-          syncActiveBuilderFileFromCanvas({ skipHistory: true });
-          saveToHistory();
+          // Don't sync immediately after insert - this causes elements to lose positioning
+          // Instead, defer sync or only sync on user action
+          setTimeout(() => {
+            syncActiveBuilderFileFromCanvas({ skipHistory: true });
+            saveToHistory();
+          }, 300);
         }
         return applied;
       }
@@ -33197,7 +33472,7 @@ ${interactionBlock}
         // apply directly to current file and rebuild canvas objects immediately.
         if (
           !applied.length &&
-          /<(?:!doctype|html|head|body|div|section|main|style|script)[\s>]/i.test(
+          /<(?:!doctype|html|head|body|div|main|style|script)[\s>]/i.test(
             response,
           )
         ) {

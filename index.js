@@ -4657,6 +4657,11 @@ app.post("/api/ai/manager", async (req, res) => {
       "template",
       "design",
       "format",
+      "put",
+      "place",
+      "drop",
+      "generate",
+      "show",
     ];
 
     const negativeKeywords = [
@@ -4800,25 +4805,27 @@ function sanitizeAutoFixHTML(html = "") {
 
   // Remove any opacity:0 or opacity: 0
   content = content.replace(/opacity\s*:\s*0(?![^;]*[0-9])/g, "opacity: 1");
-  
+
   // Remove visibility:hidden and similar
   content = content.replace(/visibility\s*:\s*hidden/gi, "visibility: visible");
-  
+
   // Remove display:none
   content = content.replace(/display\s*:\s*none/gi, "display: block");
-  
+
   // Remove lines with only display:none in style attribute
-  content = content.replace(/style="[^"]*display\s*:\s*none[^"]*"/gi, (match) => {
-    // Reconstruct without the display:none part
-    const style = match.replace(/display\s*:\s*none\s*;?/gi, "").trim();
-    if (style === 'style=""') return 'style="display: block;"';
-    if (style.endsWith(';')) return style.slice(0, -1) + ';"';
-    return style + ';"';
-  });
+  content = content.replace(
+    /style="[^"]*display\s*:\s*none[^"]*"/gi,
+    (match) => {
+      // Reconstruct without the display:none part
+      const style = match.replace(/display\s*:\s*none\s*;?/gi, "").trim();
+      if (style === 'style=""') return 'style="display: block;"';
+      if (style.endsWith(";")) return style.slice(0, -1) + ';"';
+      return style + ';"';
+    },
+  );
 
   return content;
 }
-
 
 app.post("/api/ai/autofix", async (req, res) => {
   try {
