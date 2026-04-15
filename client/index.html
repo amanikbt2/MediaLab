@@ -60,6 +60,11 @@
       /* --- UI Animations --- */
       .tool-card {
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        width: clamp(190px, 20vw, 230px);
+        min-height: 320px;
+        aspect-ratio: 3 / 4;
+        display: flex;
+        flex-direction: column;
       }
       .tool-card:hover {
         transform: translateY(-8px);
@@ -5677,7 +5682,7 @@
               document.getElementById("tool-grid").innerHTML = toolsData
                 .map(
                   (t) => `
-              <div onclick="openTool('${t.id}')" class="tool-card bg-gray-900 border border-gray-800 rounded-3xl p-8 cursor-pointer relative overflow-hidden group">
+              <div onclick="openTool('${t.id}')" class="tool-card bg-gray-900 border border-gray-800 rounded-3xl p-6 cursor-pointer relative overflow-hidden group">
                 ${
                   t.isNew
                     ? `

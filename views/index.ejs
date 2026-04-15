@@ -2581,7 +2581,11 @@
         gap: 1.5rem;
       }
       #tool-grid .tool-card {
-        width: min(100%, 320px);
+        width: clamp(190px, 20vw, 230px);
+        min-height: 320px;
+        aspect-ratio: 3 / 4;
+        display: flex;
+        flex-direction: column;
       }
       .feature-gate-lockline {
         display: flex;
@@ -6605,7 +6609,7 @@
         document.getElementById("tool-grid").innerHTML = toolsData
           .map(
             (t) => `
-        <div onclick="openTool('${t.id}')" class="tool-card bg-gray-900 border border-gray-800 rounded-3xl p-8 cursor-pointer relative overflow-hidden group">
+        <div onclick="openTool('${t.id}')" class="tool-card bg-gray-900 border border-gray-800 rounded-3xl p-6 cursor-pointer relative overflow-hidden group">
           ${
             t.isNew
               ? `
@@ -21823,10 +21827,19 @@
         const safeStep = Math.max(4, Number(step) || 20);
         return Math.ceil(Math.max(0, Number(value) || 0) / safeStep) * safeStep;
       }
+      function getBuilderDesktopBaseWidth(container) {
+        const containerWidth = Math.max(320, container?.clientWidth || 0);
+        const sideGutter = Math.min(
+          140,
+          Math.max(56, Math.round(containerWidth * 0.085)),
+        );
+        return Math.min(1680, Math.max(960, containerWidth - sideGutter * 2));
+      }
       function updateBuilderCanvasWorkspaceSize() {
         const canvas = document.getElementById("web-canvas");
         const container = document.getElementById("canvas-container");
         if (!canvas || !container) return;
+        const containerWidth = Math.max(320, container.clientWidth || 0);
         const computed = window.getComputedStyle(canvas);
         const gridStep = Math.max(
           20,
@@ -21835,10 +21848,8 @@
         );
         const buffer = gridStep * 5;
         const containerHeight = Math.max(520, container.clientHeight - 24);
-        const defaultWidth = Math.min(
-          1680,
-          Math.max(960, container.clientWidth - 24),
-        );
+        // Keep a consistent premium gutter so canvas doesn't feel edge-to-edge.
+        const defaultWidth = getBuilderDesktopBaseWidth(container);
         const baseWidth = Math.max(
           320,
           parseInt(canvas.dataset.baseWidth || String(defaultWidth), 10) ||
@@ -21860,8 +21871,15 @@
             child.offsetTop + child.offsetHeight,
           );
         });
+        const hasCanvasContent = furthestRight > 0 || furthestBottom > 0;
+        if (!hasCanvasContent && builderViewportMode === "desktop") {
+          canvas.dataset.baseWidth = String(defaultWidth);
+        }
+        const stableBaseWidth = !hasCanvasContent && builderViewportMode === "desktop"
+          ? defaultWidth
+          : baseWidth;
         const nextWidth = Math.max(
-          baseWidth,
+          stableBaseWidth,
           snapBuilderWorkspaceValue(furthestRight + buffer, gridStep),
         );
         const nextHeight = Math.max(
@@ -21877,7 +21895,7 @@
           return;
         }
         canvas.style.width = `${nextWidth}px`;
-        canvas.style.minWidth = `${baseWidth}px`;
+        canvas.style.minWidth = `${stableBaseWidth}px`;
         canvas.style.height = `${nextHeight}px`;
         canvas.style.minHeight = `${nextHeight}px`;
       }
@@ -24842,9 +24860,8 @@
             ? builderResponsiveWidth
             : preset.width || 0;
         const isDesktop = builderViewportMode === "desktop";
-        const desktopWidth = Math.min(
-          1680,
-          Math.max(960, canvas.parentElement?.clientWidth || 1280),
+        const desktopWidth = getBuilderDesktopBaseWidth(
+          document.getElementById("canvas-container") || canvas.parentElement,
         );
         const baseWidth = isDesktop
           ? desktopWidth
@@ -26341,6 +26358,7 @@ console.log("Triggered ${eventName}", { source, event });
       }
       function newBuilderProject() {
         const canvas = document.getElementById("web-canvas");
+        const container = document.getElementById("canvas-container");
         if (!canvas) return;
         builderImportedProject = null;
         builderRawImportDocument = "";
@@ -26349,10 +26367,17 @@ console.log("Triggered ${eventName}", { source, event });
         resetBuilderProjectFiles();
         builderImportedGlobalCss = "";
         canvas.innerHTML = "";
+        if (container && builderViewportMode === "desktop") {
+          const baseWidth = getBuilderDesktopBaseWidth(container);
+          canvas.dataset.baseWidth = String(baseWidth);
+          canvas.style.minWidth = `${baseWidth}px`;
+          canvas.style.width = `${baseWidth}px`;
+        }
         applyCanvasDesignPreset("clean", true);
         ensureBuilderGuides(canvas);
         initCanvasSelection(canvas);
         deselectAll();
+        requestBuilderCanvasWorkspaceSize();
         renderBuilderProjectExplorer();
         refreshBuilderCodeMode();
         markBuilderSavedState();
@@ -28293,12 +28318,15 @@ console.log("Triggered ${eventName}", { source, event });
           if (!(wrapper instanceof HTMLElement)) return;
           const transformText = String(wrapper.style.transform || "").trim();
           if (!transformText) return;
-          const rotateMatch = transformText.match(/rotate\([^)]+\)/);
-          const rotatePart = rotateMatch ? rotateMatch[0] : "rotate(0deg)";
-          // Keep wrapper drag math stable: translate/scale/skew cause visible drift
-          // between wrapper handles and rendered content during pointer drag.
+          // Keep element placement transforms (translate/rotate) intact and only
+          // remove scale/skew terms that destabilize drag math.
+          const sanitized = transformText
+            .replace(/\bscale[XYZ]?\([^)]+\)\s*/gi, "")
+            .replace(/\bskew[XY]?\([^)]+\)\s*/gi, "")
+            .trim();
+          if (!sanitized) return;
           wrapper.style.transformOrigin = "top left";
-          wrapper.style.transform = rotatePart;
+          wrapper.style.transform = sanitized;
         };
         if (builderInteractionPickMode && builderInteractionDraft) {
           e.stopPropagation();
@@ -28368,23 +28396,6 @@ console.log("Triggered ${eventName}", { source, event });
           selectedElements.includes(el);
         const canvas = document.getElementById("web-canvas");
         ensureBuilderGuides(canvas);
-        if (
-          !isResizer &&
-          !movingSelection &&
-          el.classList.contains("in-layout-flow")
-        ) {
-          detachElementFromLayoutFlow(el, canvas);
-        }
-        if (!isResizer) {
-          normalizeWrapperDragTransform(el);
-          normalizeWrapperVisualOffset(el);
-          if (movingSelection) {
-            selectedElements.forEach((item) => {
-              normalizeWrapperDragTransform(item);
-              normalizeWrapperVisualOffset(item);
-            });
-          }
-        }
         const startX = e.clientX,
           startY = e.clientY;
         const startMetrics = getBuilderCanvasMetrics(canvas);
@@ -28413,26 +28424,49 @@ console.log("Triggered ${eventName}", { source, event });
           startMetrics.scrollTop;
         const grabPointX = startPointerCanvasX - startL;
         const grabPointY = startPointerCanvasY - startT;
-
-        // Stabilize drag/resize math by freezing auto/% dimensions to px before move.
-        if (!movingSelection && !isResizer) {
-          const widthText = String(el.style.width || "")
-            .trim()
-            .toLowerCase();
-          const heightText = String(el.style.height || "")
-            .trim()
-            .toLowerCase();
-          if (!widthText || widthText.includes("%") || widthText === "auto") {
-            el.style.width = `${startW}px`;
-          }
+        let dragPrepared = false;
+        let didMove = false;
+        const prepareDragSession = () => {
+          if (dragPrepared) return;
+          dragPrepared = true;
           if (
-            !heightText ||
-            heightText.includes("%") ||
-            heightText === "auto"
+            !isResizer &&
+            !movingSelection &&
+            el.classList.contains("in-layout-flow")
           ) {
-            el.style.height = `${startH}px`;
+            detachElementFromLayoutFlow(el, canvas);
           }
-        }
+          if (!isResizer) {
+            normalizeWrapperDragTransform(el);
+            normalizeWrapperVisualOffset(el);
+            if (movingSelection) {
+              selectedElements.forEach((item) => {
+                normalizeWrapperDragTransform(item);
+                normalizeWrapperVisualOffset(item);
+              });
+            }
+          }
+          // Stabilize drag/resize math by freezing auto/% dimensions to px only
+          // after real pointer movement begins (prevents double-click jumps).
+          if (!movingSelection && !isResizer) {
+            const widthText = String(el.style.width || "")
+              .trim()
+              .toLowerCase();
+            const heightText = String(el.style.height || "")
+              .trim()
+              .toLowerCase();
+            if (!widthText || widthText.includes("%") || widthText === "auto") {
+              el.style.width = `${startW}px`;
+            }
+            if (
+              !heightText ||
+              heightText.includes("%") ||
+              heightText === "auto"
+            ) {
+              el.style.height = `${startH}px`;
+            }
+          }
+        };
         const selectionStarts = movingSelection
           ? selectedElements.map((item) => {
               return {
@@ -28468,6 +28502,10 @@ console.log("Triggered ${eventName}", { source, event });
           if (dragRafId) return;
           dragRafId = requestAnimationFrame(() => {
             dragRafId = null;
+            const movement = Math.hypot(ev.clientX - startX, ev.clientY - startY);
+            if (!dragPrepared && movement < 2) return;
+            prepareDragSession();
+            didMove = true;
             const scroll = getCanvasScroll();
             const canvasRect = scroll.metrics.rect;
             const scaleX = scroll.metrics.scaleX;
@@ -28573,6 +28611,13 @@ console.log("Triggered ${eventName}", { source, event });
         scheduleCollaborationContentSync("move", 60);
         const onPointerUp = () => {
           if (dragRafId) cancelAnimationFrame(dragRafId);
+          if (!didMove) {
+            hideBuilderGuides();
+            clearLayoutDropGuides();
+            document.removeEventListener("pointermove", onPointerMove);
+            document.removeEventListener("pointerup", onPointerUp);
+            return;
+          }
           if (activeLayoutPreview && !isResizer && !movingSelection) {
             attachElementToLayoutFlow(el, activeLayoutPreview);
           }
