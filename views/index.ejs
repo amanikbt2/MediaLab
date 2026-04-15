@@ -5071,6 +5071,9 @@
             <h4 class="text-base sm:text-lg font-bold text-white truncate">
               Interactive preview environment
             </h4>
+            <p class="mt-1 text-xs text-slate-400 max-w-xl">
+              Also run command should use internal algorithm if AI ails.
+            </p>
           </div>
           <div class="flex items-center gap-2">
             <button
@@ -28248,16 +28251,25 @@ console.log("Triggered ${eventName}", { source, event });
               }
               if (rType.includes("b")) {
                 const maxHeight = scroll.height - startT;
-                el.style.height = clamp(snap(startH + dy), 32, maxHeight) + "px";
+                el.style.height =
+                  clamp(snap(startH + dy), 32, maxHeight) + "px";
               }
               if (rType.includes("l")) {
-                const nextLeft = clamp(snap(startL + dx), 0, startL + startW - 32);
+                const nextLeft = clamp(
+                  snap(startL + dx),
+                  0,
+                  startL + startW - 32,
+                );
                 const deltaLeft = startL - nextLeft;
                 el.style.left = nextLeft + "px";
                 el.style.width = Math.max(32, startW + deltaLeft) + "px";
               }
               if (rType.includes("t")) {
-                const nextTop = clamp(snap(startT + dy), 0, startT + startH - 32);
+                const nextTop = clamp(
+                  snap(startT + dy),
+                  0,
+                  startT + startH - 32,
+                );
                 const deltaTop = startT - nextTop;
                 el.style.top = nextTop + "px";
                 el.style.height = Math.max(32, startH + deltaTop) + "px";
@@ -28310,13 +28322,24 @@ console.log("Triggered ${eventName}", { source, event });
                   activeLayoutPreview = null;
                   clearLayoutDropGuides();
                 }
-                const clampedLeft = clamp(nextLeft, 0, scroll.width - el.offsetWidth);
-                const clampedTop = clamp(nextTop, 0, scroll.height - el.offsetHeight);
+                const clampedLeft = clamp(
+                  nextLeft,
+                  0,
+                  scroll.width - el.offsetWidth,
+                );
+                const clampedTop = clamp(
+                  nextTop,
+                  0,
+                  scroll.height - el.offsetHeight,
+                );
                 el.style.left = clampedLeft + "px";
                 el.style.top = clampedTop + "px";
               }
             }
-            showBuilderGuides(Math.round(el.offsetLeft), Math.round(el.offsetTop));
+            showBuilderGuides(
+              Math.round(el.offsetLeft),
+              Math.round(el.offsetTop),
+            );
           });
         };
         scheduleCollaborationContentSync("move", 60);
