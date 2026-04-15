@@ -25132,8 +25132,7 @@
         const elementWidth =
           el.offsetWidth || Math.max(30, Math.round(elementRect.width || 30));
         const elementHeight =
-          el.offsetHeight ||
-          Math.max(30, Math.round(elementRect.height || 30));
+          el.offsetHeight || Math.max(30, Math.round(elementRect.height || 30));
         const nextLeft = clampBuilderValue(
           (elementRect.left - metrics.rect.left) * metrics.scaleX +
             metrics.scrollLeft,
@@ -32486,10 +32485,8 @@ ${interactionBlock}
               if (!target) return;
               const startL = parseFloat(target.style.left) || target.offsetLeft;
               const startT = parseFloat(target.style.top) || target.offsetTop;
-              const nextX =
-                dx != null ? startL + (Number(dx) || 0) : startL;
-              const nextY =
-                dy != null ? startT + (Number(dy) || 0) : startT;
+              const nextX = dx != null ? startL + (Number(dx) || 0) : startL;
+              const nextY = dy != null ? startT + (Number(dy) || 0) : startT;
               if (applyElementPositionMove(selector, nextX, nextY)) {
                 applied.push(`MOVE ${selector}`);
               }
@@ -32538,13 +32535,15 @@ ${interactionBlock}
                   body.innerHTML = html;
                   body
                     .querySelectorAll("[contenteditable]")
-                    .forEach((node) =>
-                      node.removeAttribute("contenteditable"),
-                    );
+                    .forEach((node) => node.removeAttribute("contenteditable"));
                 }
               }
               const inner = getElementInnerNode(created);
-              if (op?.innerStyles && typeof op.innerStyles === "object" && inner) {
+              if (
+                op?.innerStyles &&
+                typeof op.innerStyles === "object" &&
+                inner
+              ) {
                 applyStyleObjectToElement(inner, op.innerStyles);
               }
               applied.push(`INSERT ${created.id || elementType}`);
@@ -32750,7 +32749,9 @@ ${interactionBlock}
               /<html[\s>]/i.test(content)
             ) {
               const beforeHtml =
-                getBuilderFileContent(activePath) || buildCodeModeDocument() || "";
+                getBuilderFileContent(activePath) ||
+                buildCodeModeDocument() ||
+                "";
               const beforeIds = collectCanvasIdsFromHtml(beforeHtml);
               const afterIds = collectCanvasIdsFromHtml(content);
               if (beforeIds.size) {
@@ -33363,57 +33364,117 @@ ${interactionBlock}
         if (canvas) canvas.classList.add("magic-fix-active");
         if (magicBtn) magicBtn.disabled = true;
         if (magicIcon) magicIcon.classList.add("is-spinning");
+
+        // Model fallback list for auto-retry
+        const modelsToTry = [
+          "openai/gpt-oss-120b",
+          "llama-3.3-70b-versatile",
+          "openai/gpt-oss-20b",
+          "meta-llama/llama-4-scout-17b-16e-instruct",
+          "groq/compound",
+        ];
+        let lastError = null;
+        let successfulModel = null;
+
         try {
-          const res = await fetch("/api/ai/autofix", {
-            method: "POST",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ currentCode: code }),
-          });
-          const data = await res.json().catch(() => ({}));
-          if (!res.ok || !data.success) {
-            if (data.limitReached) {
-              openUpgradeModal();
-              showBuilderSnackbar(
-                "Daily Auto-Fix credits reached. Upgrade to Pro.",
-                "error",
-              );
-              return;
+          for (
+            let modelIndex = 0;
+            modelIndex < modelsToTry.length;
+            modelIndex++
+          ) {
+            const modelId = modelsToTry[modelIndex];
+            try {
+              // Show which model is being attempted
+              if (modelIndex > 0) {
+                showBuilderSnackbar(
+                  `Autofix failed, trying ${modelId}...`,
+                  "warn",
+                );
+                addAIThinkingTask(`Retrying with ${modelId}...`);
+              }
+
+              const res = await fetch("/api/ai/autofix", {
+                method: "POST",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  currentCode: code,
+                  preferredModel: modelId, // Request specific model
+                }),
+              });
+              const data = await res.json().catch(() => ({}));
+              if (!res.ok || !data.success) {
+                if (data.limitReached) {
+                  openUpgradeModal();
+                  showBuilderSnackbar(
+                    "Daily Auto-Fix credits reached. Upgrade to Pro.",
+                    "error",
+                  );
+                  return;
+                }
+                lastError = data.message || `${modelId} failed`;
+                continue; // Try next model
+              }
+
+              // SUCCESS: This model worked
+              successfulModel = modelId;
+              aiActiveModel = String(data.modelUsed || modelId);
+              if (data.modelRecoveryUsed) aiModelRecoveryInFlight = true;
+              if (
+                data.modelSwitchUsed &&
+                data.modelSwitchReason === "rate_limit"
+              ) {
+                aiModelSwitchingInFlight = true;
+                aiChatMessages.push({
+                  role: "assistant",
+                  text: "Choosing the best model for your response...",
+                });
+                renderBuilderAiChat();
+              }
+              if (data.creditsRemaining !== undefined)
+                aiCreditsRemaining = data.creditsRemaining;
+              if (editor) {
+                editor.value = String(data.updatedCode || "");
+                handleBuilderCodeInput();
+              }
+              applyCodeModeToCanvas();
+
+              // Show success message
+              const successMsg =
+                modelIndex > 0
+                  ? `Magic Auto-Fix recovered with ${aiActiveModel} ✓`
+                  : `Magic Auto-Fix applied successfully with ${aiActiveModel}.`;
+              aiChatMessages.push({
+                role: "assistant",
+                text: successMsg,
+              });
+              renderBuilderAiChat();
+              showBuilderSnackbar(successMsg, "success");
+              break; // Exit loop on success
+            } catch (modelError) {
+              lastError = modelError.message;
+              // Continue to next model
             }
-            throw new Error(data.message || "Magic Auto-Fix failed.");
           }
-          aiActiveModel = String(data.modelUsed || "openai/gpt-oss-120b");
-          if (data.modelRecoveryUsed) aiModelRecoveryInFlight = true;
-          if (data.modelSwitchUsed && data.modelSwitchReason === "rate_limit") {
-            aiModelSwitchingInFlight = true;
-            aiChatMessages.push({
-              role: "assistant",
-              text: "Choosing the best model for your response...",
-            });
-            renderBuilderAiChat();
+
+          // If all models failed
+          if (!successfulModel) {
+            throw new Error(
+              lastError ||
+                "Autofix failed on all available models. Please try again.",
+            );
           }
-          if (data.creditsRemaining !== undefined)
-            aiCreditsRemaining = data.creditsRemaining;
-          if (editor) {
-            editor.value = String(data.updatedCode || "");
-            handleBuilderCodeInput();
-          }
-          applyCodeModeToCanvas();
-          aiChatMessages.push({
-            role: "assistant",
-            text:
-              "Magic Auto-Fix applied successfully with " + aiActiveModel + ".",
-          });
-          renderBuilderAiChat();
-          showBuilderSnackbar("Magic Auto-Fix complete.", "success");
         } catch (error) {
           await logErrorEvent(
             `Magic Auto-Fix failed: ${error.message || "unknown error"}`,
             "ai-autofix",
-            { promptPreview: String(code || "").slice(0, 160) },
+            {
+              promptPreview: String(code || "").slice(0, 160),
+              modelsAttempted: modelsToTry.length,
+            },
           );
           showBuilderSnackbar(
-            error.message || "Magic Auto-Fix failed.",
+            `⚠️ Autofix failed: ${error.message || "Unable to fix code."}`,
             "error",
           );
         } finally {
@@ -33669,7 +33730,8 @@ ${interactionBlock}
           const body = wrapper?.querySelector(":scope > .element-body");
           if (!body) return;
           const child =
-            body.querySelector(":scope > .ml-content") || body.firstElementChild;
+            body.querySelector(":scope > .ml-content") ||
+            body.firstElementChild;
           if (!child || !(child instanceof HTMLElement)) return;
           const childStyle = String(child.getAttribute("style") || "");
           const pos = String(child.style.position || "").toLowerCase();
@@ -33680,7 +33742,10 @@ ${interactionBlock}
           const looksAbsolute =
             pos === "absolute" ||
             (/position\s*:\s*absolute/i.test(childStyle) &&
-              (left !== null || top !== null || width !== null || height !== null));
+              (left !== null ||
+                top !== null ||
+                width !== null ||
+                height !== null));
 
           if (!looksAbsolute) return;
 
