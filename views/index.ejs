@@ -28226,6 +28226,69 @@ console.log("Triggered ${eventName}", { source, event });
                     : fallback;
           return Number.isFinite(offsetFallback) ? offsetFallback : fallback;
         };
+        const normalizeWrapperVisualOffset = (wrapper) => {
+          if (!(wrapper instanceof HTMLElement)) return;
+          const body = wrapper.querySelector(":scope > .element-body");
+          if (!body) return;
+          const child = body.firstElementChild;
+          if (!(child instanceof HTMLElement)) return;
+          const childStyle = String(child.getAttribute("style") || "");
+          const childComputed = window.getComputedStyle(child);
+          const childPos = String(childComputed.position || "").toLowerCase();
+          const childLeft = parseFloat(child.style.left || "");
+          const childTop = parseFloat(child.style.top || "");
+          const childWidth = parseFloat(child.style.width || "");
+          const childHeight = parseFloat(child.style.height || "");
+          const looksAbsolute =
+            childPos === "absolute" ||
+            (/position\s*:\s*absolute/i.test(childStyle) &&
+              (Number.isFinite(childLeft) ||
+                Number.isFinite(childTop) ||
+                Number.isFinite(childWidth) ||
+                Number.isFinite(childHeight)));
+          if (!looksAbsolute) return;
+          const wrapperLeft = readPx(wrapper, "left", 0);
+          const wrapperTop = readPx(wrapper, "top", 0);
+          const wrapperWidth = readPx(wrapper, "width", 0);
+          const wrapperHeight = readPx(wrapper, "height", 0);
+          const nextLeft = Number.isFinite(childLeft)
+            ? Math.max(0, Math.round(wrapperLeft + childLeft))
+            : Math.round(wrapperLeft);
+          const nextTop = Number.isFinite(childTop)
+            ? Math.max(0, Math.round(wrapperTop + childTop))
+            : Math.round(wrapperTop);
+          if (
+            Number.isFinite(childLeft) ||
+            Number.isFinite(childTop) ||
+            wrapperLeft === 0 ||
+            wrapperTop === 0
+          ) {
+            wrapper.style.left = `${nextLeft}px`;
+            wrapper.style.top = `${nextTop}px`;
+          }
+          const measuredWidth = Math.max(
+            child.offsetWidth || 0,
+            Number.isFinite(childWidth) ? childWidth : 0,
+          );
+          const measuredHeight = Math.max(
+            child.offsetHeight || 0,
+            Number.isFinite(childHeight) ? childHeight : 0,
+          );
+          if (wrapperWidth < 8 && measuredWidth > 0) {
+            wrapper.style.width = `${Math.max(32, Math.round(measuredWidth))}px`;
+          }
+          if (wrapperHeight < 8 && measuredHeight > 0) {
+            wrapper.style.height = `${Math.max(32, Math.round(measuredHeight))}px`;
+          }
+          child.style.position = "relative";
+          child.style.left = "0px";
+          child.style.top = "0px";
+          child.style.right = "auto";
+          child.style.bottom = "auto";
+          if (!String(child.style.width || "").trim()) child.style.width = "100%";
+          if (!String(child.style.height || "").trim())
+            child.style.height = "100%";
+        };
         if (builderInteractionPickMode && builderInteractionDraft) {
           e.stopPropagation();
           e.preventDefault();
@@ -28293,6 +28356,12 @@ console.log("Triggered ${eventName}", { source, event });
           el.classList.contains("in-layout-flow")
         ) {
           detachElementFromLayoutFlow(el, canvas);
+        }
+        if (!isResizer) {
+          normalizeWrapperVisualOffset(el);
+          if (movingSelection) {
+            selectedElements.forEach((item) => normalizeWrapperVisualOffset(item));
+          }
         }
         const startX = e.clientX,
           startY = e.clientY;
@@ -33711,25 +33780,10 @@ ${interactionBlock}
         const container = document.getElementById("canvas-container");
         const target = selectedEl;
         if (!canvas || !container || !target) return;
-        const compact = canvas.clientWidth < 640;
-        const naturalWidth = target.offsetWidth || 0;
-        const maxWidth = Math.max(180, canvas.clientWidth - (compact ? 24 : 48));
-        const scale =
-          compact && naturalWidth > maxWidth
-            ? Math.max(0.68, maxWidth / naturalWidth)
-            : 1;
-        const rotateMatch = String(target.style.transform || "").match(
-          /rotate\([^)]+\)/,
-        );
-        const rotatePart = rotateMatch ? ` ${rotateMatch[0]}` : "";
-        target.style.transformOrigin = "top left";
-        target.style.transform =
-          `${scale !== 1 ? `scale(${scale})` : ""}${rotatePart}`.trim() ||
-          "rotate(0deg)";
         const metrics = getBuilderCanvasMetrics(canvas);
         const canvasRect = canvas.getBoundingClientRect();
         const containerRect = container.getBoundingClientRect();
-        const targetWidth = Math.max(1, target.offsetWidth || naturalWidth || 1);
+        const targetWidth = Math.max(1, target.offsetWidth || 1);
         const targetHeight = Math.max(1, target.offsetHeight || 1);
         const centerX =
           (containerRect.left + containerRect.width / 2 - canvasRect.left) *
