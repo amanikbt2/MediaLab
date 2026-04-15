@@ -2576,16 +2576,33 @@
       }
       #tool-grid {
         display: flex;
-        flex-wrap: wrap;
-        justify-content: center;
-        gap: 1.5rem;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 1rem;
+        width: min(100%, 420px);
+        margin: 0 auto;
       }
       #tool-grid .tool-card {
-        width: clamp(190px, 20vw, 230px);
-        min-height: 320px;
-        aspect-ratio: 3 / 4;
+        width: 100%;
+        min-height: 270px;
+        aspect-ratio: auto;
         display: flex;
         flex-direction: column;
+      }
+      @media (min-width: 768px) {
+        #tool-grid {
+          width: min(100%, 1220px);
+          flex-direction: row;
+          flex-wrap: nowrap;
+          justify-content: center;
+          align-items: stretch;
+          gap: 1rem;
+        }
+        #tool-grid .tool-card {
+          width: clamp(160px, 16vw, 210px);
+          min-height: 300px;
+          aspect-ratio: 3 / 4;
+        }
       }
       .feature-gate-lockline {
         display: flex;
@@ -3500,10 +3517,7 @@
           Start for free <i class="fas fa-arrow-right"></i>
         </button>
       </div>
-      <div
-        class="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6"
-        id="tool-grid"
-      ></div>
+      <div class="max-w-7xl mx-auto px-4 sm:px-6" id="tool-grid"></div>
     </div>
     <!-- STUDIO PAGE -->
     <div
@@ -20031,7 +20045,6 @@
                         <button id="tab-file" onclick="toggleBuilderTab('file', event)" class="builder-tab">File</button>
                         <button id="tab-edit" onclick="toggleBuilderTab('edit', event)" class="builder-tab">Edit</button>
                         <button id="tab-arrange" onclick="toggleBuilderTab('arrange', event)" class="builder-tab">Arrange</button>
-                        <button id="tab-design" onclick="toggleBuilderTab('design', event)" class="builder-tab">Design</button>
                         <button id="tab-templates" onclick="toggleBuilderTab('templates', event)" class="builder-tab">Templates</button>
                         <button id="tab-community" onclick="toggleBuilderTab('community', event)" class="builder-tab">Community</button>
                         <button id="builder-code-toggle" onclick="toggleBuilderCodeMode()" class="builder-tab">Code</button>
@@ -20049,10 +20062,22 @@
                         </div>
                     </div>
                     <div id="builder-panel-insert" class="builder-popover hidden">
-                        <div class="builder-popover-grid">
-                            <button id="insert-elements-trigger" onclick="toggleElementPicker(event); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-plus-circle text-cyan-400"></i><span>Elements<small>Open element library</small></span></button>
-                            <button onclick="insertStarterBlock('hero'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-wand-magic-sparkles text-cyan-400"></i><span>Hero Block<small>Premium landing hero</small></span></button>
-                            <button onclick="insertStarterBlock('feature'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-layer-group text-cyan-400"></i><span>Feature Row<small>Three-card section</small></span></button>
+                        <div class="grid gap-3 sm:grid-cols-2">
+                            <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                                <p class="text-[9px] font-black uppercase tracking-[0.2em] text-cyan-300">Element</p>
+                                <div class="builder-popover-grid mt-3">
+                                    <button id="insert-elements-trigger" onclick="toggleElementPicker(event); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-plus-circle text-cyan-400"></i><span>Elements<small>Open element library</small></span></button>
+                                    <button onclick="insertStarterBlock('hero'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-wand-magic-sparkles text-cyan-400"></i><span>Hero Block<small>Premium landing hero</small></span></button>
+                                </div>
+                            </div>
+                            <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                                <p class="text-[9px] font-black uppercase tracking-[0.2em] text-cyan-300">Background</p>
+                                <div class="builder-popover-grid mt-3">
+                                    <button id="builder-insert-background-templates-trigger" onclick="openDesignModal('templates'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-swatchbook text-cyan-400"></i><span>Templates<small>Professional page background presets</small></span></button>
+                                    <button onclick="openDesignModal('color'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-fill-drip text-cyan-400"></i><span>Color<small>Pick a clean custom page color</small></span></button>
+                                    <button onclick="openDesignModal('image'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-image text-cyan-400"></i><span>Upload Image<small>Use a real page background image</small></span></button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div id="builder-panel-file" class="builder-popover hidden">
@@ -20085,13 +20110,6 @@
                             <button onclick="ungroupSelectedElements(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-object-ungroup text-cyan-400"></i><span>Ungroup<small>Break selected group</small></span></button>
                             <button onclick="toggleSelectedLock(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-lock text-cyan-400"></i><span>Lock<small>Protect placement</small></span></button>
                             <button onclick="removeSelectedElement(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-trash-alt text-red-400"></i><span>Delete<small>Remove selection</small></span></button>
-                        </div>
-                    </div>
-                    <div id="builder-panel-design" class="builder-popover hidden">
-                        <div class="builder-popover-grid">
-                            <button id="builder-design-templates-trigger" onclick="openDesignModal('templates'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-swatchbook text-cyan-400"></i><span>Templates<small>Professional page background presets</small></span></button>
-                            <button onclick="openDesignModal('color'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-fill-drip text-cyan-400"></i><span>Color<small>Pick a clean custom page color</small></span></button>
-                            <button onclick="openDesignModal('image'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-image text-cyan-400"></i><span>Upload Image<small>Use a real page background image</small></span></button>
                         </div>
                     </div>
                     <div id="builder-panel-templates" class="builder-popover hidden">
@@ -20377,21 +20395,18 @@
                                 <i class="fas fa-chevron-down text-[10px]"></i>
                             </button>
                             <div id="builder-canvas-size-label" class="hidden text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Desktop Canvas</div>
-                            <div id="builder-viewport-panel" class="hidden items-center gap-2 rounded-lg border border-white/10 bg-[#071122]/95 px-2.5 py-1.5 shadow-[0_18px_38px_rgba(2,6,23,0.45)]">
-                                <label class="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">
-                                    <i class="fas fa-laptop-code text-cyan-300"></i>
-                                    <select id="builder-device-select" onchange="setBuilderViewportMode(this.value)" class="bg-transparent text-[10px] font-black uppercase tracking-[0.2em] text-slate-200 outline-none">
-                                        <option value="desktop" class="bg-slate-950 text-slate-100">Desktop</option>
-                                        <option value="laptop" class="bg-slate-950 text-slate-100">Laptop 1440</option>
-                                        <option value="tablet" class="bg-slate-950 text-slate-100">iPad 1024</option>
-                                        <option value="tablet-portrait" class="bg-slate-950 text-slate-100">iPad 768</option>
-                                        <option value="mobile" class="bg-slate-950 text-slate-100">iPhone 14 Pro Max</option>
-                                        <option value="mobile-small" class="bg-slate-950 text-slate-100">iPhone SE</option>
-                                        <option value="pixel" class="bg-slate-950 text-slate-100">Pixel 7</option>
-                                        <option value="galaxy" class="bg-slate-950 text-slate-100">Galaxy S8</option>
-                                        <option value="responsive" class="bg-slate-950 text-slate-100">Responsive</option>
-                                    </select>
-                                </label>
+                            <div id="builder-viewport-panel" class="hidden flex-col items-start gap-2 rounded-lg border border-white/10 bg-[#071122]/95 px-2.5 py-2 shadow-[0_18px_38px_rgba(2,6,23,0.45)]">
+                                <select id="builder-device-select" onchange="setBuilderViewportMode(this.value)" class="w-[210px] rounded-md border border-white/15 bg-slate-950 px-2.5 py-2 text-[11px] font-semibold text-slate-100 outline-none focus:border-cyan-400">
+                                    <option value="desktop">Desktop</option>
+                                    <option value="laptop">Laptop 1440</option>
+                                    <option value="tablet">iPad 1024</option>
+                                    <option value="tablet-portrait">iPad 768</option>
+                                    <option value="mobile">iPhone 14 Pro Max</option>
+                                    <option value="mobile-small">iPhone SE</option>
+                                    <option value="pixel">Pixel 7</option>
+                                    <option value="galaxy">Galaxy S8</option>
+                                    <option value="responsive">Responsive</option>
+                                </select>
                             </div>
                             <button id="builder-terminal-toggle" type="button" onclick="toggleTerminalDrawer()" class="toolbar-item inline-flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-[10px] font-black uppercase tracking-[0.18em] text-slate-300 hover:text-cyan-100">
                                 <i class="fas fa-terminal text-[11px]"></i>
@@ -22527,7 +22542,7 @@
       let selectionBoxEl = null;
       let builderConfirmAction = null;
       let builderConfirmSecondaryAction = null;
-      let builderViewportMode = "desktop";
+      let builderViewportMode = "laptop";
       let builderResponsiveWidth = 1280;
       let builderViewportPanelOpen = false;
       let builderCanvasSizeRaf = 0;
@@ -24815,7 +24830,7 @@
             : !builderViewportPanelOpen;
         builderViewportPanelOpen = nextState;
         panel.classList.toggle("hidden", !nextState);
-        panel.classList.toggle("inline-flex", nextState);
+        panel.classList.toggle("flex", nextState);
         toggle.innerHTML = `<i class="fas fa-chevron-${nextState ? "up" : "down"} text-[10px]"></i>`;
       }
       function setBuilderViewportMode(mode = "desktop") {
@@ -24834,8 +24849,6 @@
         builderResponsiveWidth = nextValue;
         if (builderViewportMode !== "responsive") {
           builderViewportMode = "responsive";
-          const select = document.getElementById("builder-device-select");
-          if (select) select.value = "responsive";
         }
         applyBuilderViewportToCanvas();
       }
@@ -24844,11 +24857,20 @@
         const select = document.getElementById("builder-device-select");
         const label = document.getElementById("builder-canvas-size-label");
         const controls = document.getElementById("builder-responsive-controls");
+        const panel = document.getElementById("builder-viewport-panel");
+        const toggle = document.getElementById("builder-viewport-toggle");
         const widthRange = document.getElementById("builder-responsive-width");
         const widthInput = document.getElementById(
           "builder-responsive-width-number",
         );
         if (!canvas) return;
+        const isPhoneWidth = (window.innerWidth || 0) < 640;
+        if (toggle) toggle.classList.toggle("hidden", isPhoneWidth);
+        if (isPhoneWidth) {
+          builderViewportPanelOpen = false;
+          panel?.classList.add("hidden");
+          panel?.classList.remove("flex");
+        }
         if (select && select.value !== builderViewportMode) {
           select.value = builderViewportMode;
         }
@@ -24887,6 +24909,9 @@
         }
         requestBuilderCanvasWorkspaceSize();
       }
+      window.addEventListener("resize", () => {
+        applyBuilderViewportToCanvas();
+      });
       document.addEventListener("mousedown", (event) => {
         const panel = document.getElementById("builder-viewport-panel");
         const toggle = document.getElementById("builder-viewport-toggle");
@@ -25420,7 +25445,6 @@
           "file",
           "edit",
           "arrange",
-          "design",
           "templates",
           "community",
         ].forEach((name) => {
@@ -30453,17 +30477,17 @@ console.log("Triggered ${eventName}", { source, event });
             },
           },
           {
-            title: "Open Design",
+            title: "Open Insert",
             message:
-              "Now move to Design so Workflow AI can show you a quick full-page look.",
-            targetSelector: "#tab-design",
+              "Now open Insert and use Background so Workflow AI can show you a quick full-page look.",
+            targetSelector: "#tab-insert",
             primaryLabel: "Waiting...",
             primaryAction: null,
             secondaryLabel: "Dismiss",
             secondaryAction: () => dismissBuilderTutorial(true),
             waitFor: "builder-tab-opened",
             onEvent: (payload) => {
-              if (payload.tab !== "design") return false;
+              if (payload.tab !== "insert") return false;
               setTimeout(() => {
                 openDesignModal("templates");
                 renderBuilderTutorialStep();
