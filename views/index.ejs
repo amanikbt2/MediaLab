@@ -28200,7 +28200,14 @@ console.log("Triggered ${eventName}", { source, event });
         const isResizer = e.target.classList.contains("resizer");
         const isDragHandle = e.target.closest(".drag-handle");
         const isToolbarControl = e.target.closest(".absolute.-top-10");
-        const canDragFromBody = !isResizer && !isToolbarControl;
+        const isInteractiveControl = Boolean(
+          e.target?.closest?.(
+            "input, textarea, select, button, label, option, a",
+          ),
+        );
+        // Dragging from inside a form/input should not happen; require the drag-handle.
+        const canDragFromBody =
+          !isResizer && !isToolbarControl && !isInteractiveControl;
         const isAlreadySingleSelected =
           !multiSelectMode &&
           selectedElements.length === 1 &&
@@ -28292,7 +28299,8 @@ console.log("Triggered ${eventName}", { source, event });
             })
           : [];
         const rType = e.target.classList[1];
-        const snap = (value) =>
+        const snapLive = (value) => Math.round(value);
+        const snapFinal = (value) =>
           builderSnapEnabled
             ? Math.round(value / BUILDER_GRID_SIZE) * BUILDER_GRID_SIZE
             : Math.round(value);
@@ -28324,16 +28332,17 @@ console.log("Triggered ${eventName}", { source, event });
               const dy = Math.round((ev.clientY - startY) * scaleY);
               if (rType.includes("r")) {
                 const maxWidth = scroll.width - startL;
-                el.style.width = clamp(snap(startW + dx), 32, maxWidth) + "px";
+                el.style.width =
+                  clamp(snapLive(startW + dx), 32, maxWidth) + "px";
               }
               if (rType.includes("b")) {
                 const maxHeight = scroll.height - startT;
                 el.style.height =
-                  clamp(snap(startH + dy), 32, maxHeight) + "px";
+                  clamp(snapLive(startH + dy), 32, maxHeight) + "px";
               }
               if (rType.includes("l")) {
                 const nextLeft = clamp(
-                  snap(startL + dx),
+                  snapLive(startL + dx),
                   0,
                   startL + startW - 32,
                 );
@@ -28343,7 +28352,7 @@ console.log("Triggered ${eventName}", { source, event });
               }
               if (rType.includes("t")) {
                 const nextTop = clamp(
-                  snap(startT + dy),
+                  snapLive(startT + dy),
                   0,
                   startT + startH - 32,
                 );
@@ -28356,12 +28365,12 @@ console.log("Triggered ${eventName}", { source, event });
                 (ev.clientX - canvasRect.left) * scaleX + scroll.left;
               const pointerY =
                 (ev.clientY - canvasRect.top) * scaleY + scroll.top;
-              const nextLeft = snap(pointerX - grabPointX);
-              const nextTop = snap(pointerY - grabPointY);
+              const nextLeft = snapLive(pointerX - grabPointX);
+              const nextTop = snapLive(pointerY - grabPointY);
               if (movingSelection) {
                 selectionStarts.forEach((item) => {
-                  const itemNextLeft = snap(pointerX - item.grabX);
-                  const itemNextTop = snap(pointerY - item.grabY);
+                  const itemNextLeft = snapLive(pointerX - item.grabX);
+                  const itemNextTop = snapLive(pointerY - item.grabY);
                   const clampedLeft = clamp(
                     itemNextLeft,
                     0,
@@ -28420,6 +28429,31 @@ console.log("Triggered ${eventName}", { source, event });
           if (dragRafId) cancelAnimationFrame(dragRafId);
           if (activeLayoutPreview && !isResizer && !movingSelection) {
             attachElementToLayoutFlow(el, activeLayoutPreview);
+          }
+          // Apply grid snap on drop (not during drag) for smooth movement.
+          if (builderSnapEnabled) {
+            if (isResizer) {
+              const w = parseFloat(el.style.width) || el.offsetWidth || startW;
+              const h = parseFloat(el.style.height) || el.offsetHeight || startH;
+              const l = parseFloat(el.style.left) || el.offsetLeft || startL;
+              const t = parseFloat(el.style.top) || el.offsetTop || startT;
+              el.style.width = `${Math.max(32, snapFinal(w))}px`;
+              el.style.height = `${Math.max(32, snapFinal(h))}px`;
+              el.style.left = `${Math.max(0, snapFinal(l))}px`;
+              el.style.top = `${Math.max(0, snapFinal(t))}px`;
+            } else if (movingSelection) {
+              selectedElements.forEach((item) => {
+                const l = parseFloat(item.style.left) || item.offsetLeft || 0;
+                const t = parseFloat(item.style.top) || item.offsetTop || 0;
+                item.style.left = `${Math.max(0, snapFinal(l))}px`;
+                item.style.top = `${Math.max(0, snapFinal(t))}px`;
+              });
+            } else {
+              const l = parseFloat(el.style.left) || el.offsetLeft || 0;
+              const t = parseFloat(el.style.top) || el.offsetTop || 0;
+              el.style.left = `${Math.max(0, snapFinal(l))}px`;
+              el.style.top = `${Math.max(0, snapFinal(t))}px`;
+            }
           }
           hideBuilderGuides();
           clearLayoutDropGuides();
@@ -29469,6 +29503,33 @@ console.log("Triggered ${eventName}", { source, event });
           }
           if (isNaN(height) || el.style.height === "") {
             el.style.height = (el.offsetHeight || 100) + "px";
+          }
+        });
+      }
+      function ensureCanvasElementsVisible(options = {}) {
+        const { aggressive = false } = options || {};
+        const canvas = document.getElementById("web-canvas");
+        if (!canvas) return;
+        const targets = getCanvasTopLevelElements();
+        targets.forEach((el) => {
+          const computed = window.getComputedStyle(el);
+          const opacity = parseFloat(computed.opacity || "1");
+          const visibility = computed.visibility || "visible";
+          const display = computed.display || "block";
+          const hasExplicitDisplay = Boolean(el.style.display);
+          const hasExplicitVisibility = Boolean(el.style.visibility);
+          const hasExplicitOpacity = Boolean(el.style.opacity);
+          if ((aggressive || !hasExplicitDisplay) && display === "none") {
+            el.style.display = "block";
+          }
+          if (
+            (aggressive || !hasExplicitVisibility) &&
+            visibility === "hidden"
+          ) {
+            el.style.visibility = "visible";
+          }
+          if ((aggressive || !hasExplicitOpacity) && opacity <= 0.06) {
+            el.style.opacity = "1";
           }
         });
       }
@@ -33576,6 +33637,60 @@ ${interactionBlock}
         if (!canvas) return;
         const reportProgress =
           typeof options?.onProgress === "function" ? options.onProgress : null;
+        const parsePx = (value) => {
+          const num = parseFloat(String(value || "").replace("px", ""));
+          return Number.isFinite(num) ? num : null;
+        };
+        const liftAbsoluteChildBoxToWrapper = (wrapper) => {
+          const body = wrapper?.querySelector(":scope > .element-body");
+          if (!body) return;
+          const child =
+            body.querySelector(":scope > .ml-content") || body.firstElementChild;
+          if (!child || !(child instanceof HTMLElement)) return;
+          const childStyle = String(child.getAttribute("style") || "");
+          const pos = String(child.style.position || "").toLowerCase();
+          const left = parsePx(child.style.left);
+          const top = parsePx(child.style.top);
+          const width = parsePx(child.style.width);
+          const height = parsePx(child.style.height);
+          const looksAbsolute =
+            pos === "absolute" ||
+            (/position\s*:\s*absolute/i.test(childStyle) &&
+              (left !== null || top !== null || width !== null || height !== null));
+
+          if (!looksAbsolute) return;
+
+          // Only lift if wrapper doesn't already have a meaningful box.
+          const wrapperLeft = parsePx(wrapper.style.left);
+          const wrapperTop = parsePx(wrapper.style.top);
+          const wrapperWidth = parsePx(wrapper.style.width);
+          const wrapperHeight = parsePx(wrapper.style.height);
+
+          if (left !== null && (wrapperLeft === null || wrapperLeft === 0)) {
+            wrapper.style.left = `${Math.round(left)}px`;
+          }
+          if (top !== null && (wrapperTop === null || wrapperTop === 0)) {
+            wrapper.style.top = `${Math.round(top)}px`;
+          }
+          if (width !== null && (wrapperWidth === null || wrapperWidth < 8)) {
+            wrapper.style.width = `${Math.max(32, Math.round(width))}px`;
+          }
+          if (
+            height !== null &&
+            (wrapperHeight === null || wrapperHeight < 8)
+          ) {
+            wrapper.style.height = `${Math.max(32, Math.round(height))}px`;
+          }
+
+          // Reset child positioning so clicks/drags don’t “jump” based on a tiny wrapper rect.
+          child.style.position = "relative";
+          child.style.left = "0px";
+          child.style.top = "0px";
+          child.style.right = "auto";
+          child.style.bottom = "auto";
+          child.style.width = "100%";
+          child.style.height = "100%";
+        };
         builderImportedProject = null;
         builderRawImportDocument = "";
         canvas.innerHTML = "";
@@ -33585,6 +33700,20 @@ ${interactionBlock}
         const canvasRect = canvas.getBoundingClientRect();
         nodes.forEach((node, index) => {
           if (!(node instanceof HTMLElement)) return;
+          const skipTag = String(node.tagName || "").toUpperCase();
+          if (
+            [
+              "STYLE",
+              "SCRIPT",
+              "META",
+              "LINK",
+              "TITLE",
+              "NOSCRIPT",
+              "TEMPLATE",
+            ].includes(skipTag)
+          ) {
+            return;
+          }
           reportProgress?.(
             Math.min(92, 42 + Math.round(((index + 1) / totalNodes) * 48)),
             `Building draggable objects (${index + 1}/${totalNodes})...`,
@@ -33652,6 +33781,10 @@ ${interactionBlock}
           body
             .querySelectorAll("[contenteditable]")
             .forEach((editable) => editable.removeAttribute("contenteditable"));
+
+          // Normalize a common import shape: `.ml-content` is absolutely positioned inside a wrapper.
+          // Lift its box to the wrapper and reset the inner node to relative so selection/drag math matches visuals.
+          liftAbsoluteChildBoxToWrapper(wrapper);
           canvas.appendChild(wrapper);
 
           // CRITICAL FIX: Verify and stabilize all position/size properties
@@ -33705,6 +33838,7 @@ ${interactionBlock}
         });
         normalizeCanvasLayerOrder();
         normalizeCanvasElementPositions();
+        ensureCanvasElementsVisible({ aggressive: false });
         hydrateCanvasElements();
         deselectAll();
         updateBuilderUI();
