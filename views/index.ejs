@@ -33013,6 +33013,9 @@
             position: "absolute",
             width,
             height,
+            background: "linear-gradient(135deg, rgba(6, 182, 212, 0.15), rgba(34, 211, 238, 0.1))",
+            border: "1px solid rgba(34, 211, 238, 0.3)",
+            borderRadius: "8px",
             ...(typeof style === "object" ? style : {}),
           };
 
@@ -33021,7 +33024,7 @@
           } else {
             styles.left = "100px"; // Default position
           }
-          
+
           if (y !== null && y !== undefined) {
             styles.top = typeof y === "number" ? `${y}px` : String(y);
           } else {
@@ -33030,15 +33033,40 @@
 
           Object.assign(wrapper.style, styles);
 
+          // Set style attribute as string (like addObject does) for persistence
+          const styleString = [
+            `position: absolute`,
+            `left: ${styles.left || "100px"}`,
+            `top: ${styles.top || "100px"}`,
+            `width: ${width}`,
+            `height: ${height}`,
+            `background: ${styles.background}`,
+            `border: ${styles.border}`,
+            `border-radius: ${styles.borderRadius}`,
+            `z-index: 1`,
+          ]
+            .filter(Boolean)
+            .join("; ");
+          wrapper.setAttribute("style", styleString);
+
           // Get the element body and populate it
           const body = wrapper.querySelector(".element-body");
           if (body) {
+            // Apply body styling
+            body.style.width = "100%";
+            body.style.height = "100%";
+            body.style.position = "relative";
+            body.style.overflow = "visible";
+            body.style.display = "flex";
+            body.style.alignItems = "center";
+            body.style.justifyContent = "center";
+            
             if (html) {
               body.innerHTML = String(html).trim();
             } else if (text) {
               body.textContent = String(text);
             } else {
-              body.innerHTML = `<div style="width:100%; height:100%; display:flex; align-items:center; justify-content:center; color:#999;">Element</div>`;
+              body.innerHTML = `<div style="width:100%; height:100%; display:flex; align-items:center; justify-content:center; color:#999; font-size:14px;">Content</div>`;
             }
           }
 
@@ -33069,13 +33097,13 @@
           const canvas = document.getElementById("web-canvas");
           if (canvas) {
             canvas.appendChild(wrapper);
-            
+
             // CRITICAL: Hydrate the element to make it interactive/draggable
             hydrateCanvasElement(wrapper);
-            
+
             // Save to history
             saveToHistory();
-            
+
             // Select the newly added element
             selectElement(wrapper);
           }
