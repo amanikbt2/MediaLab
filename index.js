@@ -5379,28 +5379,62 @@ app.post("/api/ai/manager", async (req, res) => {
         .json({ success: false, message: "User input is required." });
     }
 
-    // IF ANALYZE_INTENT FLAG: Use Groq API to understand and correct user input
-    let analyzedInput = userInput;
-    let analysisResult = null;
+    // STAGE 1: GROQ AI - Web Builder Command Formatter
+    // Converts natural language into strict builder commands
+    let commandOutput = null;
+    let formattedCommand = null;
 
     if (analyzeIntent && correctErrors && GROQ_API_KEY) {
       try {
-        // Use Groq API to analyze intent and correct errors
-        const intentPrompt = `You are an expert UI/UX command parser. Analyze the user's input and determine:
-1. What they actually want to build/modify
-2. Fix any spelling errors or ambiguous language
-3. Predict the intended element if they describe it creatively
+        // Use Groq as strict command formatter - NO explanations, NO JSON, ONLY commands
+        const systemPrompt = `You are an elite web builder command formatter for a professional AI website builder.
 
-User input: "${userInput}"
+Your ONLY task: Convert natural language website requests into strict builder commands.
 
-RESPOND in JSON format only:
-{
-  "intent": "insert|modify|remove|change|question|other",
-  "correctedInput": "the corrected/normalized version of their request",
-  "elementType": "button|input|text|image|etc or null",
-  "confidence": 0-100,
-  "interpretation": "brief explanation of what they likely meant"
-}`;
+CRITICAL RULES:
+* Output ONLY valid builder commands - NOTHING ELSE
+* NO explanations, markdown, code blocks, or conversational text
+* NO JSON or metadata - raw commands only
+* If input is ambiguous, PREDICT what user meant
+* Infer missing professional defaults automatically
+
+COMMAND SYNTAX (STRICT - do not deviate):
+insert <element_type> <property>; <property>; <property>;...
+
+PROPERTY INTELLIGENCE (convert descriptions to CSS):
+- "round" → border-radius:50%
+- "shadow" → box-shadow:0 8px 24px rgba(0,0,0,0.15)
+- "glass" → backdrop-filter:blur(12px); background:rgba(255,255,255,0.15)
+- "centered" → display:flex; justify-content:center; align-items:center
+- "bouncing" → animation:bounce 0.6s infinite ease-in-out
+- "floating" → animation:float 3s infinite ease-in-out; transform-origin:center
+- "gradient" → background:linear-gradient(135deg, #667eea 0%, #764ba2 100%)
+- "neon" → text-shadow:0 0 10px rgba(0,255,255,0.8); color:#00ffff
+- "hero" → Full hero section with professional defaults
+- "card" → Rounded container with shadow and padding defaults
+
+PROFESSIONAL DEFAULTS (auto-add):
+- All text elements: font-family:system-ui; line-height:1.6
+- All buttons: padding:12px 24px; border-radius:8px; cursor:pointer
+- All containers: padding:20px; background:#f5f5f5
+- All images: max-width:100%; height:auto
+- Spacing: Use consistent 8px, 16px, 24px increments
+- Colors: Use professional, accessible color schemes
+- Responsive: Include mobile-first sizing
+
+OUTPUT EXAMPLES:
+User: "Make a round blue button that says Click Me"
+Output: insert button width:120px; height:120px; border-radius:50%; background:#3b82f6; color:white; font-size:16px; font-weight:bold; padding:12px; display:flex; justify-content:center; align-items:center; cursor:pointer; box-shadow:0 4px 12px rgba(0,0,0,0.15);
+
+User: "bouncing neon ball"
+Output: insert div width:100px; height:100px; border-radius:50%; background:#00ffff; box-shadow:0 0 20px rgba(0,255,255,0.8); animation:bounce 0.6s infinite ease-in-out;
+
+User: "card with product image and title"
+Output: insert div background:white; border-radius:12px; padding:20px; box-shadow:0 4px 12px rgba(0,0,0,0.1); display:flex; flex-direction:column; gap:12px;`;
+
+        const commandRequest = `User input: "${userInput}"
+
+Generate the builder command(s). Output ONLY the raw command - no explanations or extra text.`;
 
         const groqResponse = await nodeFetch(
           "https://api.groq.com/openai/v1/chat/completions",
@@ -5412,41 +5446,41 @@ RESPOND in JSON format only:
             },
             body: JSON.stringify({
               model: "mixtral-8x7b-32768",
-              temperature: 0.3,
-              max_tokens: 300,
-              messages: [{ role: "user", content: intentPrompt }],
+              temperature: 0.2,
+              max_tokens: 500,
+              messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: commandRequest },
+              ],
             }),
           },
         );
 
         if (groqResponse.ok) {
           const groqPayload = await groqResponse.json();
-          const analysisText = String(
+          commandOutput = String(
             groqPayload?.choices?.[0]?.message?.content || "",
           ).trim();
 
-          // Try to parse JSON from response
-          try {
-            analysisResult = JSON.parse(analysisText);
-            analyzedInput = analysisResult.correctedInput || userInput;
-            console.log("[AI Manager] Intent Analysis:", {
+          // Parse and validate the command
+          if (commandOutput && commandOutput.startsWith("insert")) {
+            formattedCommand = commandOutput;
+            console.log("[AI Formatter] Stage 1 Complete - Command:", {
               original: userInput,
-              corrected: analyzedInput,
-              confidence: analysisResult.confidence,
+              formatted: formattedCommand,
             });
-          } catch (parseErr) {
-            // If JSON parsing fails, use original input
-            console.log(
-              "[AI Manager] Could not parse Groq response:",
-              analysisText,
-            );
+          } else {
+            console.log("[AI Formatter] Invalid output format:", commandOutput);
           }
         }
       } catch (apiErr) {
-        console.error("[AI Manager] Groq API error:", apiErr.message);
-        // Fall through - continue with original input
+        console.error("[AI Formatter] Groq API error:", apiErr.message);
       }
     }
+
+    // Use formatted command if available, otherwise fall back to original
+    const analyzedInput = formattedCommand || userInput;
+    let analysisResult = null;
 
     const userInputLower = String(analyzedInput || userInput)
       .trim()
@@ -5609,14 +5643,31 @@ RESPOND in JSON format only:
     const isAction = actionScore >= 50;
     const confidence = Math.max(0, Math.min(100, 50 + actionScore));
 
+    // STAGE 2: Parse the formatted command if available
+    let parsedCommand = null;
+    let elementSpec = null;
+    if (formattedCommand && formattedCommand.startsWith("insert")) {
+      parsedCommand = parseBuilderCommand(formattedCommand);
+      if (parsedCommand && isValidBuilderCommand(parsedCommand)) {
+        elementSpec = commandToElementSpec(parsedCommand);
+        console.log("[AI Manager] Parsed Command:", {
+          type: parsedCommand.elementType,
+          properties: Object.keys(parsedCommand.properties),
+        });
+      }
+    }
+
     return res.json({
       success: true,
       decision: isAction ? "Action" : "Response",
       confidence,
       actionScore,
-      userInput: analyzedInput, // Return analyzed/corrected input
+      userInput: analyzedInput, // Return Groq-formatted command
       originalInput: userInput,
-      analysisResult, // Include intent analysis
+      formattedCommand, // Raw command from Groq
+      parsedCommand, // Parsed command object
+      elementSpec, // Ready-to-use element specification
+      analysisResult,
       reasoning: isAction
         ? "Input appears to be a code/design change command"
         : "Input appears to be a general chat query",
@@ -5629,6 +5680,76 @@ RESPOND in JSON format only:
     });
   }
 });
+
+// STAGE 2: Command Parser & Validator
+// Parse strict builder commands into actionable specifications
+
+function parseBuilderCommand(commandText = "") {
+  const text = String(commandText || "").trim();
+
+  // Check if it starts with "insert"
+  if (!text.startsWith("insert ")) {
+    return null;
+  }
+
+  // Extract command: insert <type> <properties>
+  const match = text.match(/^insert\s+(\w+)\s*(.*)/i);
+  if (!match) return null;
+
+  const [, elementType, propertiesString] = match;
+
+  // Parse properties separated by semicolons
+  const properties = {};
+  if (propertiesString) {
+    const propPairs = propertiesString.split(";").filter((p) => p.trim());
+    propPairs.forEach((pair) => {
+      const [key, value] = pair.split(":").map((s) => s.trim());
+      if (key && value) {
+        properties[key] = value;
+      }
+    });
+  }
+
+  return {
+    type: "insert",
+    elementType: elementType.toLowerCase(),
+    properties,
+    rawCommand: text,
+    isValid: true,
+  };
+}
+
+function isValidBuilderCommand(parsed) {
+  if (!parsed || !parsed.isValid) return false;
+  if (!parsed.elementType) return false;
+  if (!parsed.properties || Object.keys(parsed.properties).length === 0)
+    return false;
+
+  // Must have at least width, height, or display property
+  const hasSize =
+    parsed.properties.width ||
+    parsed.properties.height ||
+    parsed.properties.display;
+  return (
+    hasSize || parsed.elementType === "text" || parsed.elementType === "button"
+  );
+}
+
+function commandToElementSpec(parsed) {
+  if (!isValidBuilderCommand(parsed)) return null;
+
+  // Convert parsed command to element spec for canvas rendering
+  return {
+    type: parsed.elementType,
+    label: parsed.elementType,
+    styles: parsed.properties,
+    attributes: {
+      class: `ml-${parsed.elementType}`,
+    },
+    html: null, // Will be generated by canvas renderer
+    isFromCommand: true,
+  };
+}
 
 // Helper: Extract HTML from AI response that might contain conversational text
 function extractHTMLFromResponse(text = "") {

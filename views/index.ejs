@@ -32884,6 +32884,55 @@
           top: clamp(top, 0, maxTop),
         };
       }
+
+      /**
+       * Generate HTML element from Groq-formatted command spec
+       * Converts element type and properties to production-ready HTML
+       */
+      function generateElementFromSpec(spec = {}) {
+        const { type, label, styles = {}, attributes = {} } = spec;
+        
+        if (!type) return null;
+
+        // Convert styles object to inline style string
+        const styleString = Object.entries(styles)
+          .map(([key, value]) => `${key}:${value}`)
+          .join(";");
+
+        // Convert attributes object to string
+        const attrString = Object.entries(attributes)
+          .map(([key, value]) => `${key}="${value}"`)
+          .join(" ");
+
+        // Generate appropriate element based on type
+        let html = "";
+        switch (type.toLowerCase()) {
+          case "button":
+            html = `<button ${attrString} style="${styleString}">Click Me</button>`;
+            break;
+          case "input":
+          case "text":
+            html = `<input type="text" ${attrString} style="${styleString}" placeholder="Enter text...">`;
+            break;
+          case "image":
+          case "img":
+            html = `<img src="https://via.placeholder.com/300x200" ${attrString} style="${styleString}">`;
+            break;
+          case "text":
+          case "heading":
+          case "h1":
+          case "h2":
+          case "h3":
+            html = `<h3 ${attrString} style="${styleString}">Heading</h3>`;
+            break;
+          default:
+            // Generic container
+            html = `<div ${attrString} style="${styleString}"></div>`;
+        }
+
+        return html;
+      }
+
       /**
        * Parse and apply INSERT_ELEMENT_SPEC action from AI agent.
        * Supports full HTML/CSS/attributes for flexible element creation.
@@ -35453,7 +35502,7 @@
         // No local interception - let Groq API analyze intent and correct errors
         const currentCode = buildLatestAiCodeSnapshot();
         await syncAiContextSilently();
-        
+
         aiChatMessages.push({ role: "user", text: prompt });
         aiChatSending = true;
         aiModelRecoveryInFlight = false;
@@ -35542,11 +35591,40 @@
           if (!managerResponse?.success) {
             throw new Error("AI manager failed to process request");
           }
+
+          // STAGE 2: Check if we have a parsed command from Groq formatter
+          if (managerResponse?.elementSpec && managerResponse?.parsedCommand) {
+            setAiAgentStage("applying");
+            const spec = managerResponse.elementSpec;
+            
+            // Create insertion from command spec
+            const insertResult = applyInsertElementSpec({
+              html: generateElementFromSpec(spec) || `<${spec.type}></${spec.type}>`,
+              css: "", // CSS already in styles
+              animations: "", // Already in styles
+              style: spec.styles || {},
+              attributes: spec.attributes || {},
+            });
+
+            if (insertResult.success) {
+              syncActiveBuilderFileFromCanvas({ skipHistory: true });
+              aiChatMessages.push({
+                role: "assistant",
+                text: `✓ Inserted ${spec.type} with Groq-formatted specifications.`,
+              });
+              setAiAgentStage("done");
+              renderBuilderAiChat();
+              return;
+            }
+          }
+
+          // Fall back to original agent flow if no command spec
           const decision = managerResponse.decision;
           if (decision === "Action") {
             setAiAgentStage("parsing");
-            // Use original prompt - API has already analyzed and corrected it
-            const agentReply = await runBuilderAiAgent(prompt, currentCode);
+            // Use Groq-formatted command if available
+            const agentPrompt = managerResponse.formattedCommand || prompt;
+            const agentReply = await runBuilderAiAgent(agentPrompt, currentCode);
             setAiAgentStage("parsing");
             let actionResult = executeAIActions(agentReply, prompt);
             const actions = actionResult?.applied || [];
