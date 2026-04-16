@@ -33053,11 +33053,82 @@
             pointerEvents: "auto",
             transition: "all 0.2s ease"
           });
-          dragDiv.innerHTML = `
-            <div class="drag-handle" style="width:28px; height:28px; background:linear-gradient(135deg, #06b6d4 0%, #2563eb 100%); color:white; border-radius:8px; border:1px solid rgba(255,255,255,0.2); display:flex; align-items:center; justify-content:center; cursor:grab; box-shadow:0 8px 12px rgba(0,0,0,0.35); pointer-events:auto;" onmousedown="this.style.cursor='grabbing'"><i class="fas fa-arrows-alt" style="font-size:10px;"></i></div>
-            <button onclick="openSmartInspector('div', this.closest('.canvas-element'))" style="width:28px; height:28px; background:#1e293b; color:#06b6d4; border-radius:8px; border:1px solid rgba(255,255,255,0.1); display:flex; align-items:center; justify-content:center; pointer-events:auto; cursor:pointer; padding:0; font-size:0;" onmouseover="this.style.background='#0f172a'" onmouseout="this.style.background='#1e293b'"><i class="fas fa-sliders-h" style="font-size:10px;"></i></button>
-            <button onclick="this.closest('.canvas-element').remove(); saveToHistory();" style="width:28px; height:28px; background:#1e293b; color:#ef4444; border-radius:8px; border:1px solid rgba(255,255,255,0.1); display:flex; align-items:center; justify-content:center; pointer-events:auto; cursor:pointer; padding:0; font-size:0;" onmouseover="this.style.background='#7f1d1d'" onmouseout="this.style.background='#1e293b'"><i class="fas fa-trash-alt" style="font-size:10px;"></i></button>
-          `;
+          
+          // Create drag handle
+          const dragHandle = document.createElement("div");
+          dragHandle.className = "drag-handle";
+          Object.assign(dragHandle.style, {
+            width: "28px",
+            height: "28px",
+            background: "linear-gradient(135deg, #06b6d4 0%, #2563eb 100%)",
+            color: "white",
+            borderRadius: "8px",
+            border: "1px solid rgba(255,255,255,0.2)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "grab",
+            boxShadow: "0 8px 12px rgba(0,0,0,0.35)",
+            pointerEvents: "auto",
+            fontSize: "0",
+            padding: "0"
+          });
+          dragHandle.innerHTML = '<i class="fas fa-arrows-alt" style="font-size:10px;"></i>';
+          
+          // Create inspector button
+          const inspectorBtn = document.createElement("button");
+          Object.assign(inspectorBtn.style, {
+            width: "28px",
+            height: "28px",
+            background: "#1e293b",
+            color: "#06b6d4",
+            borderRadius: "8px",
+            border: "1px solid rgba(255,255,255,0.1)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            pointerEvents: "auto",
+            cursor: "pointer",
+            padding: "0",
+            fontSize: "0"
+          });
+          inspectorBtn.innerHTML = '<i class="fas fa-sliders-h" style="font-size:10px;"></i>';
+          inspectorBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            openSmartInspector("div", wrapper);
+          });
+          inspectorBtn.addEventListener("mouseover", () => { inspectorBtn.style.background = "#0f172a"; });
+          inspectorBtn.addEventListener("mouseout", () => { inspectorBtn.style.background = "#1e293b"; });
+          
+          // Create delete button
+          const deleteBtn = document.createElement("button");
+          Object.assign(deleteBtn.style, {
+            width: "28px",
+            height: "28px",
+            background: "#1e293b",
+            color: "#ef4444",
+            borderRadius: "8px",
+            border: "1px solid rgba(255,255,255,0.1)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            pointerEvents: "auto",
+            cursor: "pointer",
+            padding: "0",
+            fontSize: "0"
+          });
+          deleteBtn.innerHTML = '<i class="fas fa-trash-alt" style="font-size:10px;"></i>';
+          deleteBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            wrapper.remove();
+            saveToHistory();
+          });
+          deleteBtn.addEventListener("mouseover", () => { deleteBtn.style.background = "#7f1d1d"; });
+          deleteBtn.addEventListener("mouseout", () => { deleteBtn.style.background = "#1e293b"; });
+          
+          dragDiv.appendChild(dragHandle);
+          dragDiv.appendChild(inspectorBtn);
+          dragDiv.appendChild(deleteBtn);
 
           // Build element-body
           const elementBody = document.createElement("div");
