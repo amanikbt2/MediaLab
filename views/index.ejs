@@ -31440,7 +31440,7 @@
         const cleanNode = sourceNode.cloneNode(true);
         cleanNode
           .querySelectorAll(
-            ".resizer, .absolute.-top-10, .builder-selection-chip",
+            ".resizer, .absolute.-top-10, .builder-selection-chip, .builder-controls",
           )
           .forEach((ui) => ui.remove());
         cleanNode
@@ -33021,6 +33021,7 @@
 
           // Create drag controls programmatically
           const dragDiv = document.createElement("div");
+          dragDiv.className = "builder-controls absolute -top-8 left-0";
           Object.assign(dragDiv.style, {
             position: "absolute",
             top: "-32px",
@@ -37266,11 +37267,15 @@
         let previewShell;
         if (currentInspectorState.targetEl) {
           previewShell = currentInspectorState.targetEl.cloneNode(true);
+          // Remove builder controls (handles, toolbar, selection indicators)
           previewShell
             .querySelectorAll(".resizer")
             .forEach((node) => node.remove());
           previewShell
             .querySelectorAll(".builder-selection-chip")
+            .forEach((node) => node.remove());
+          previewShell
+            .querySelectorAll(".builder-controls")
             .forEach((node) => node.remove());
           const toolbar = previewShell.querySelector(".absolute.-top-10");
           if (toolbar) toolbar.remove();
