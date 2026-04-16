@@ -32979,6 +32979,7 @@
           // Create wrapper - matches addObject() exactly
           const wrapper = document.createElement("div");
           wrapper.id = id || `ml-inserted-${Date.now()}`;
+          wrapper.setAttribute("data-type", "div"); // CRITICAL: Add data-type like addObject
           wrapper.className =
             "canvas-element absolute group transition-shadow active:cursor-grabbing";
 
@@ -32987,7 +32988,7 @@
           let handlesHTML = handles
             .map(
               (h) =>
-                `<div class="resizer ${h} absolute w-2 h-2 bg-cyan-500 border border-white rounded-full opacity-0 group-hover:opacity-100 z-50"></div>`,
+                `<div class="resizer ${h} absolute w-2 h-2 bg-cyan-500 border border-white rounded-full opacity-0 group-hover:opacity-100 z-50" style="pointer-events: auto;"></div>`,
             )
             .join("");
 
@@ -33026,6 +33027,8 @@
             zIndex: "1",
             opacity: "1",
             visibility: "visible",
+            overflow: "visible", // CRITICAL: Ensure handles are not clipped
+            pointerEvents: "auto", // CRITICAL: Allow pointer events on wrapper
           });
 
           // Set style attribute as string for persistence and export
@@ -33038,6 +33041,8 @@
             `z-index: 1`,
             `opacity: 1`,
             `visibility: visible`,
+            `overflow: visible`,
+            `pointer-events: auto`,
           ]
             .filter(Boolean)
             .join("; ");
