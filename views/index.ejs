@@ -33003,9 +33003,14 @@
               zIndex: "50",
               pointerEvents: "auto",
               transition: "all 0.15s ease",
-              cursor: h === "tl" || h === "br" ? "nwse-resize" : 
-                      h === "tr" || h === "bl" ? "nesw-resize" :
-                      h === "mt" || h === "mb" ? "ns-resize" : "ew-resize"
+              cursor:
+                h === "tl" || h === "br"
+                  ? "nwse-resize"
+                  : h === "tr" || h === "bl"
+                    ? "nesw-resize"
+                    : h === "mt" || h === "mb"
+                      ? "ns-resize"
+                      : "ew-resize",
               // NOTE: Positioning (top/bottom/left/right/transform) handled by CSS class rules
             });
 
@@ -33024,9 +33029,9 @@
             opacity: "0",
             zIndex: "60",
             pointerEvents: "auto",
-            transition: "all 0.2s ease"
+            transition: "all 0.2s ease",
           });
-          
+
           // Create drag handle
           const dragHandle = document.createElement("div");
           dragHandle.className = "drag-handle";
@@ -33044,11 +33049,11 @@
             boxShadow: "0 8px 12px rgba(0,0,0,0.35)",
             pointerEvents: "auto",
             fontSize: "0",
-            padding: "0"
+            padding: "0",
           });
-          dragHandle.innerHTML = '<i class="fas fa-arrows-alt" style="font-size:10px;"></i>';
-          console.log("[ARROW DEBUG] Drag handle innerHTML set to:", dragHandle.innerHTML);
-          
+          dragHandle.innerHTML =
+            '<i class="fas fa-arrows-alt" style="font-size:10px;"></i>';
+
           // Create inspector button
           const inspectorBtn = document.createElement("button");
           Object.assign(inspectorBtn.style, {
@@ -33064,16 +33069,21 @@
             pointerEvents: "auto",
             cursor: "pointer",
             padding: "0",
-            fontSize: "0"
+            fontSize: "0",
           });
-          inspectorBtn.innerHTML = '<i class="fas fa-sliders-h" style="font-size:10px;"></i>';
+          inspectorBtn.innerHTML =
+            '<i class="fas fa-sliders-h" style="font-size:10px;"></i>';
           inspectorBtn.addEventListener("click", (e) => {
             e.stopPropagation();
             openSmartInspector("div", wrapper);
           });
-          inspectorBtn.addEventListener("mouseover", () => { inspectorBtn.style.background = "#0f172a"; });
-          inspectorBtn.addEventListener("mouseout", () => { inspectorBtn.style.background = "#1e293b"; });
-          
+          inspectorBtn.addEventListener("mouseover", () => {
+            inspectorBtn.style.background = "#0f172a";
+          });
+          inspectorBtn.addEventListener("mouseout", () => {
+            inspectorBtn.style.background = "#1e293b";
+          });
+
           // Create delete button
           const deleteBtn = document.createElement("button");
           Object.assign(deleteBtn.style, {
@@ -33089,22 +33099,27 @@
             pointerEvents: "auto",
             cursor: "pointer",
             padding: "0",
-            fontSize: "0"
+            fontSize: "0",
           });
-          deleteBtn.innerHTML = '<i class="fas fa-trash-alt" style="font-size:10px;"></i>';
+          deleteBtn.innerHTML =
+            '<i class="fas fa-trash-alt" style="font-size:10px;"></i>';
           deleteBtn.addEventListener("click", (e) => {
             e.stopPropagation();
             wrapper.remove();
             saveToHistory();
           });
-          deleteBtn.addEventListener("mouseover", () => { deleteBtn.style.background = "#7f1d1d"; });
-          deleteBtn.addEventListener("mouseout", () => { deleteBtn.style.background = "#1e293b"; });
-          
+          deleteBtn.addEventListener("mouseover", () => {
+            deleteBtn.style.background = "#7f1d1d";
+          });
+          deleteBtn.addEventListener("mouseout", () => {
+            deleteBtn.style.background = "#1e293b";
+          });
+
           // Attach drag handle listener BEFORE adding to DOM
           dragHandle.addEventListener("pointerdown", (e) => {
             handleObjectInteraction(e, wrapper);
           });
-          
+
           dragDiv.appendChild(dragHandle);
           dragDiv.appendChild(inspectorBtn);
           dragDiv.appendChild(deleteBtn);
@@ -33129,9 +33144,9 @@
           wrapper.appendChild(elementBody);
 
           // Add hover listeners to show/hide handles and controls
-          wrapper.addEventListener("mouseenter", function() {
+          wrapper.addEventListener("mouseenter", function () {
             const handles = this.querySelectorAll(".resizer");
-            handles.forEach(h => {
+            handles.forEach((h) => {
               if (h.style.opacity === "0") {
                 h.style.opacity = "1";
               }
@@ -33141,12 +33156,15 @@
               dragControls.style.opacity = "1";
             }
           });
-          
-          wrapper.addEventListener("mouseleave", function() {
+
+          wrapper.addEventListener("mouseleave", function () {
             // Only hide if not selected
-            if (!this.classList.contains("selected-premium") && !this.classList.contains("selected-secondary")) {
+            if (
+              !this.classList.contains("selected-premium") &&
+              !this.classList.contains("selected-secondary")
+            ) {
               const handles = this.querySelectorAll(".resizer");
-              handles.forEach(h => {
+              handles.forEach((h) => {
                 h.style.opacity = "0";
               });
               const dragControls = this.querySelector("div[style*='gap: 6px']");
@@ -33232,24 +33250,36 @@
             // Populate content
             if (html) {
               let cleanHtml = String(html).trim();
-              console.log("[ARROW DEBUG] Raw HTML from spec:", cleanHtml.substring(0, 500));
-              
+
               // Remove carousel/navigation buttons and arrow icons only
               // Remove builder layout scroll buttons
-              cleanHtml = cleanHtml.replace(/<button[^>]*builder-layout-scroll-btn[^>]*>[\s\S]*?<\/button>/gi, '');
+              cleanHtml = cleanHtml.replace(
+                /<button[^>]*builder-layout-scroll-btn[^>]*>[\s\S]*?<\/button>/gi,
+                "",
+              );
               // Remove buttons with prev/next classes
-              cleanHtml = cleanHtml.replace(/<button[^>]*(?:prev|next)[^>]*>[\s\S]*?<\/button>/gi, '');
+              cleanHtml = cleanHtml.replace(
+                /<button[^>]*(?:prev|next)[^>]*>[\s\S]*?<\/button>/gi,
+                "",
+              );
               // Remove div with carousel-related classes
-              cleanHtml = cleanHtml.replace(/<div[^>]*class="[^"]*(?:carousel-nav|nav-button)[^"]*"[^>]*>[\s\S]*?<\/div>/gi, '');
+              cleanHtml = cleanHtml.replace(
+                /<div[^>]*class="[^"]*(?:carousel-nav|nav-button)[^"]*"[^>]*>[\s\S]*?<\/div>/gi,
+                "",
+              );
               // Remove all navigation/directional arrow icons EXCEPT fa-arrows-alt (drag handle)
-              // This covers: fa-chevron-*, fa-angle-*, fa-arrow-*, and plain < > characters used as arrows
-              cleanHtml = cleanHtml.replace(/<i[^>]*fa-(?!arrows-alt)(?:chevron|angle|arrow)[^>]*><\/i>/gi, '');
+              cleanHtml = cleanHtml.replace(
+                /<i[^>]*fa-(?!arrows-alt)(?:chevron|angle|arrow)[^>]*><\/i>/gi,
+                "",
+              );
               // Remove button elements that contain arrow-like content or navigation
-              cleanHtml = cleanHtml.replace(/<button[^>]*>[\s\S]*?(?:<i[^>]*fa-(?:chevron|angle|arrow-left|arrow-right)[^>]*>[\s\S]*?<\/i>)[\s\S]*?<\/button>/gi, '');
+              cleanHtml = cleanHtml.replace(
+                /<button[^>]*>[\s\S]*?(?:<i[^>]*fa-(?:chevron|angle|arrow-left|arrow-right)[^>]*>[\s\S]*?<\/i>)[\s\S]*?<\/button>/gi,
+                "",
+              );
               // Remove standalone < > characters that look like navigation arrows
-              cleanHtml = cleanHtml.replace(/(?:<|&lt;)\s*(?:>|&gt;)/g, '');
-              
-              console.log("[ARROW DEBUG] Cleaned HTML:", cleanHtml.substring(0, 500));
+              cleanHtml = cleanHtml.replace(/(?:<|&lt;)\s*(?:>|&gt;)/g, "");
+
               body.innerHTML = cleanHtml;
             } else if (text) {
               body.textContent = String(text);
@@ -33285,7 +33315,6 @@
           const canvas = document.getElementById("web-canvas");
           if (canvas) {
             canvas.appendChild(wrapper);
-            console.log("[ARROW DEBUG] Element appended. Wrapper HTML:", wrapper.outerHTML.substring(0, 800));
             hydrateCanvasElement(wrapper);
             saveToHistory();
             selectElement(wrapper);
