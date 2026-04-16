@@ -32991,20 +32991,72 @@
 
           handles.forEach((h) => {
             const handle = document.createElement("div");
-            handle.className = `resizer ${h} absolute w-2 h-2 bg-cyan-500 border border-white rounded-full opacity-0 group-hover:opacity-100 z-50`;
-            handle.style.pointerEvents = "auto";
+            handle.className = `resizer ${h}`;
+            // Use inline styles to ensure they're applied to dynamically-created elements
+            Object.assign(handle.style, {
+              position: "absolute",
+              width: "8px",
+              height: "8px",
+              backgroundColor: "#06b6d4", // cyan-500
+              border: "1px solid white",
+              borderRadius: "50%",
+              opacity: "0",
+              zIndex: "50",
+              pointerEvents: "auto",
+              transition: "all 0.15s ease",
+              cursor: h === "tl" || h === "br" ? "nwse-resize" : 
+                      h === "tr" || h === "bl" ? "nesw-resize" :
+                      h === "mt" || h === "mb" ? "ns-resize" : "ew-resize"
+            });
+
+            // Position each handle
+            switch(h) {
+              case "tl": handle.style.top = "-5px"; handle.style.left = "-5px"; break;
+              case "tr": handle.style.top = "-5px"; handle.style.right = "-5px"; break;
+              case "bl": handle.style.bottom = "-5px"; handle.style.left = "-5px"; break;
+              case "br": handle.style.bottom = "-5px"; handle.style.right = "-5px"; break;
+              case "mt": 
+                handle.style.top = "-5px"; 
+                handle.style.left = "50%"; 
+                handle.style.transform = "translateX(-50%)"; 
+                break;
+              case "mb": 
+                handle.style.bottom = "-5px"; 
+                handle.style.left = "50%"; 
+                handle.style.transform = "translateX(-50%)"; 
+                break;
+              case "ml": 
+                handle.style.left = "-5px"; 
+                handle.style.top = "50%"; 
+                handle.style.transform = "translateY(-50%)"; 
+                break;
+              case "mr": 
+                handle.style.right = "-5px"; 
+                handle.style.top = "50%"; 
+                handle.style.transform = "translateY(-50%)"; 
+                break;
+            }
+
             handlesFragment.appendChild(handle);
           });
 
           // Create drag controls programmatically
           const dragDiv = document.createElement("div");
-          dragDiv.className =
-            "absolute -top-8 left-0 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-all z-[60]";
-          dragDiv.style.pointerEvents = "auto";
+          Object.assign(dragDiv.style, {
+            position: "absolute",
+            top: "-32px",
+            left: "0",
+            display: "flex",
+            gap: "6px",
+            opacity: "0",
+            zIndex: "60",
+            pointerEvents: "auto",
+            transition: "all 0.2s ease"
+          });
           dragDiv.innerHTML = `
-            <div class="drag-handle w-7 h-7 bg-gradient-to-br from-cyan-500 to-blue-600 text-white rounded-lg border border-white/20 shadow-2xl flex items-center justify-center cursor-grab active:cursor-grabbing pointer-events-auto hover:shadow-cyan-500/50 transition-all select-none" style="pointer-events: auto;"><i class="fas fa-arrows-alt text-[10px]"></i></div>
-            <button onclick="openSmartInspector('div', this.closest('.canvas-element'))" class="w-7 h-7 bg-gray-950 text-cyan-400 rounded-lg border border-white/10 flex items-center justify-center pointer-events-auto hover:bg-cyan-950 transition-all" style="pointer-events: auto;"><i class="fas fa-sliders-h text-[10px]"></i></button>
-            <button onclick="this.closest('.canvas-element').remove(); saveToHistory();" class="w-7 h-7 bg-gray-950 text-red-500 rounded-lg border border-white/10 flex items-center justify-center pointer-events-auto hover:bg-red-950 transition-all" style="pointer-events: auto;"><i class="fas fa-trash-alt text-[10px]"></i></button>
+            <div class="drag-handle" style="width:28px; height:28px; background:linear-gradient(135deg, #06b6d4 0%, #2563eb 100%); color:white; border-radius:8px; border:1px solid rgba(255,255,255,0.2); display:flex; align-items:center; justify-content:center; cursor:grab; box-shadow:0 8px 12px rgba(0,0,0,0.35); pointer-events:auto;" onmousedown="this.style.cursor='grabbing'"><i class="fas fa-arrows-alt" style="font-size:10px;"></i></div>
+            <button onclick="openSmartInspector('div', this.closest('.canvas-element'))" style="width:28px; height:28px; background:#1e293b; color:#06b6d4; border-radius:8px; border:1px solid rgba(255,255,255,0.1); display:flex; align-items:center; justify-content:center; pointer-events:auto; cursor:pointer; padding:0; font-size:0;" onmouseover="this.style.background='#0f172a'" onmouseout="this.style.background='#1e293b'"><i class="fas fa-sliders-h" style="font-size:10px;"></i></button>
+            <button onclick="this.closest('.canvas-element').remove(); saveToHistory();" style="width:28px; height:28px; background:#1e293b; color:#ef4444; border-radius:8px; border:1px solid rgba(255,255,255,0.1); display:flex; align-items:center; justify-content:center; pointer-events:auto; cursor:pointer; padding:0; font-size:0;" onmouseover="this.style.background='#7f1d1d'" onmouseout="this.style.background='#1e293b'"><i class="fas fa-trash-alt" style="font-size:10px;"></i></button>
           `;
 
           // Build element-body
@@ -33025,6 +33077,34 @@
           wrapper.appendChild(dragDiv);
           wrapper.appendChild(badgeDiv.firstChild || badgeDiv);
           wrapper.appendChild(elementBody);
+
+          // Add hover listeners to show/hide handles and controls
+          wrapper.addEventListener("mouseenter", function() {
+            const handles = this.querySelectorAll(".resizer");
+            handles.forEach(h => {
+              if (h.style.opacity === "0") {
+                h.style.opacity = "1";
+              }
+            });
+            const dragControls = this.querySelector("div[style*='gap: 6px']");
+            if (dragControls && dragControls.style.opacity === "0") {
+              dragControls.style.opacity = "1";
+            }
+          });
+          
+          wrapper.addEventListener("mouseleave", function() {
+            // Only hide if not selected
+            if (!this.classList.contains("selected-premium") && !this.classList.contains("selected-secondary")) {
+              const handles = this.querySelectorAll(".resizer");
+              handles.forEach(h => {
+                h.style.opacity = "0";
+              });
+              const dragControls = this.querySelector("div[style*='gap: 6px']");
+              if (dragControls) {
+                dragControls.style.opacity = "0";
+              }
+            }
+          });
 
           // Set wrapper HTML with EXACT same structure as addObject()
           // wrapper.innerHTML = `
