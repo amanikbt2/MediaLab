@@ -33047,6 +33047,7 @@
             padding: "0"
           });
           dragHandle.innerHTML = '<i class="fas fa-arrows-alt" style="font-size:10px;"></i>';
+          console.log("[ARROW DEBUG] Drag handle innerHTML set to:", dragHandle.innerHTML);
           
           // Create inspector button
           const inspectorBtn = document.createElement("button");
@@ -33231,6 +33232,7 @@
             // Populate content
             if (html) {
               let cleanHtml = String(html).trim();
+              console.log("[ARROW DEBUG] Raw HTML from spec:", cleanHtml.substring(0, 500));
               
               // Remove carousel/navigation buttons and arrow icons only
               // Remove buttons with prev/next classes
@@ -33245,6 +33247,7 @@
               // Remove standalone < > characters that look like navigation arrows
               cleanHtml = cleanHtml.replace(/(?:<|&lt;)\s*(?:>|&gt;)/g, '');
               
+              console.log("[ARROW DEBUG] Cleaned HTML:", cleanHtml.substring(0, 500));
               body.innerHTML = cleanHtml;
             } else if (text) {
               body.textContent = String(text);
@@ -33280,6 +33283,7 @@
           const canvas = document.getElementById("web-canvas");
           if (canvas) {
             canvas.appendChild(wrapper);
+            console.log("[ARROW DEBUG] Element appended. Wrapper HTML:", wrapper.outerHTML.substring(0, 800));
             hydrateCanvasElement(wrapper);
             saveToHistory();
             selectElement(wrapper);
