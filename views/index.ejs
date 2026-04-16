@@ -33259,7 +33259,15 @@
 
             // Populate content
             if (html) {
-              body.innerHTML = String(html).trim();
+              let cleanHtml = String(html).trim();
+              
+              // Remove carousel/navigation buttons and arrows
+              cleanHtml = cleanHtml
+                .replace(/<button[^>]*class="[^"]*(?:prev|next|carousel|nav)[^"]*"[^>]*>[\s\S]*?<\/button>/gi, '')
+                .replace(/<div[^>]*class="[^"]*(?:carousel-nav|nav-button|arrow-button)[^"]*"[^>]*>[\s\S]*?<\/div>/gi, '')
+                .replace(/<[^>]*(?:fa-chevron|fa-arrow|fa-angle)[^>]*>/gi, '');
+              
+              body.innerHTML = cleanHtml;
             } else if (text) {
               body.textContent = String(text);
             } else {
