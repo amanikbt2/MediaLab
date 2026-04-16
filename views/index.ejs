@@ -32983,26 +32983,57 @@
           wrapper.className =
             "canvas-element absolute group transition-shadow active:cursor-grabbing";
 
-          // 8-Point Resizer Matrix - EXACT match to addObject
+          // 8-Point Resizer Matrix - Create programmatically for reliability
           const handles = ["tl", "tr", "bl", "br", "mt", "mb", "ml", "mr"];
-          let handlesHTML = handles
-            .map(
-              (h) =>
-                `<div class="resizer ${h} absolute w-2 h-2 bg-cyan-500 border border-white rounded-full opacity-0 group-hover:opacity-100 z-50" style="pointer-events: auto;"></div>`,
-            )
-            .join("");
+          const handlesFragment = document.createDocumentFragment();
+          
+          handles.forEach((h) => {
+            const handle = document.createElement("div");
+            handle.className = `resizer ${h} absolute w-2 h-2 bg-cyan-500 border border-white rounded-full opacity-0 group-hover:opacity-100 z-50`;
+            handle.style.pointerEvents = "auto";
+            handlesFragment.appendChild(handle);
+          });
+
+          // Create drag controls programmatically
+          const dragDiv = document.createElement("div");
+          dragDiv.className = "absolute -top-8 left-0 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-all z-[60]";
+          dragDiv.style.pointerEvents = "auto";
+          dragDiv.innerHTML = `
+            <div class="drag-handle w-7 h-7 bg-gradient-to-br from-cyan-500 to-blue-600 text-white rounded-lg border border-white/20 shadow-2xl flex items-center justify-center cursor-grab active:cursor-grabbing pointer-events-auto hover:shadow-cyan-500/50 transition-all select-none" style="pointer-events: auto;"><i class="fas fa-arrows-alt text-[10px]"></i></div>
+            <button onclick="openSmartInspector('div', this.closest('.canvas-element'))" class="w-7 h-7 bg-gray-950 text-cyan-400 rounded-lg border border-white/10 flex items-center justify-center pointer-events-auto hover:bg-cyan-950 transition-all" style="pointer-events: auto;"><i class="fas fa-sliders-h text-[10px]"></i></button>
+            <button onclick="this.closest('.canvas-element').remove(); saveToHistory();" class="w-7 h-7 bg-gray-950 text-red-500 rounded-lg border border-white/10 flex items-center justify-center pointer-events-auto hover:bg-red-950 transition-all" style="pointer-events: auto;"><i class="fas fa-trash-alt text-[10px]"></i></button>
+          `;
+
+          // Build element-body
+          const elementBody = document.createElement("div");
+          elementBody.className = "element-body w-full h-full overflow-visible";
+          elementBody.style.width = "100%";
+          elementBody.style.height = "100%";
+          elementBody.style.overflow = "visible";
+          elementBody.style.pointerEvents = "none";
+
+          // Create badge
+          const badgeHtml = renderInteractionBadgeHtml();
+          const badgeDiv = document.createElement("div");
+          badgeDiv.innerHTML = badgeHtml;
+
+          // Assemble wrapper with all children
+          wrapper.appendChild(handlesFragment);
+          wrapper.appendChild(dragDiv);
+          wrapper.appendChild(badgeDiv.firstChild || badgeDiv);
+          wrapper.appendChild(elementBody);
 
           // Set wrapper HTML with EXACT same structure as addObject()
-          wrapper.innerHTML = `
-              ${handlesHTML}
-              <div class="absolute -top-8 left-0 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-all z-[60]">
-                  <div class="drag-handle w-7 h-7 bg-gradient-to-br from-cyan-500 to-blue-600 text-white rounded-lg border border-white/20 shadow-2xl flex items-center justify-center cursor-grab active:cursor-grabbing pointer-events-auto hover:shadow-cyan-500/50 transition-all select-none"><i class="fas fa-arrows-alt text-[10px]"></i></div>
-                  <button onclick="openSmartInspector('div', this.closest('.canvas-element'))" class="w-7 h-7 bg-gray-950 text-cyan-400 rounded-lg border border-white/10 flex items-center justify-center pointer-events-auto hover:bg-cyan-950 transition-all"><i class="fas fa-sliders-h text-[10px]"></i></button>
-                  <button onclick="this.closest('.canvas-element').remove(); saveToHistory();" class="w-7 h-7 bg-gray-950 text-red-500 rounded-lg border border-white/10 flex items-center justify-center pointer-events-auto hover:bg-red-950 transition-all"><i class="fas fa-trash-alt text-[10px]"></i></button>
-              </div>
-              ${renderInteractionBadgeHtml()}
-              <div class="element-body w-full h-full overflow-visible"></div>
-          `;
+          // wrapper.innerHTML = `
+          //     ${handlesHTML}
+          //     <div class="absolute -top-8 left-0 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-all z-[60]">
+          //         <div class="drag-handle w-7 h-7 bg-gradient-to-br from-cyan-500 to-blue-600 text-white rounded-lg border border-white/20 shadow-2xl flex items-center justify-center cursor-grab active:cursor-grabbing pointer-events-auto hover:shadow-cyan-500/50 transition-all select-none"><i class="fas fa-arrows-alt text-[10px]"></i></div>
+          //         <button onclick="openSmartInspector('div', this.closest('.canvas-element'))" class="w-7 h-7 bg-gray-950 text-cyan-400 rounded-lg border border-white/10 flex items-center justify-center pointer-events-auto hover:bg-cyan-950 transition-all"><i class="fas fa-sliders-h text-[10px]"></i></button>
+          //         <button onclick="this.closest('.canvas-element').remove(); saveToHistory();" class="w-7 h-7 bg-gray-950 text-red-500 rounded-lg border border-white/10 flex items-center justify-center pointer-events-auto hover:bg-red-950 transition-all"><i class="fas fa-trash-alt text-[10px]"></i></button>
+          //     </div>
+          //     ${renderInteractionBadgeHtml()}
+          //     <div class="element-body w-full h-full overflow-visible"></div>
+          // `;
 
           // Compute wrapper positioning
           const posLeft =
@@ -33048,15 +33079,9 @@
             .join("; ");
           wrapper.setAttribute("style", styleString);
 
-          // Get the element body - THIS is where visual styles go
-          const body = wrapper.querySelector(".element-body");
+          // Get the element body (already created above)
+          const body = elementBody;
           if (body) {
-            // Body takes 100% of wrapper and allows pointer events to pass through to handles
-            body.style.width = "100%";
-            body.style.height = "100%";
-            body.style.overflow = "visible";
-            body.style.pointerEvents = "none"; // CRITICAL: Let drag/resize handles work!
-
             // Apply visual styles from spec.style to body
             if (typeof style === "object" && style !== null) {
               Object.assign(body.style, style);
