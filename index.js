@@ -5606,35 +5606,18 @@ Generate the COMPLETE builder command with ALL properties. Output ONLY the raw c
             }
           } else {
             // Handle Groq API errors (4xx, 5xx responses) - try next model
-            const errorText = await groqResponse
-              .text()
-              .catch(() => "Unknown error");
             const statusCode = groqResponse.status;
 
-            formattingError = {
-              model: currentModel,
-              status: statusCode,
-              statusText: groqResponse.statusText,
-              body: errorText.substring(0, 200),
-            };
-
-            console.error(
-              `[AI Formatter] Model ${currentModel} failed (HTTP ${statusCode}):`,
-              formattingError,
+            console.warn(
+              `[AI Formatter] Model ${currentModel} failed with HTTP ${statusCode}. Trying next model...`,
             );
 
             // Continue to next model instead of failing immediately
             continue;
           }
         } catch (apiErr) {
-          formattingError = {
-            model: currentModel,
-            error: apiErr.message,
-          };
-
-          console.error(
-            `[AI Formatter] Model ${currentModel} error:`,
-            apiErr.message,
+          console.warn(
+            `[AI Formatter] Model ${currentModel} error: ${apiErr.message}. Trying next model...`,
           );
 
           // Continue to next model instead of failing immediately
@@ -5655,8 +5638,10 @@ Generate the COMPLETE builder command with ALL properties. Output ONLY the raw c
           success: false,
           message:
             "All AI formatter models failed. Please try again in a moment.",
-          lastError: formattingError,
-          triedModels: modelsToTry,
+          error: {
+            code: "rate_limit_exceeded",
+            type: "tokens",
+          },
         });
       }
     }

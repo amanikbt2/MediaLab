@@ -1890,12 +1890,21 @@
         display: flex;
         flex-direction: column;
         gap: 0.55rem;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+      }
+      .ai-chat-messages::-webkit-scrollbar {
+        display: none;
       }
       .ai-chat-bubble {
         border-radius: 0.95rem;
         padding: 0.62rem 0.75rem;
         font-size: 12px;
         line-height: 1.45;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 0.5rem;
       }
       .ai-chat-bubble.user {
         align-self: flex-end;
@@ -1908,6 +1917,22 @@
         max-width: 96%;
         background: rgba(148, 163, 184, 0.14);
         color: #e2e8f0;
+      }
+      .ai-copy-btn {
+        flex-shrink: 0;
+        background: transparent;
+        border: none;
+        color: inherit;
+        opacity: 0.6;
+        cursor: pointer;
+        padding: 0.25rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: opacity 0.2s;
+      }
+      .ai-copy-btn:hover {
+        opacity: 1;
       }
       .ai-agent-stage {
         display: inline-flex;
@@ -20082,21 +20107,9 @@
                           <div id="builder-panel-insert" class="builder-popover hidden">
                               <div class="space-y-3">
                                   <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                                      <button id="builder-insert-tab-element" onclick="setBuilderInsertMiniTab('element')" class="builder-cmd"><i class="fas fa-plus-circle text-cyan-400"></i><span>Element<small>Open element library</small></span></button>
-                                      <button id="builder-insert-tab-feature" onclick="setBuilderInsertMiniTab('feature')" class="builder-cmd"><i class="fas fa-layer-group text-cyan-400"></i><span>Feature Block<small>Insert a features section</small></span></button>
-                                      <button id="builder-insert-tab-background" onclick="setBuilderInsertMiniTab('background')" class="builder-cmd"><i class="fas fa-image text-cyan-400"></i><span>Background<small>Open background options</small></span></button>
-                                  </div>
-                                  <div id="builder-insert-mini-panel-element" class="builder-popover-grid">
-                                      <button id="insert-elements-trigger" onclick="toggleElementPicker(event); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-plus-circle text-cyan-400"></i><span>Elements<small>Open element library</small></span></button>
-                                      <button onclick="insertStarterBlock('hero'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-wand-magic-sparkles text-cyan-400"></i><span>Hero Block<small>Premium landing hero</small></span></button>
-                                  </div>
-                                  <div id="builder-insert-mini-panel-feature" class="builder-popover-grid hidden">
-                                      <button onclick="insertStarterBlock('feature'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-th-large text-cyan-400"></i><span>Feature Row<small>Three-card section</small></span></button>
-                                  </div>
-                                  <div id="builder-insert-mini-panel-background" class="builder-popover-grid hidden">
-                                      <button id="builder-insert-background-templates-trigger" onclick="openDesignModal('templates'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-swatchbook text-cyan-400"></i><span>Templates<small>Professional page background presets</small></span></button>
-                                      <button onclick="openDesignModal('color'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-fill-drip text-cyan-400"></i><span>Color<small>Pick a clean custom page color</small></span></button>
-                                      <button onclick="openDesignModal('image'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-image text-cyan-400"></i><span>Upload Image<small>Use a real page background image</small></span></button>
+                                      <button id="builder-insert-tab-element" onclick="toggleElementPicker(event); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-plus-circle text-cyan-400"></i><span>Element<small>Open element library</small></span></button>
+                                      <button id="builder-insert-tab-feature" onclick="insertStarterBlock('feature'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-layer-group text-cyan-400"></i><span>Feature Block<small>Insert feature row</small></span></button>
+                                      <button id="builder-insert-tab-background" onclick="openDesignModal('templates'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-image text-cyan-400"></i><span>Background<small>Set page background</small></span></button>
                                   </div>
                               </div>
                           </div>
@@ -20396,17 +20409,16 @@
                                   <i id="magic-fix-icon" class="fas fa-magic text-amber-400"></i>
                               </button>
                               <input id="ai-chat-input" type="text" placeholder="Ask for fixes, templates, or backgrounds (e.g. cat image URL)..." onkeydown="if(event.key==='Enter'){event.preventDefault();sendBuilderAiChat();}" class="min-w-0 flex-1 rounded-xl border border-white/10 bg-slate-950/85 px-3 py-2 text-sm text-slate-200 outline-none focus:border-cyan-400" />
-                              <button id="ai-chat-send" onclick="sendBuilderAiChat()" class="rounded-xl bg-cyan-500 px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-950 hover:bg-cyan-400">Send</button>
+                              <button id="ai-chat-send" onclick="sendBuilderAiChat()" class="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500 hover:bg-cyan-400 transition-all" title="Send message"><i class="fas fa-paper-plane text-slate-950"></i></button>
+                              <button id="ai-chat-stop" onclick="stopBuilderAiChat()" class="hidden inline-flex h-9 w-9 items-center justify-center rounded-xl bg-red-600 hover:bg-red-500 transition-all" title="Stop AI processing"><i class="fas fa-stop text-white"></i></button>
                           </div>
                           <div class="flex items-center justify-between gap-2 mt-2">
                               <div class="flex items-center gap-1">
-                                  <button onclick="startNewAiChat()" class="inline-flex h-8 px-2 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white transition-all text-[10px] font-bold gap-1" title="Start new chat">
+                                  <button onclick="startNewAiChat()" class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white transition-all" title="Start new chat">
                                       <i class="fas fa-plus text-xs"></i>
-                                      <span>New</span>
                                   </button>
-                                  <button onclick="clearAiChatHistory()" class="inline-flex h-8 px-2 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-white/70 hover:bg-red-500/10 hover:text-red-300 transition-all text-[10px] font-bold gap-1" title="Clear history">
+                                  <button onclick="clearAiChatHistory()" class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-white/70 hover:bg-red-500/10 hover:text-red-300 transition-all" title="Clear history">
                                       <i class="fas fa-trash-alt text-xs"></i>
-                                      <span>Clear</span>
                                   </button>
                               </div>
                               <span class="text-[9px] text-slate-500"><span id="ai-message-count">0</span> messages</span>
@@ -31416,51 +31428,23 @@
         cleanNode
           .querySelectorAll("[contenteditable]")
           .forEach((editable) => editable.removeAttribute("contenteditable"));
-
-        // IMPORTANT: Preserve wrapper positioning styles for canvas elements
-        const wrapperStyle = String(
-          sourceNode.getAttribute("style") || "",
-        ).trim();
-        const preservedWrapperStyles = extractPositioningStyles(wrapperStyle);
-
         const wrapperClasses = filterExportClasses(cleanNode.classList);
         const type = sourceNode.getAttribute("data-type") || "div";
-        const body = cleanNode.querySelector(".element-body");
-        const primaryNode =
-          body?.firstElementChild ||
-          (() => {
-            const fallback = document.createElement("div");
-            fallback.textContent = body?.textContent?.trim() || "";
-            return fallback;
-          })();
-        const contentNode = primaryNode.cloneNode(true);
-        const contentClasses = filterExportClasses(contentNode.classList);
-        contentNode.className = [...new Set(contentClasses)].join(" ").trim();
-        contentNode.removeAttribute("style");
-        contentNode
-          .querySelectorAll("[style]")
-          .forEach((node) => node.removeAttribute("style"));
-        const sourceId = String(contentNode.id || cleanNode.id || "").trim();
+        cleanNode.className = [...new Set(wrapperClasses)].join(" ").trim();
+        if (!cleanNode.className.trim()) {
+          cleanNode.removeAttribute("class");
+        }
+        const sourceId = String(cleanNode.id || "").trim();
         if (sourceId) {
-          contentNode.id = sourceId;
+          cleanNode.id = sourceId;
         } else {
-          contentNode.id = generateBuilderElementId();
-        }
-        if (wrapperClasses.length) {
-          contentNode.className = [
-            ...new Set([...contentClasses, ...wrapperClasses]),
-          ]
-            .join(" ")
-            .trim();
-        }
-        if (!contentNode.className.trim()) {
-          contentNode.removeAttribute("class");
+          cleanNode.id = generateBuilderElementId();
         }
 
         return {
-          node: contentNode,
+          node: cleanNode,
           type,
-          wrapperStyle: preservedWrapperStyles,
+          wrapperStyle: String(cleanNode.getAttribute("style") || "").trim(),
           contentStyle: "",
           interactions: normalizeElementInteractions(
             JSON.parse(sourceNode.dataset.interactions || "{}"),
@@ -31684,17 +31668,46 @@
         if (!canvas) return "";
 
         const clone = canvas.cloneNode(true);
-        clone.removeAttribute("id");
-        clone.style.margin = "0 auto";
+        clone.id = "medialab-run-stage";
+        clone.style.margin = "0";
         clone.style.maxWidth = "none";
         clone.style.borderRadius = "0";
         clone.style.boxShadow = "none";
-        clone.style.overflow = "visible";
+        clone.style.transform = "none";
+        clone.style.transition = "none";
 
-        // Remove editor-specific elements
+        // Preserve exact inline styles of all elements from original canvas
+        const preserveElementStyles = (cloned, original) => {
+          if (original.style.cssText) {
+            cloned.style.cssText = original.style.cssText;
+          }
+          // Preserve styles for all descendants
+          const clonedChildren = cloned.querySelectorAll("*");
+          const originalChildren = original.querySelectorAll("*");
+          clonedChildren.forEach((clonedChild, index) => {
+            const originalChild = originalChildren[index];
+            if (originalChild && originalChild.style.cssText) {
+              clonedChild.style.cssText = originalChild.style.cssText;
+            }
+          });
+        };
+
+        clone.querySelectorAll(":scope > .canvas-element").forEach((el) => {
+          const original = canvas.querySelector(`#${el.id}`);
+          if (original) {
+            // Copy ALL inline styles from original
+            preserveElementStyles(el, original);
+            // Ensure absolute positioning for run mode
+            if (el.classList.contains("in-layout-flow")) {
+              el.classList.remove("in-layout-flow");
+            }
+          }
+        });
+
+        // Remove ALL editor-specific elements and UI
         clone
           .querySelectorAll(
-            ".resizer, .drag-handle, .builder-selection-chip, .builder-guide, .builder-layout-guide-overlay, .builder-layout-slot-guide, .builder-selection-box, .builder-layout-scroll-assist, [contenteditable='true']",
+            ".resizer, .drag-handle, .builder-selection-chip, .builder-guide, .builder-layout-guide-overlay, .builder-layout-slot-guide, .builder-selection-box, .builder-layout-scroll-assist, .absolute.-top-10, [contenteditable='true'], [data-editor], .builder-*",
           )
           .forEach((node) => {
             if (node.hasAttribute?.("contenteditable")) {
@@ -31704,31 +31717,13 @@
             node.remove();
           });
 
-        // Use canvas decompiler if available for better accuracy
-        let canvasHtml = clone.innerHTML;
-        if (
-          typeof BuilderAIAgents !== "undefined" &&
-          BuilderAIAgents.CanvasDecompiler
-        ) {
-          try {
-            const tempContainer = document.createElement("div");
-            tempContainer.innerHTML = canvasHtml;
-            const decompiled = await BuilderAIAgents.CanvasDecompiler.decompile(
-              `<!DOCTYPE html><html><body>${canvasHtml}</body></html>`,
-              { stripEditorData: true, normalizeSpacing: true },
-            );
-            const decompileDoc = new DOMParser().parseFromString(
-              decompiled,
-              "text/html",
-            );
-            canvasHtml = decompileDoc.body?.innerHTML || canvasHtml;
-          } catch (error) {
-            console.warn(
-              "Canvas decompilation failed, using basic approach",
-              error,
-            );
-          }
-        }
+        // Strip contenteditable from any remaining elements
+        clone.querySelectorAll("[contenteditable]").forEach((node) => {
+          node.removeAttribute("contenteditable");
+        });
+
+        // Use canvas HTML directly without decompilation for accurate positioning
+        let canvasHtml = clone.outerHTML;
 
         const pageBackground = getCanvasPageStyleState(canvas).background;
         const dynamicCss = syncStyleTag({ forExport: true });
@@ -31788,18 +31783,24 @@
             body {
               position: relative;
               font-family: Inter, system-ui, sans-serif;
+              min-width: ${Math.max(320, Math.round(width))}px;
+              min-height: ${Math.max(320, Math.round(height))}px;
             }
       ${String(builderImportedGlobalCss || "").trim()}
-            .canvas-element,
-            .absolute {
-              position: absolute;
+            .canvas-element {
+              position: absolute !important;
             }
             .canvas-element.in-layout-flow {
               position: static !important;
             }
             .element-body {
-              width: 100%;
-              height: 100%;
+              width: auto;
+              height: auto;
+              box-sizing: border-box;
+              display: contents;
+            }
+            #medialab-run-stage,
+            #medialab-run-stage * {
               box-sizing: border-box;
             }
       ${dynamicCss}
@@ -31807,15 +31808,18 @@
               position: relative;
               width: ${Math.max(320, Math.round(width))}px;
               min-width: ${Math.max(320, Math.round(width))}px;
-              height: ${Math.max(320, Math.round(height))}px;
+              height: auto;
               min-height: ${Math.max(320, Math.round(height))}px;
               background: ${pageBackground};
               overflow: visible;
+              inset: auto;
+              left: auto;
+              top: auto;
             }
           </style>
         </head>
         <body>
-          <div id="medialab-run-stage">${canvasHtml}</div>
+          ${canvasHtml}
       ${interactionBlock}
         </body>
       </html>`;
@@ -32186,6 +32190,8 @@
         const statusEl = document.getElementById("ai-status-indicator");
         const creditsEl = document.getElementById("ai-credits-badge");
         const recoveryEl = document.getElementById("ai-recovery-badge");
+        const sendBtn = document.getElementById("ai-chat-send");
+        const stopBtn = document.getElementById("ai-chat-stop");
         if (!messagesEl || !statusEl || !creditsEl) return;
         const fallback =
           '<div class="ai-chat-bubble assistant">Hi! I can chat, plan, and apply builder fixes. Tell me your goal (for example: "build a SaaS hero", "set a cat background", or just "hello").</div>';
@@ -32193,13 +32199,18 @@
           .filter((item) => item.role !== "system_hidden")
           .map((item) => {
             const roleClass = item.role === "user" ? "user" : "assistant";
+            const content = item.html
+              ? item.html
+              : escapeHtmlText(item.text || "");
+            const copyBtn = `<button onclick="copyAiChatBubble(this)" class="ai-copy-btn" title="Copy text"><i class="fas fa-copy text-[10px]"></i></button>`;
             // Support HTML rendering for special message types (like login prompts)
             if (item.html) {
               return (
                 '<div class="ai-chat-bubble ' +
                 roleClass +
                 '">' +
-                item.html +
+                content +
+                copyBtn +
                 "</div>"
               );
             }
@@ -32207,7 +32218,8 @@
               '<div class="ai-chat-bubble ' +
               roleClass +
               '">' +
-              escapeHtmlText(item.text || "") +
+              content +
+              copyBtn +
               "</div>"
             );
           });
@@ -32246,6 +32258,11 @@
             "hidden",
             !(aiModelRecoveryInFlight || aiModelSwitchingInFlight),
           );
+        // Toggle STOP button visibility
+        const isProcessing =
+          aiChatSending || !["idle", "done"].includes(aiAgentStage);
+        if (sendBtn) sendBtn.classList.toggle("hidden", isProcessing);
+        if (stopBtn) stopBtn.classList.toggle("hidden", !isProcessing);
         const messageCountEl = document.getElementById("ai-message-count");
         if (messageCountEl) {
           const userMessageCount = aiChatMessages.filter(
@@ -35844,6 +35861,45 @@
         };
       }
 
+      function parseAiError(error) {
+        // Handle Groq API errors with error details
+        if (error?.code === "rate_limit_exceeded" || error?.error?.code === "rate_limit_exceeded") {
+          if (error?.type === "tokens" || error?.error?.type === "tokens") {
+            return "⚠️ Token limit reached. Please try again in a few moments or reduce your message size.";
+          }
+          return "⚠️ Rate limit reached. Please try again in a few moments.";
+        }
+
+        // Check for rate limit in error message string
+        if (
+          typeof error === "string" &&
+          error.includes("rate_limit_exceeded")
+        ) {
+          return "⚠️ Rate limit reached. Please try again in a few moments.";
+        }
+
+        // Check for token limit messages
+        if (
+          typeof error === "string" &&
+          (error.includes("tokens per minute") ||
+            error.includes("Request too large") ||
+            error.includes("TPM"))
+        ) {
+          return "⚠️ Token limit reached. Please try again in a few moments or reduce your message size.";
+        }
+
+        // Fallback to original error message if available
+        if (error?.message) {
+          return error.message;
+        }
+
+        if (typeof error === "string") {
+          return error;
+        }
+
+        return "Could not complete AI request.";
+      }
+
       async function sendBuilderAiChat() {
         if (aiChatSending) return;
         const input = document.getElementById("ai-chat-input");
@@ -35871,6 +35927,10 @@
         aiChatSending = true;
         aiModelRecoveryInFlight = false;
         aiModelSwitchingInFlight = false;
+
+        // Create abort controller for this request
+        window.aiChatAbortController = new AbortController();
+
         if (input) input.value = "";
         if (sendBtn) {
           sendBtn.disabled = true;
@@ -35897,15 +35957,24 @@
                   analyzeIntent: true,
                   correctErrors: true,
                 }),
+                signal: window.aiChatAbortController?.signal,
               })
                 .then((r) => r.json())
                 .catch((err) => {
+                  if (err.name === "AbortError")
+                    return { success: false, aborted: true };
                   console.error("Xtra AI error:", err);
                   return {
                     success: false,
                     error: "Xtra AI temporarily unavailable",
                   };
                 });
+
+              // If request was aborted, stop processing
+              if (managerResponse?.aborted) {
+                aiChatSending = false;
+                return;
+              }
 
               // If Xtra AI fails, show message and fall back to Workflow AI
               if (!managerResponse?.success) {
@@ -35927,11 +35996,20 @@
                     analyzeIntent: true,
                     correctErrors: true,
                   }),
+                  signal: window.aiChatAbortController?.signal,
                 })
                   .then((r) => r.json())
-                  .catch(() => ({ success: false }));
+                  .catch((err) => {
+                    if (err.name === "AbortError")
+                      return { success: false, aborted: true };
+                    return { success: false };
+                  });
               }
             } catch (err) {
+              if (err.name === "AbortError") {
+                aiChatSending = false;
+                return;
+              }
               console.error("Xtra AI routing error:", err);
               managerResponse = { success: false };
             }
@@ -35947,12 +36025,29 @@
                 analyzeIntent: true,
                 correctErrors: true,
               }),
+              signal: window.aiChatAbortController?.signal,
             })
               .then((r) => r.json())
-              .catch(() => ({ success: false }));
+              .catch((err) => {
+                if (err.name === "AbortError")
+                  return { success: false, aborted: true };
+                return { success: false };
+              });
+          }
+
+          if (managerResponse?.aborted) {
+            aiChatSending = false;
+            return;
           }
 
           if (!managerResponse?.success) {
+            // Check if there's a detailed error from the API
+            const errorDetail = managerResponse?.error;
+            if (errorDetail) {
+              const err = new Error("API Error");
+              err.apiError = errorDetail;
+              throw err;
+            }
             throw new Error("AI manager failed to process request");
           }
 
@@ -36104,9 +36199,18 @@
             "ai-chat",
             { promptPreview: prompt.slice(0, 160) },
           );
+          
+          // Parse error for user-friendly message
+          let errorMessage;
+          if (error?.apiError) {
+            errorMessage = parseAiError(error.apiError);
+          } else {
+            errorMessage = parseAiError(error);
+          }
+          
           aiChatMessages.push({
             role: "assistant",
-            text: error.message || "Could not complete AI patch.",
+            text: errorMessage,
           });
           setAiAgentStage("idle");
           renderBuilderAiChat();
@@ -36121,6 +36225,94 @@
           }, 900);
         }
       }
+
+      function copyAiChatBubble(btn) {
+        // Get the parent bubble
+        const bubble = btn.closest(".ai-chat-bubble");
+        if (!bubble) return;
+
+        // Get all text content except the button
+        const bubbleClone = bubble.cloneNode(true);
+        bubbleClone.querySelector(".ai-copy-btn")?.remove();
+
+        const text = bubbleClone.textContent.trim();
+
+        // Copy to clipboard
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard
+            .writeText(text)
+            .then(() => {
+              // Show brief success feedback
+              const originalIcon = btn.innerHTML;
+              btn.innerHTML = '<i class="fas fa-check text-[10px]"></i>';
+              setTimeout(() => {
+                btn.innerHTML = originalIcon;
+              }, 1500);
+            })
+            .catch((err) => {
+              console.error("Copy failed:", err);
+              showBuilderSnackbar("Copy failed", "error");
+            });
+        } else {
+          // Fallback for older browsers
+          const textArea = document.createElement("textarea");
+          textArea.value = text;
+          document.body.appendChild(textArea);
+          textArea.select();
+          try {
+            document.execCommand("copy");
+            const originalIcon = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-check text-[10px]"></i>';
+            setTimeout(() => {
+              btn.innerHTML = originalIcon;
+            }, 1500);
+          } catch (err) {
+            console.error("Copy failed:", err);
+            showBuilderSnackbar("Copy failed", "error");
+          }
+          document.body.removeChild(textArea);
+        }
+      }
+
+      function stopBuilderAiChat() {
+        // Stop the AI processing
+        aiChatSending = false;
+        aiModelRecoveryInFlight = false;
+        aiModelSwitchingInFlight = false;
+
+        // Abort any pending fetch requests
+        if (window.aiChatAbortController) {
+          window.aiChatAbortController.abort();
+          window.aiChatAbortController = null;
+        }
+
+        // Reset the agent stage to idle
+        setAiAgentStage("idle");
+
+        // Add a message indicating the AI was stopped
+        aiChatMessages.push({
+          role: "assistant",
+          text: "⏹️ AI processing stopped.",
+        });
+
+        // Update the button state
+        const sendBtn = document.getElementById("ai-chat-send");
+        const stopBtn = document.getElementById("ai-chat-stop");
+        if (sendBtn) {
+          sendBtn.disabled = false;
+          sendBtn.textContent = "Send";
+        }
+        if (stopBtn) {
+          stopBtn.classList.add("hidden");
+        }
+
+        // Re-render the chat
+        renderBuilderAiChat();
+
+        // Show feedback
+        showBuilderSnackbar("AI processing stopped", "info");
+      }
+
       async function triggerMagicFix() {
         if (aiMagicFixRunning) return;
         if (!loggedIn || !currentUser) {
@@ -36166,12 +36358,13 @@
             const modelId = modelsToTry[modelIndex];
             try {
               // Show which model is being attempted
+              let retryTaskId = null;
               if (modelIndex > 0) {
                 showBuilderSnackbar(
                   `Autofix failed, trying ${modelId}...`,
                   "warn",
                 );
-                addAIThinkingTask(`Retrying with ${modelId}...`);
+                retryTaskId = addAIThinkingTask(`Retrying with ${modelId}...`);
               }
 
               const res = await fetch("/api/ai/autofix", {
@@ -36184,6 +36377,12 @@
                 }),
               });
               const data = await res.json().catch(() => ({}));
+              
+              // Complete the retry task
+              if (retryTaskId) {
+                completeAIThinkingTask(retryTaskId, 0);
+              }
+              
               if (!res.ok || !data.success) {
                 if (data.limitReached) {
                   openUpgradeModal();
@@ -36951,11 +37150,8 @@
           String(builderTemplateRuntimeDocument || "").trim()
         ) {
           completeAIThinkingTask(prepTask, 100);
-          const cleanedTemplateDoc = await runBuilderCodeConverterAgent(
-            builderTemplateRuntimeDocument,
-            "run",
-          );
-          openBuilderRunModeWithHtml(cleanedTemplateDoc);
+          // Use accurate run document without AI conversion
+          openBuilderRunModeWithHtml(builderTemplateRuntimeDocument);
           return;
         }
         if (
@@ -36963,24 +37159,18 @@
           /<html[\s>]/i.test(String(activeDocument || ""))
         ) {
           completeAIThinkingTask(prepTask, 100);
+          // Use accurate run document without AI conversion
           const runtimeHtml = buildBuilderRuntimeDocument(
             activePath,
             activeDocument,
           );
-          const cleanedRuntimeHtml = await runBuilderCodeConverterAgent(
-            runtimeHtml,
-            "run",
-          );
-          openBuilderRunModeWithHtml(cleanedRuntimeHtml);
+          openBuilderRunModeWithHtml(runtimeHtml);
           return;
         }
         if (builderRawImportDocument) {
           completeAIThinkingTask(prepTask, 100);
-          const cleanedImportedDoc = await runBuilderCodeConverterAgent(
-            builderRawImportDocument,
-            "run",
-          );
-          openBuilderRunModeWithHtml(cleanedImportedDoc);
+          // Use accurate run document without AI conversion
+          openBuilderRunModeWithHtml(builderRawImportDocument);
           return;
         }
         const accurateRunDocument = await buildBuilderAccurateRunDocument();
@@ -36994,11 +37184,8 @@
           return;
         }
         completeAIThinkingTask(prepTask, 100);
-        const cleanedRunDocument = await runBuilderCodeConverterAgent(
-          accurateRunDocument,
-          "run",
-        );
-        openBuilderRunModeWithHtml(cleanedRunDocument);
+        // Use accurate run document without AI conversion
+        openBuilderRunModeWithHtml(accurateRunDocument);
       }
       function openBuilderRunModeWithHtml(documentHtml = "") {
         const modal = document.getElementById("builder-run-modal");
@@ -37041,10 +37228,7 @@
           );
           return;
         }
-        const cleanedRunDocument = await runBuilderCodeConverterAgent(
-          runDocument,
-          "run",
-        );
+        // Use document directly without AI conversion
         const previewWindow = window.open(
           "",
           "medialab_run_preview",
@@ -37055,7 +37239,7 @@
             previewWindow.opener = null;
           } catch (_error) {}
           previewWindow.document.open();
-          previewWindow.document.write(cleanedRunDocument);
+          previewWindow.document.write(runDocument);
           previewWindow.document.close();
           previewWindow.focus();
           return;
@@ -37065,7 +37249,7 @@
           builderRunPreviewUrl = null;
         }
         builderRunPreviewUrl = URL.createObjectURL(
-          new Blob([cleanedRunDocument], { type: "text/html" }),
+          new Blob([runDocument], { type: "text/html" }),
         );
         window.open(builderRunPreviewUrl, "_blank", "noopener,noreferrer");
       }
@@ -37138,7 +37322,7 @@
           () => {
             bar.classList.add("hidden");
           },
-          Math.max(1200, Number(options.duration || 2200)),
+          Math.max(600, Number(options.duration || 1000)),
         );
       }
       // AI Professional Thinking System
