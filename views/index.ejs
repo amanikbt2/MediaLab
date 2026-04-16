@@ -28452,6 +28452,9 @@
         e.stopPropagation();
         e.preventDefault();
         const isResizer = e.target.classList.contains("resizer");
+        if (isResizer) {
+          console.log(`[DEBUG] handleObjectInteraction: RESIZER DETECTED, target.className=${e.target.className}, classList[1]=${e.target.classList[1]}`);
+        }
         const isDragHandle = e.target.closest(".drag-handle");
         // Ignore drag-handle double-clicks entirely to avoid accidental
         // second-click drag math applying stale coordinates.
@@ -29379,7 +29382,10 @@
         scheduleSyncStyleTag();
       }
       function hydrateCanvasElement(el) {
-        el.onpointerdown = (e) => handleObjectInteraction(e, el);
+        el.onpointerdown = (e) => {
+          console.log(`[DEBUG] WRAPPER POINTERDOWN: target=${e.target.className}, isResizer=${e.target.classList.contains("resizer")}`);
+          handleObjectInteraction(e, el);
+        };
         el.onclick = (e) => {
           e.stopPropagation();
         };
@@ -33184,8 +33190,12 @@
 
           // Attach resize/drag handler to all handles
           const allHandles = wrapper.querySelectorAll(".resizer");
-          allHandles.forEach(handle => {
+          console.log(`[DEBUG] Found ${allHandles.length} resize handles`);
+          allHandles.forEach((handle, idx) => {
+            const handleType = Array.from(handle.classList).find(c => c !== "resizer");
+            console.log(`[DEBUG] Handle ${idx}: type=${handleType}, classList=${handle.className}, pointer-events=${handle.style.pointerEvents}`);
             handle.addEventListener("pointerdown", (e) => {
+              console.log(`[DEBUG] HANDLE POINTERDOWN: type=${handleType}, target=${e.target.className}, classList[1]=${e.target.classList[1]}`);
               handleObjectInteraction(e, wrapper);
             });
           });
