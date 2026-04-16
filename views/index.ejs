@@ -33177,6 +33177,22 @@
             }
           });
 
+          // Attach resize/drag handler to all handles
+          const allHandles = wrapper.querySelectorAll(".resizer");
+          allHandles.forEach(handle => {
+            handle.addEventListener("pointerdown", (e) => {
+              handleObjectInteraction(e, wrapper);
+            });
+          });
+
+          // Attach drag handle listener
+          const dragHandle = wrapper.querySelector(".drag-handle");
+          if (dragHandle) {
+            dragHandle.addEventListener("pointerdown", (e) => {
+              handleObjectInteraction(e, wrapper);
+            });
+          }
+
           // Set wrapper HTML with EXACT same structure as addObject()
           // wrapper.innerHTML = `
           //     ${handlesHTML}
