@@ -33237,10 +33237,13 @@
               cleanHtml = cleanHtml.replace(/<button[^>]*(?:prev|next)[^>]*>[\s\S]*?<\/button>/gi, '');
               // Remove div with carousel-related classes
               cleanHtml = cleanHtml.replace(/<div[^>]*class="[^"]*(?:carousel-nav|nav-button)[^"]*"[^>]*>[\s\S]*?<\/div>/gi, '');
-              // Remove ONLY chevron and angle icons, not arrows-alt
-              cleanHtml = cleanHtml.replace(/<i[^>]*(?:fa-chevron|fa-angle)[^>]*><\/i>/gi, '');
-              // Remove left/right arrow icons specifically
-              cleanHtml = cleanHtml.replace(/<i[^>]*fa-(?:arrow-left|arrow-right|chevron-left|chevron-right)[^>]*><\/i>/gi, '');
+              // Remove all navigation/directional arrow icons EXCEPT fa-arrows-alt (drag handle)
+              // This covers: fa-chevron-*, fa-angle-*, fa-arrow-*, and plain < > characters used as arrows
+              cleanHtml = cleanHtml.replace(/<i[^>]*fa-(?!arrows-alt)(?:chevron|angle|arrow)[^>]*><\/i>/gi, '');
+              // Remove button elements that contain arrow-like content or navigation
+              cleanHtml = cleanHtml.replace(/<button[^>]*>[\s\S]*?(?:<i[^>]*fa-(?:chevron|angle|arrow-left|arrow-right)[^>]*>[\s\S]*?<\/i>)[\s\S]*?<\/button>/gi, '');
+              // Remove standalone < > characters that look like navigation arrows
+              cleanHtml = cleanHtml.replace(/(?:<|&lt;)\s*(?:>|&gt;)/g, '');
               
               body.innerHTML = cleanHtml;
             } else if (text) {
