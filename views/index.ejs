@@ -1370,25 +1370,7 @@
         pointer-events: none;
         z-index: 160;
       }
-      .builder-layout-scroll-btn {
-        width: 28px;
-        height: 28px;
-        border-radius: 999px;
-        border: 1px solid rgba(148, 163, 184, 0.4);
-        background: rgba(2, 6, 23, 0.82);
-        color: #dbeafe;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 11px;
-        box-shadow: 0 10px 22px rgba(2, 6, 23, 0.45);
-        pointer-events: auto;
-      }
-      .builder-layout-scroll-btn:hover {
-        border-color: rgba(34, 211, 238, 0.65);
-        color: #67e8f9;
-        background: rgba(8, 47, 73, 0.9);
-      }
+
       .builder-layout-child-assist {
         position: absolute;
         top: 10px;
@@ -1595,6 +1577,28 @@
           transform: translateY(-10px) rotate(1.6deg);
           filter: drop-shadow(0 0 18px rgba(34, 211, 238, 0.35));
         }
+      }
+      @keyframes builderCircularProgress {
+        0% {
+          stroke-dashoffset: 60;
+          transform: rotate(0deg);
+        }
+        50% {
+          stroke-dashoffset: 15;
+        }
+        100% {
+          stroke-dashoffset: 60;
+          transform: rotate(360deg);
+        }
+      }
+      .builder-run-icon-loading {
+        width: 18px;
+        height: 18px;
+        display: inline-block;
+      }
+      .builder-run-icon-loading svg {
+        animation: builderCircularProgress 1.5s linear infinite;
+        transform-origin: center;
       }
       @keyframes mlElasticPop {
         0%,
@@ -20048,7 +20052,7 @@
                                       </div>
                                   </div>
                               </div>
-                              <button id="builder-quick-run" onclick="openBuilderRunMode(); hideBuilderPanels();" class="w-9 h-9 shrink-0 flex items-center justify-center text-emerald-300 hover:text-white border border-emerald-400/20 rounded-xl bg-emerald-500/10 transition-colors shadow-[0_0_0_1px_rgba(16,185,129,0.06)]">
+                              <button id="builder-quick-run" onclick="handleQuickRunClick()" class="w-9 h-9 shrink-0 flex items-center justify-center text-emerald-300 hover:text-white border border-emerald-400/20 rounded-xl bg-emerald-500/10 transition-colors shadow-[0_0_0_1px_rgba(16,185,129,0.06)]">
                                   <i class="fas fa-play text-sm"></i>
                               </button>
                               <button id="builder-ai-toggle" onclick="toggleBuilderAiPopup()" class="w-9 h-9 shrink-0 flex items-center justify-center text-cyan-300 hover:text-white border border-cyan-400/20 rounded-xl bg-cyan-500/10 transition-colors shadow-[0_0_0_1px_rgba(6,182,212,0.12)]">
@@ -20102,7 +20106,7 @@
                                   <button onclick="saveBuilderDraft(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-floppy-disk text-cyan-400"></i><span>Save Draft<small>Keep work locally</small></span></button>
                                   <button onclick="openBuilderFilePicker('builder-file-input'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-file-import text-cyan-400"></i><span>Import HTML<small>Open local project code</small></span></button>
                                   <button onclick="openBuilderFilePicker('builder-folder-input'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-folder-tree text-emerald-400"></i><span>Import Folder<small>Preview a full website project</small></span></button>
-                                  <button onclick="openBuilderRunMode(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-play text-emerald-400"></i><span>Run Site<small>Open a clean live preview</small></span></button>
+                                  <button id="builder-run-btn" onclick="handleBuilderRunClick()" class="builder-cmd"><i class="fas fa-play text-emerald-400"></i><span>Run Site<small>Open a clean live preview</small></span></button>
                                   <button onclick="downloadBuilderHtmlFile(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-file-export text-cyan-400"></i><span>Export HTML<small>Download polished page file</small></span></button>
                                   <button onclick="openBuilderPublishModal(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-rocket text-emerald-400"></i><span>Publish To Web<small>Push live HTML to GitHub Pages</small></span></button>
                                   <button onclick="downloadBuilderStylesTxt(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-file-lines text-cyan-400"></i><span>Export TXT<small>Download full code as text</small></span></button>
@@ -25397,38 +25401,10 @@
         requestBuilderCanvasWorkspaceSize();
       }
       function syncLayoutScrollAssist() {
+        // Removed: scroll buttons are no longer needed
         document
           .querySelectorAll("#web-canvas .builder-layout-scroll-assist")
           .forEach((node) => node.remove());
-        if (!selectedEl || !isLayoutScrollableCanvasElement(selectedEl)) return;
-        if (!String(selectedEl.id || "").trim()) {
-          selectedEl.id = `el_${Date.now()}`;
-        }
-        const host = getLayoutHostNode(selectedEl);
-        if (!host) return;
-        const wrapper = document.createElement("div");
-        wrapper.className = "builder-layout-scroll-assist";
-        const leftBtn = document.createElement("button");
-        leftBtn.type = "button";
-        leftBtn.className = "builder-layout-scroll-btn";
-        leftBtn.innerHTML = '<i class="fas fa-chevron-left"></i>';
-        leftBtn.addEventListener("pointerdown", (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          scrollBuilderLayoutContainerById(selectedEl.id, -1);
-        });
-        const rightBtn = document.createElement("button");
-        rightBtn.type = "button";
-        rightBtn.className = "builder-layout-scroll-btn";
-        rightBtn.innerHTML = '<i class="fas fa-chevron-right"></i>';
-        rightBtn.addEventListener("pointerdown", (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          scrollBuilderLayoutContainerById(selectedEl.id, 1);
-        });
-        wrapper.appendChild(leftBtn);
-        wrapper.appendChild(rightBtn);
-        selectedEl.appendChild(wrapper);
       }
       function syncLayoutChildSnapAssist() {
         document
@@ -32984,7 +32960,8 @@
           wrapper.className =
             "canvas-element absolute group transition-shadow active:cursor-grabbing";
           if (className) {
-            wrapper.className = `${wrapper.className} ${String(className)}`.trim();
+            wrapper.className =
+              `${wrapper.className} ${String(className)}`.trim();
           }
 
           // 8-Point Resizer Matrix - Create programmatically for reliability
@@ -33282,7 +33259,8 @@
             overflow: wrapperStyle.overflow ?? "visible",
             pointerEvents: wrapperStyle.pointerEvents ?? "auto",
           });
-          if (wrapperStyle.transform) wrapper.style.transform = wrapperStyle.transform;
+          if (wrapperStyle.transform)
+            wrapper.style.transform = wrapperStyle.transform;
           if (wrapperStyle.transformOrigin)
             wrapper.style.transformOrigin = wrapperStyle.transformOrigin;
 
@@ -33370,7 +33348,8 @@
               if (!attrKey) return;
               if (attrKey === "style" || attrKey === "id") return;
               if (attrKey === "class" || attrKey === "className") {
-                wrapper.className = `${wrapper.className} ${String(value || "")}`.trim();
+                wrapper.className =
+                  `${wrapper.className} ${String(value || "")}`.trim();
                 return;
               }
               wrapper.setAttribute(attrKey, String(value));
@@ -36894,6 +36873,69 @@
       }
       function downloadBuilderHtmlFile() {
         exportCanvasToHTML();
+      }
+      async function handleQuickRunClick() {
+        const btn = document.getElementById("builder-quick-run");
+        const icon = btn?.querySelector("i");
+        if (btn && icon) {
+          btn.disabled = true;
+          btn.style.opacity = "0.6";
+          btn.style.pointerEvents = "none";
+          btn.style.cursor = "not-allowed";
+          // Replace icon with circular progress
+          const progressSvg = `<svg class="builder-run-icon-loading" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10" stroke="rgba(52, 211, 153, 0.2)" stroke-dasharray="62.8" stroke-linecap="round"/>
+            <circle cx="12" cy="12" r="10" stroke="#22d3ee" stroke-dasharray="20, 62.8" stroke-linecap="round" stroke-dashoffset="0"/>
+          </svg>`;
+          icon.outerHTML = progressSvg;
+        }
+        try {
+          await openBuilderRunMode();
+        } finally {
+          if (btn) {
+            btn.disabled = false;
+            btn.style.opacity = "1";
+            btn.style.pointerEvents = "auto";
+            btn.style.cursor = "pointer";
+            // Restore original icon
+            const loaderSvg = btn.querySelector("svg.builder-run-icon-loading");
+            if (loaderSvg) {
+              loaderSvg.outerHTML = '<i class="fas fa-play text-sm"></i>';
+            }
+          }
+        }
+        hideBuilderPanels();
+      }
+      async function handleBuilderRunClick() {
+        const btn = document.getElementById("builder-run-btn");
+        const icon = btn?.querySelector("i");
+        if (btn && icon) {
+          btn.disabled = true;
+          btn.style.opacity = "0.7";
+          btn.style.pointerEvents = "none";
+          // Replace icon with circular progress
+          const progressSvg = `<svg class="builder-run-icon-loading" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10" stroke="rgba(52, 211, 153, 0.2)" stroke-dasharray="62.8" stroke-linecap="round"/>
+            <circle cx="12" cy="12" r="10" stroke="#22d3ee" stroke-dasharray="20, 62.8" stroke-linecap="round" stroke-dashoffset="0"/>
+          </svg>`;
+          icon.outerHTML = progressSvg;
+        }
+        try {
+          await openBuilderRunMode();
+        } finally {
+          if (btn) {
+            btn.disabled = false;
+            btn.style.opacity = "1";
+            btn.style.pointerEvents = "auto";
+            // Restore original icon
+            const loaderSvg = btn.querySelector("svg.builder-run-icon-loading");
+            if (loaderSvg) {
+              loaderSvg.outerHTML =
+                '<i class="fas fa-play text-emerald-400"></i>';
+            }
+          }
+        }
+        hideBuilderPanels();
       }
       async function openBuilderRunMode() {
         const prepTask = addAIThinkingTask(".preparing run preview...");
