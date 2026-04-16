@@ -5409,9 +5409,27 @@ app.post("/api/ai/manager", async (req, res) => {
 
     if (mustUseGroq && GROQ_API_KEY) {
       console.log("[AI Manager] ✓ Entering Groq formatter stage (ENFORCED)");
-      try {
-        // Use Groq as strict command formatter - NO explanations, NO JSON, ONLY commands
-        const systemPrompt = `You are an elite web builder command formatter for a professional AI website builder.
+
+      // List of models to try in order
+      const modelsToTry = [
+        "mixtral-8x7b-32768", // Primary
+        "llama-3.3-70b-versatile", // Fallback 1
+        "llama-3.1-8b-instant", // Fallback 2
+        "qwen/qwen3-32b", // Fallback 3
+      ];
+
+      let formattingError = null;
+
+      // Try each model in sequence
+      for (let modelIndex = 0; modelIndex < modelsToTry.length; modelIndex++) {
+        const currentModel = modelsToTry[modelIndex];
+        console.log(
+          `[AI Manager] Attempting model ${modelIndex + 1}/${modelsToTry.length}: ${currentModel}`,
+        );
+
+        try {
+          // Use Groq as strict command formatter - NO explanations, NO JSON, ONLY commands
+          const systemPrompt = `You are an elite web builder command formatter for a professional AI website builder.
 
 Your ONLY task: Convert natural language website requests into COMPLETE, PRODUCTION-READY builder commands.
 
@@ -5435,6 +5453,8 @@ PROPERTY INTELLIGENCE (convert ALL descriptive terms to CSS):
 - "round" → border-radius:50%
 - "sharp left" → border-radius:0 12px 12px 0
 - "sharp right" → border-radius:12px 0 0 12px
+- "sharp left top" → border-radius:0 12px 12px 0
+- "sharp right top" → border-radius:12px 0 0 12px
 - "rounded corners" → border-radius:12px
 - "shadow" → box-shadow:0 8px 24px rgba(0,0,0,0.15)
 - "glass" → backdrop-filter:blur(12px); background:rgba(255,255,255,0.15)
@@ -5446,6 +5466,7 @@ PROPERTY INTELLIGENCE (convert ALL descriptive terms to CSS):
 - "outline dotted" → border:2px dotted
 - "outline solid" → border:2px solid
 - "outline dashed" → border:2px dashed
+- "nice border" → border:2px solid; box-shadow:0 4px 8px rgba(0,0,0,0.1)
 - "left green" → border-left:3px solid green (or border-color if using border shorthand)
 - "hero" → Full hero section with professional defaults
 - "card" → Rounded container with shadow and padding defaults
@@ -5474,6 +5495,9 @@ OUTPUT EXAMPLES (COMPLETE COMMANDS):
 
 User: "Make a round blue button that says Click Me"
 Output: insert button width:120px; height:120px; border-radius:50%; background:#3b82f6; color:white; font-size:16px; font-weight:bold; padding:12px; display:flex; justify-content:center; align-items:center; cursor:pointer; box-shadow:0 4px 12px rgba(0,0,0,0.15); content="Click Me"
+
+User: "nice button with green border and click me text and rounded corners but sharp left top"
+Output: insert button width:140px; height:50px; border:2px solid green; border-radius:0 12px 12px 0; background:white; color:green; font-size:14px; font-weight:bold; padding:12px 24px; cursor:pointer; display:flex; justify-content:center; align-items:center; box-shadow:0 4px 8px rgba(0,0,0,0.1); content="Click Me"
 
 User: "bouncing neon ball"
 Output: insert div width:100px; height:100px; border-radius:50%; background:#00ffff; box-shadow:0 0 20px rgba(0,255,255,0.8); animation:bounce 0.6s infinite ease-in-out;
@@ -5507,82 +5531,126 @@ REMEMBER: Your output is DIRECTLY used by the renderer. Missing properties = bro
 ALWAYS include width/height, colors, spacing, AND content if mentioned.
 For background requests, ALWAYS output valid update-background commands with image description.`;
 
-        const commandRequest = `User input: "${userInput}"
+          const commandRequest = `User input: "${userInput}"
 
 Generate the COMPLETE builder command with ALL properties. Output ONLY the raw command - no explanations or extra text.`;
 
-        const groqResponse = await nodeFetch(
-          "https://api.groq.com/openai/v1/chat/completions",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${GROQ_API_KEY}`,
+          console.log("[AI Formatter] Sending to Groq API:", {
+            model: currentModel,
+            userInputLength: userInput.length,
+            systemPromptLength: systemPrompt.length,
+          });
+
+          const groqResponse = await nodeFetch(
+            "https://api.groq.com/openai/v1/chat/completions",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${GROQ_API_KEY}`,
+              },
+              body: JSON.stringify({
+                model: currentModel,
+                temperature: 0.2,
+                max_tokens: 600,
+                messages: [
+                  { role: "system", content: systemPrompt },
+                  { role: "user", content: commandRequest },
+                ],
+              }),
             },
-            body: JSON.stringify({
-              model: "mixtral-8x7b-32768",
-              temperature: 0.2,
-              max_tokens: 600,
-              messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: commandRequest },
-              ],
-            }),
-          },
-        );
+          );
 
-        if (groqResponse.ok) {
-          const groqPayload = await groqResponse.json();
-          commandOutput = String(
-            groqPayload?.choices?.[0]?.message?.content || "",
-          ).trim();
+          if (groqResponse.ok) {
+            const groqPayload = await groqResponse.json();
+            commandOutput = String(
+              groqPayload?.choices?.[0]?.message?.content || "",
+            ).trim();
 
-          // Parse and validate the command
-          if (commandOutput && commandOutput.startsWith("insert")) {
-            formattedCommand = commandOutput;
-            console.log("[AI Formatter] Stage 1 Complete - Command:", {
-              original: userInput,
-              formatted: formattedCommand,
-            });
-          } else if (
-            commandOutput &&
-            commandOutput.startsWith("update-background")
-          ) {
-            formattedCommand = commandOutput;
-            console.log(
-              "[AI Formatter] Stage 1 Complete - Background Command:",
-              {
+            // Parse and validate the command
+            if (commandOutput && commandOutput.startsWith("insert")) {
+              formattedCommand = commandOutput;
+              console.log("[AI Formatter] Stage 1 Complete - Command:", {
                 original: userInput,
                 formatted: formattedCommand,
-              },
-            );
+              });
+            } else if (
+              commandOutput &&
+              commandOutput.startsWith("update-background")
+            ) {
+              formattedCommand = commandOutput;
+              console.log(
+                "[AI Formatter] Stage 1 Complete - Background Command:",
+                {
+                  original: userInput,
+                  formatted: formattedCommand,
+                },
+              );
+            } else {
+              console.error(
+                "[AI Formatter] INVALID FORMAT - Groq returned non-command:",
+                commandOutput.substring(0, 100),
+              );
+              return res.status(500).json({
+                success: false,
+                message:
+                  "Groq AI returned invalid format. Expected builder command.",
+                receivedFormat: commandOutput.substring(0, 200),
+              });
+            }
           } else {
+            // Handle Groq API errors (4xx, 5xx responses) - try next model
+            const errorText = await groqResponse
+              .text()
+              .catch(() => "Unknown error");
+            const statusCode = groqResponse.status;
+
+            formattingError = {
+              model: currentModel,
+              status: statusCode,
+              statusText: groqResponse.statusText,
+              body: errorText.substring(0, 200),
+            };
+
             console.error(
-              "[AI Formatter] INVALID FORMAT - Groq returned non-command:",
-              commandOutput.substring(0, 100),
+              `[AI Formatter] Model ${currentModel} failed (HTTP ${statusCode}):`,
+              formattingError,
             );
-            return res.status(500).json({
-              success: false,
-              message:
-                "Groq AI returned invalid format. Expected builder command.",
-              receivedFormat: commandOutput.substring(0, 200),
-            });
+
+            // Continue to next model instead of failing immediately
+            continue;
           }
+        } catch (apiErr) {
+          formattingError = {
+            model: currentModel,
+            error: apiErr.message,
+          };
+
+          console.error(
+            `[AI Formatter] Model ${currentModel} error:`,
+            apiErr.message,
+          );
+
+          // Continue to next model instead of failing immediately
+          continue;
         }
-      } catch (apiErr) {
-        console.error("[AI Formatter] Groq API error:", apiErr.message);
-        return res.status(500).json({
-          success: false,
-          message: "Groq API error: " + apiErr.message,
-        });
+
+        // If we got here, this model succeeded - break out of retry loop
+        break;
       }
 
-      // ENFORCE: If we reach here after Groq attempt, it MUST have a formatted command
+      // If we tried all models and none succeeded, return error
       if (!formattedCommand) {
-        console.error("[AI Formatter] Groq did not produce a valid command");
+        console.error(
+          "[AI Formatter] All models failed. Last error:",
+          formattingError,
+        );
         return res.status(500).json({
           success: false,
-          message: "Groq formatter failed to produce a valid command.",
+          message:
+            "All AI formatter models failed. Please try again in a moment.",
+          lastError: formattingError,
+          triedModels: modelsToTry,
         });
       }
     }
