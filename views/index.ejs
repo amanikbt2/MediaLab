@@ -33126,6 +33126,11 @@
           deleteBtn.addEventListener("mouseover", () => { deleteBtn.style.background = "#7f1d1d"; });
           deleteBtn.addEventListener("mouseout", () => { deleteBtn.style.background = "#1e293b"; });
           
+          // Attach drag handle listener BEFORE adding to DOM
+          dragHandle.addEventListener("pointerdown", (e) => {
+            handleObjectInteraction(e, wrapper);
+          });
+          
           dragDiv.appendChild(dragHandle);
           dragDiv.appendChild(inspectorBtn);
           dragDiv.appendChild(deleteBtn);
@@ -33184,14 +33189,6 @@
               handleObjectInteraction(e, wrapper);
             });
           });
-
-          // Attach drag handle listener
-          const dragHandle = wrapper.querySelector(".drag-handle");
-          if (dragHandle) {
-            dragHandle.addEventListener("pointerdown", (e) => {
-              handleObjectInteraction(e, wrapper);
-            });
-          }
 
           // Set wrapper HTML with EXACT same structure as addObject()
           // wrapper.innerHTML = `
