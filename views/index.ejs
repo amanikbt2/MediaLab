@@ -32998,12 +32998,12 @@
           handles.forEach((h) => {
             const handle = document.createElement("div");
             handle.className = `resizer ${h}`;
-            // Use inline styles to ensure they're applied to dynamically-created elements
+            // Use inline styles for appearance only - let CSS handle positioning
             Object.assign(handle.style, {
               position: "absolute",
               width: "8px",
               height: "8px",
-              backgroundColor: "#06b6d4", // cyan-500
+              backgroundColor: "#06b6d4",
               border: "1px solid white",
               borderRadius: "50%",
               opacity: "0",
@@ -33013,35 +33013,8 @@
               cursor: h === "tl" || h === "br" ? "nwse-resize" : 
                       h === "tr" || h === "bl" ? "nesw-resize" :
                       h === "mt" || h === "mb" ? "ns-resize" : "ew-resize"
+              // NOTE: Positioning (top/bottom/left/right/transform) handled by CSS class rules
             });
-
-            // Position each handle
-            switch(h) {
-              case "tl": handle.style.top = "-5px"; handle.style.left = "-5px"; break;
-              case "tr": handle.style.top = "-5px"; handle.style.right = "-5px"; break;
-              case "bl": handle.style.bottom = "-5px"; handle.style.left = "-5px"; break;
-              case "br": handle.style.bottom = "-5px"; handle.style.right = "-5px"; break;
-              case "mt": 
-                handle.style.top = "-5px"; 
-                handle.style.left = "50%"; 
-                handle.style.transform = "translateX(-50%)"; 
-                break;
-              case "mb": 
-                handle.style.bottom = "-5px"; 
-                handle.style.left = "50%"; 
-                handle.style.transform = "translateX(-50%)"; 
-                break;
-              case "ml": 
-                handle.style.left = "-5px"; 
-                handle.style.top = "50%"; 
-                handle.style.transform = "translateY(-50%)"; 
-                break;
-              case "mr": 
-                handle.style.right = "-5px"; 
-                handle.style.top = "50%"; 
-                handle.style.transform = "translateY(-50%)"; 
-                break;
-            }
 
             handlesFragment.appendChild(handle);
           });
@@ -33228,6 +33201,7 @@
 
           // Set wrapper styles ONLY for positioning (like addObject)
           Object.assign(wrapper.style, {
+            position: "absolute",
             width: width || "260px",
             height: height || "100px",
             left: posLeft,
@@ -33235,8 +33209,8 @@
             zIndex: "1",
             opacity: "1",
             visibility: "visible",
-            overflow: "visible", // CRITICAL: Ensure handles are not clipped
-            pointerEvents: "auto", // CRITICAL: Allow pointer events on wrapper
+            overflow: "visible",
+            pointerEvents: "auto",
           });
 
           // Set style attribute as string for persistence and export
