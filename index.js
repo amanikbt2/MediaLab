@@ -5443,12 +5443,34 @@ CRITICAL RULES:
 * Output ONLY valid builder commands - NOTHING ELSE
 * NO explanations, markdown, code blocks, or conversational text
 * NO JSON or metadata - raw commands only
+* NO thinking tags like <think>, <reason>, etc. - direct command output ONLY
 * If input is ambiguous, PREDICT what user meant and ADD IT
 * Infer missing professional defaults automatically
 * ALWAYS include ALL visual properties described by user
 * ALWAYS include sizing (width/height or at least one dimension)
 * ALWAYS include content (text) if mentioned
 * NEVER output incomplete commands
+
+TYPO DETECTION & CORRECTION (CRITICAL):
+When user input contains likely typos, CORRECT them intelligently:
+- "sder" → "slider" (missing 'li')
+- "slier" → "slider" (transposed letters)
+- "pickr" → "picker" (abbreviated)
+- "toogle" → "toggle" (misspelled)
+- "collor" → "color" (misspelled)
+- "expndbl" → "expandable" (abbreviated/misspelled)
+
+REASONING APPROACH:
+1. FIRST: Check if input contains recognizable words (even with typos)
+2. SECOND: Apply fuzzy matching - find close component/element names
+3. THIRD: Use context to disambiguate (e.g., "yellow WORD" likely describes a color property, not the word itself)
+4. FINALLY: Output command IMMEDIATELY - no intermediate steps or thinking
+
+OUTPUT IMMEDIACY (CRITICAL):
+- First word of output MUST be "insert" or "update-background"
+- Do NOT prefix with explanations, reasoning, or thinking
+- Do NOT output XML tags, markdown, or code blocks
+- Commands must start immediately: "insert div ...", "insert component:...", "update-background ..."
 
 COMMAND SYNTAX (STRICT):
 insert <element_type> <property>; <property>; <property>; <property>; content="text"
@@ -5477,6 +5499,158 @@ PROPERTY INTELLIGENCE (convert ALL descriptive terms to CSS):
 - "hero" → Full hero section with professional defaults
 - "card" → Rounded container with shadow and padding defaults
 - "nice" → Polished look: shadow + rounded corners + padding
+
+SEMANTIC COMPONENT RECOGNITION (HIGHEST PRIORITY - CHECK FIRST):
+IMPORTANT: Before falling back to generic div/button styling, ALWAYS check for semantic component keywords.
+If user is asking for a COMPONENT, output "insert component:TYPE" format ONLY.
+
+COMPONENT KEYWORDS TO RECOGNIZE (reason about user intent):
+- "slider", "range input", "range slider", "slide", "long slider", "input range", "sliding control" → insert component:slider
+- "color picker", "colorpicker", "pick color", "color selector", "color chooser", "color input" → insert component:color-picker  
+- "toggle", "switch", "on/off", "on-off", "checkbox toggle", "toggle switch" → insert component:toggle
+- "spinner", "loader", "loading", "loading spinner", "spin", "loader animation" → insert component:spinner
+- "modal", "dialog", "popup", "modal dialog", "pop-up window" → insert component:modal
+- "accordion", "expandable", "collapsible" → insert component:accordion
+- "range display", "dual range", "range with preview" → insert component:range-display
+- "tabs", "tabbed", "tabbed interface" → insert component:tabs
+
+SVG SHAPE RECOGNITION (HIGHEST PRIORITY - BEFORE COMPONENTS):
+IMPORTANT: If user asks for complex shapes or artistic elements, use SVG format instead of HTML.
+SVG format: insert svg:<shape> <styling>
+
+SHAPE KEYWORDS REQUIRING SVG:
+- "star", "stars", "starfield" → insert svg:star fill:#FFD700; size:100px; points:5
+- "bird", "birds", "flying bird", "dove" → insert svg:bird fill:#333; size:80px
+- "heart", "love", "heart shape" → insert svg:heart fill:#FF69B4; size:100px
+- "flower", "flowers", "rose", "daisy" → insert svg:flower fill:#FF1493; size:120px
+- "geometric", "polygon", "hexagon", "pentagon" → insert svg:polygon sides:6; fill:#3b82f6; size:100px
+- "wave", "wavy", "ocean wave" → insert svg:wave fill:#0088cc; size:200px; amplitude:20px
+- "spiral", "spiral design" → insert svg:spiral stroke:#FF6B6B; size:150px; turns:5
+- "mandala", "fractal", "kaleidoscope" → insert svg:mandala fill:#9C27B0; size:200px
+- "lightning", "bolt", "thunder" → insert svg:lightning stroke:#FFD700; size:100px
+- "gear", "cog", "machine" → insert svg:gear fill:#666; size:100px; teeth:12
+- "tree", "forest" → insert svg:tree fill:#228B22; size:150px; branches:5
+- "circuit", "tech pattern" → insert svg:circuit stroke:#00FF00; size:150px
+- "molecule", "atom" → insert svg:molecule fill:#FF6B6B; size:100px; electrons:3
+- "yin yang", "balance" → insert svg:yinyang fill:#000; size:100px
+
+3D ELEMENT RECOGNITION:
+If user mentions 3D, add CSS transforms:
+- "3d cube", "cube" → insert svg:cube; perspective:1000px; transform:rotateX(20deg) rotateY(20deg) rotateZ(0deg)
+- "3d pyramid" → insert svg:pyramid; perspective:1000px; transform:rotateX(25deg) rotateY(0deg)
+- "3d sphere", "globe" → insert svg:sphere; perspective:1000px; transform:rotateX(10deg) rotateY(10deg)
+- "3d box" → CSS transforms: perspective; transform-style:preserve-3d
+- "rotating", "spinning", "3d animation" → Add: animation:rotate3d 3s infinite linear
+
+EXAMPLE SVG REQUESTS:
+User: "insert a star"
+Output: insert svg:star fill:#FFD700; size:100px; points:5
+
+User: "make a blue heart"
+Output: insert svg:heart fill:#3b82f6; size:100px
+
+User: "draw a flying bird"
+Output: insert svg:bird fill:#333; size:80px; animation:flight 3s infinite
+
+User: "3d rotating cube"
+Output: insert svg:cube perspective:1000px; transform:rotateX(20deg) rotateY(20deg); animation:rotate3d 3s infinite
+
+User: "complex flower with animation"
+Output: insert svg:flower fill:#FF1493; size:120px; animation:bloom 2s ease-in-out infinite
+
+CRITICAL SVG RULES:
+1. If user asks for shape/artistic element → SVG instead of HTML div
+2. Prefer SVG for: star, bird, heart, flower, geometric patterns, waves, spirals, etc.
+3. Only use SVG when appropriate - simple rectangles/circles still use HTML/CSS
+4. For 3D: Use CSS perspective and transform-3d
+5. Always add size:XXXpx property for SVG shapes
+
+- "tabs", "tabbed", "tabbed interface" → insert component:tabs
+
+CRITICAL REASONING RULES:
+1. If ANY semantic keyword is mentioned, output: insert component:<type>
+2. NEVER convert component types to generic div + CSS styling
+3. Ambiguous input like "long slider" → YES, it's asking for a SLIDER component
+4. Example: "insert long slider" → Output MUST BE: "insert component:slider" (NOT "insert div width:... ")
+5. Understand that "give me a color picker" means they want THE COLOR PICKER COMPONENT, not a styled div
+6. CRITICAL: Only use "insert component:" format when NO styling is mentioned
+7. If user mentions ANY styling (color, size, appearance, etc.), output regular "insert div..." format instead
+8. Output priority: component type ONLY if unstyled, else full styled element
+
+COMPONENT vs STYLED ELEMENT DECISION:
+- "insert slider" → insert component:slider (NO styling mentioned)
+- "insert yellow slider" → insert div width:400px; height:50px; background:yellow; ... (styled element!)
+- "long slider" → insert div width:500px; height:50px; background:#f0f0f0; ... (styled element!)
+- "color picker" → insert component:color-picker (NO styling)
+- "blue color picker" → insert div (custom styled version, NOT component)
+
+CRITICAL RULE - Component vs Styled Decision:
+IF user mentions any styling descriptors: yellow, long, short, big, small, round, blue, red, green, gradient, shadow, border, outline, smooth, rough, glass, neon, etc.
+THEN: Output regular "insert div..." command with FULL styling instead of "insert component:..."
+OTHERWISE: Output "insert component:..." for barebone component
+
+CORRECT EXAMPLES:
+
+User: "insert long slider"
+Output: insert div width:500px; height:50px; background:#f0f0f0; border-radius:8px; padding:4px; display:flex; align-items:center; cursor:pointer;
+
+User: "give me a color picker"
+Output: insert component:color-picker
+
+User: "add a toggle switch for dark mode"
+Output: insert component:toggle
+
+User: "I need a loading spinner"
+Output: insert component:spinner
+
+User: "create a modal popup"
+Output: insert component:modal
+
+User: "blue slider with value 50"
+Output: insert div width:300px; height:40px; background:linear-gradient(90deg, #3b82f6 0%, #2563eb 100%); border-radius:8px; padding:8px; box-shadow:0 2px 8px rgba(0,0,0,0.15);
+
+User: "yellow slider"
+Output: insert div width:400px; height:50px; background:linear-gradient(135deg, #f7dc6f 0%, #f2c464 100%); border-radius:8px; padding:4px; display:flex; align-items:center;
+
+User: "add expandable sections"
+Output: insert component:accordion
+
+HANDLING AMBIGUOUS/UNRECOGNIZED REQUESTS (IMPORTANT):
+When user input is unclear or uses UNKNOWN keywords, REASON about their likely intent:
+
+RULE 1: Only output components that ACTUALLY EXIST
+Valid components ONLY: slider, color-picker, toggle, spinner, modal, accordion, range-display, tabs
+NEVER create "insert component:sun", "insert component:wddig", or any other non-existent component
+If user mentions an unknown keyword, THINK about what they likely want instead
+
+RULE 2: Disambiguate vague requests by thinking about context
+- "insert sun" → LIKELY INTENT: They want a yellow circular shape (sun symbol) OR sunset background
+  → NOT a component, they want a styled element
+  → Output: insert div width:100px; height:100px; border-radius:50%; background:#FFD700; box-shadow:0 0 20px rgba(255,215,0,0.8)
+
+- "insert long" → LIKELY INTENT: They want a long element, unclear type
+  → Assume: long button
+  → Output: insert button width:400px; height:50px; background:#3b82f6; color:white; border-radius:8px; padding:12px; cursor:pointer; content="Button"
+
+- "insert wddig card" → LIKELY INTENT: Could be typo for "widget" OR a decorative card
+  → If unclear word, default to card/container
+  → Output: insert div width:300px; height:200px; background:white; border-radius:12px; padding:20px; box-shadow:0 4px 12px rgba(0,0,0,0.1)
+
+- "insert perfect wddig card" → LIKELY INTENT: They want a nice-looking card with professional styling
+  → Typo or unclear word shouldn't block creation
+  → Output: insert div width:300px; height:200px; background:white; border-radius:12px; padding:20px; box-shadow:0 4px 12px rgba(0,0,0,0.1); display:flex; flex-direction:column; gap:12px
+
+RULE 3: Smart fallback for single-word unclear inputs
+If user says just "insert WORD" and WORD is unknown:
+1. Check if it matches a known component (slider, toggle, spinner, etc.)
+2. Check if it's an adjective describing a layout (long, round, square, small, big)
+3. Check if it describes an object/shape (sun, star, circle, box, card)
+4. If still unclear, create a sensible default container
+
+RULE 4: Always add reasonable defaults
+- Every element needs width, height, and basic styling
+- Never output incomplete commands
+- If properties are missing, add professional defaults
 
 DIMENSION DEFAULTS:
 - If "80px" mentioned → width:80px; height:80px (square)
@@ -5592,17 +5766,44 @@ Generate the COMPLETE builder command with ALL properties. Output ONLY the raw c
                   formatted: formattedCommand,
                 },
               );
+            } else if (
+              commandOutput &&
+              commandOutput.startsWith("insert component:")
+            ) {
+              // NEW: Handle semantic component format
+              formattedCommand = commandOutput;
+              console.log(
+                "[AI Formatter] Stage 1 Complete - Component Command:",
+                {
+                  original: userInput,
+                  formatted: formattedCommand,
+                },
+              );
             } else {
               console.error(
                 "[AI Formatter] INVALID FORMAT - Groq returned non-command:",
                 commandOutput.substring(0, 100),
               );
-              return res.status(500).json({
-                success: false,
-                message:
-                  "Groq AI returned invalid format. Expected builder command.",
-                receivedFormat: commandOutput.substring(0, 200),
-              });
+              // FALLBACK: Try to correct the input and generate command locally
+              console.log(
+                "[AI Formatter] Attempting fallback: local typo correction and command generation",
+              );
+              const correctedInput = applyTypoCorrection(userInput);
+              const fallbackCommand = generateFallbackCommand(correctedInput);
+              if (fallbackCommand) {
+                formattedCommand = fallbackCommand;
+                console.log(
+                  "[AI Formatter] Fallback Success - Generated Command:",
+                  {
+                    original: userInput,
+                    corrected: correctedInput,
+                    formatted: formattedCommand,
+                  },
+                );
+                break; // Exit retry loop - we have a command
+              }
+              // If fallback fails, continue to next model
+              continue;
             }
           } else {
             // Handle Groq API errors (4xx, 5xx responses) - try next model
@@ -5818,10 +6019,17 @@ Generate the COMPLETE builder command with ALL properties. Output ONLY the raw c
       parsedCommand = parseBuilderCommand(formattedCommand);
       if (parsedCommand && isValidBuilderCommand(parsedCommand)) {
         elementSpec = commandToElementSpec(parsedCommand);
-        console.log("[AI Manager] Parsed Command:", {
-          type: parsedCommand.elementType,
-          properties: Object.keys(parsedCommand.properties),
-        });
+        // Log appropriately based on command type
+        if (parsedCommand.type === "insert-component") {
+          console.log("[AI Manager] Parsed Component Command:", {
+            componentType: parsedCommand.componentType,
+          });
+        } else {
+          console.log("[AI Manager] Parsed Command:", {
+            type: parsedCommand.elementType,
+            properties: Object.keys(parsedCommand.properties || {}),
+          });
+        }
       }
     }
 
@@ -5849,6 +6057,180 @@ Generate the COMPLETE builder command with ALL properties. Output ONLY the raw c
   }
 });
 
+// FALLBACK FUNCTIONS FOR TYPO CORRECTION & RECOVERY
+
+/**
+ * Correct common typos in user input
+ * Handles: missing letters, transposed letters, abbreviations
+ */
+function applyTypoCorrection(input = "") {
+  let corrected = String(input || "").trim();
+
+  // Common component typos
+  const typoMap = {
+    sder: "slider",
+    slier: "slider",
+    slide: "slider",
+    pickr: "picker",
+    toogle: "toggle",
+    collor: "color",
+    colr: "color",
+    expndbl: "expandable",
+    acordion: "accordion",
+    accorion: "accordion",
+    spinr: "spinner",
+    spiner: "spinner",
+    modl: "modal",
+    dial: "dialog",
+    popup: "modal",
+    laoder: "loader",
+    load: "loader",
+  };
+
+  // Replace typos
+  for (const [typo, correct] of Object.entries(typoMap)) {
+    const regex = new RegExp(`\\b${typo}\\b`, "gi");
+    corrected = corrected.replace(regex, correct);
+  }
+
+  return corrected;
+}
+
+/**
+ * Generate a fallback command when AI fails
+ * Uses pattern matching to determine what user likely wanted
+ */
+function generateFallbackCommand(input = "") {
+  const text = String(input || "")
+    .toLowerCase()
+    .trim();
+
+  // SVG Shape keywords - CHECK FIRST (most specific)
+  const svgShapes = [
+    "star",
+    "heart",
+    "bird",
+    "flower",
+    "polygon",
+    "wave",
+    "spiral",
+    "mandala",
+    "lightning",
+    "gear",
+    "tree",
+    "cube",
+    "pyramid",
+    "sphere",
+    "circuit",
+    "yinyang",
+    "3d",
+  ];
+
+  for (const shape of svgShapes) {
+    if (text.includes(shape)) {
+      // Extract color from prompt
+      let fill = "#3b82f6";
+      if (text.includes("gold") || text.includes("yellow")) fill = "#FFD700";
+      if (text.includes("red")) fill = "#ef4444";
+      if (text.includes("green")) fill = "#10b981";
+      if (text.includes("blue")) fill = "#3b82f6";
+      if (text.includes("purple")) fill = "#8b5cf6";
+      if (text.includes("pink")) fill = "#ec4899";
+      if (text.includes("orange")) fill = "#f97316";
+
+      // Extract size
+      let size = "100px";
+      if (
+        text.includes("big") ||
+        text.includes("large") ||
+        text.includes("huge")
+      )
+        size = "200px";
+      if (text.includes("small") || text.includes("tiny")) size = "50px";
+
+      // For 3D, add perspective transforms
+      if (shape === "3d" || text.includes("3d")) {
+        // Find the actual shape in the text
+        for (const actualShape of svgShapes) {
+          if (actualShape !== "3d" && text.includes(actualShape)) {
+            return `insert svg:${actualShape} fill:${fill}; size:${size}; transform:perspective(1000px) rotateX(20deg) rotateY(20deg);`;
+          }
+        }
+        return `insert svg:cube fill:${fill}; size:${size}; transform:perspective(1000px) rotateX(20deg) rotateY(20deg);`;
+      }
+
+      return `insert svg:${shape} fill:${fill}; size:${size};`;
+    }
+  }
+
+  // Component keywords check (after SVG shapes)
+  const components = [
+    { keyword: "slider", type: "component:slider" },
+    { keyword: "range", type: "component:slider" },
+    { keyword: "color picker", type: "component:color-picker" },
+    { keyword: "color", type: "component:color-picker" },
+    { keyword: "toggle", type: "component:toggle" },
+    { keyword: "switch", type: "component:toggle" },
+    { keyword: "spinner", type: "component:spinner" },
+    { keyword: "loader", type: "component:spinner" },
+    { keyword: "loading", type: "component:spinner" },
+    { keyword: "modal", type: "component:modal" },
+    { keyword: "dialog", type: "component:modal" },
+    { keyword: "accordion", type: "component:accordion" },
+    { keyword: "expandable", type: "component:accordion" },
+  ];
+
+  // Check for component
+  for (const comp of components) {
+    if (text.includes(comp.keyword)) {
+      // Check if styling is mentioned
+      const stylingKeywords = [
+        "yellow",
+        "blue",
+        "red",
+        "green",
+        "black",
+        "white",
+        "long",
+        "short",
+        "big",
+        "small",
+        "round",
+        "square",
+        "shadow",
+        "gradient",
+        "outline",
+        "border",
+      ];
+      const hasStyle = stylingKeywords.some((kw) => text.includes(kw));
+
+      if (hasStyle) {
+        // User wants styled element, not pure component
+        const color = text.includes("yellow")
+          ? "#FFD700"
+          : text.includes("blue")
+            ? "#3b82f6"
+            : text.includes("red")
+              ? "#ef4444"
+              : text.includes("green")
+                ? "#10b981"
+                : "#f5f5f5";
+
+        const width = text.includes("long") ? "500px" : "300px";
+        const height = text.includes("tall") ? "200px" : "50px";
+
+        return `insert div width:${width}; height:${height}; background:${color}; border-radius:8px; padding:8px; display:flex; align-items:center; cursor:pointer;`;
+      } else {
+        // Pure component request
+        return `insert component:${comp.type.split(":")[1]}`;
+      }
+    }
+  }
+
+  // Default fallback for unknown input
+  return `insert div width:300px; height:200px; background:#f5f5f5; border-radius:8px; padding:20px; display:flex; align-items:center; justify-content:center;`;
+}
+
 // STAGE 2: Command Parser & Validator
 // Parse strict builder commands into actionable specifications
 
@@ -5858,6 +6240,48 @@ function parseBuilderCommand(commandText = "") {
   // Check for background/update commands first
   if (text.startsWith("update-background")) {
     return parseBackgroundCommand(text);
+  }
+
+  // NEW: Check for SVG commands: "insert svg:star" etc
+  if (text.includes("svg:")) {
+    const match = text.match(/insert\s+svg:(\w+(?:-\w+)*)(.*)/i);
+    if (match) {
+      const [, shapeType, properties] = match;
+      // Parse properties: fill:#FFD700; size:100px; etc
+      const props = {};
+      const propPairs = properties.split(";").filter((p) => p.trim());
+      propPairs.forEach((pair) => {
+        const [key, value] = pair
+          .trim()
+          .split(":")
+          .map((s) => s.trim());
+        if (key && value) {
+          props[key] = value;
+        }
+      });
+      return {
+        type: "insert-svg",
+        shapeType: shapeType.toLowerCase(),
+        properties: props,
+        rawCommand: text,
+        isValid: true,
+      };
+    }
+  }
+
+  // Check for component commands: "insert component:slider" etc
+  if (text.includes("component:")) {
+    const match = text.match(/insert\s+component:(\w+(?:-\w+)*)(.*)/i);
+    if (match) {
+      const [, componentType, extras] = match;
+      return {
+        type: "insert-component",
+        componentType: componentType.toLowerCase(),
+        rawCommand: text,
+        isValid: true,
+        extras: extras.trim(), // Additional styling if provided
+      };
+    }
   }
 
   // Check if it starts with "insert"
@@ -6032,7 +6456,69 @@ function isValidBuilderCommand(parsed) {
     return parsed.isValid && parsed.target && parsed.properties;
   }
 
-  // Handle insert commands
+  // NEW: Handle SVG commands - validate shape type exists
+  if (parsed.type === "insert-svg") {
+    const validShapes = [
+      "star",
+      "heart",
+      "bird",
+      "flower",
+      "polygon",
+      "wave",
+      "spiral",
+      "mandala",
+      "lightning",
+      "gear",
+      "tree",
+      "circuit",
+      "molecule",
+      "yinyang",
+      "cube",
+      "pyramid",
+      "sphere",
+    ];
+
+    const shapeType = String(parsed.shapeType || "").toLowerCase();
+    const isValidShape = validShapes.includes(shapeType);
+
+    if (!isValidShape) {
+      console.warn(
+        `[AI Manager] Invalid SVG shape: "${parsed.shapeType}". Expected one of: ${validShapes.join(", ")}`,
+      );
+      return false;
+    }
+
+    return parsed.isValid && parsed.shapeType;
+  }
+
+  // Handle component commands - validate that component type actually exists
+  if (parsed.type === "insert-component") {
+    // List of valid component types
+    const validComponents = [
+      "slider",
+      "color-picker",
+      "toggle",
+      "spinner",
+      "modal",
+      "accordion",
+      "range-display",
+      "tabs",
+    ];
+
+    const componentType = String(parsed.componentType || "").toLowerCase();
+    const isValidComponent = validComponents.includes(componentType);
+
+    if (!isValidComponent) {
+      console.warn(
+        `[AI Manager] Invalid component type: "${parsed.componentType}". Expected one of: ${validComponents.join(", ")}`,
+      );
+      return false; // Reject invalid component types
+    }
+
+    return parsed.isValid && parsed.componentType;
+  }
+
+  // Handle regular insert commands
   if (!parsed.isValid) return false;
   if (!parsed.elementType) return false;
   if (!parsed.properties || Object.keys(parsed.properties).length === 0)
@@ -6064,7 +6550,31 @@ function commandToElementSpec(parsed) {
     };
   }
 
-  // Handle insert commands
+  // NEW: Handle SVG commands - these will be generated with generateSVGShape in EJS
+  if (parsed.type === "insert-svg") {
+    return {
+      isSVG: true,
+      shapeType: parsed.shapeType,
+      label: parsed.shapeType,
+      properties: parsed.properties,
+      rawCommand: parsed.rawCommand,
+      isFromCommand: true,
+    };
+  }
+
+  // Handle component commands - these will be processed by buildDeterministicInsertSpec in the EJS
+  if (parsed.type === "insert-component") {
+    return {
+      isComponent: true,
+      componentType: parsed.componentType,
+      label: parsed.componentType,
+      extras: parsed.extras,
+      rawCommand: parsed.rawCommand,
+      isFromCommand: true,
+    };
+  }
+
+  // Handle regular insert commands
   return {
     type: parsed.elementType,
     label: parsed.elementType,

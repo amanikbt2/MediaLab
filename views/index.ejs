@@ -32915,6 +32915,27 @@
           case "input":
             html = `<input type="text" ${attrString} style="${styleString}" placeholder="${contentText}">`;
             break;
+          case "checkbox":
+            html = `<input type="checkbox" ${attrString} style="${styleString}">`;
+            break;
+          case "radio":
+            html = `<input type="radio" ${attrString} style="${styleString}">`;
+            break;
+          case "color":
+            html = `<input type="color" value="${contentText || "#3b82f6"}" ${attrString} style="${styleString}">`;
+            break;
+          case "range":
+          case "slider":
+            html = `<input type="range" min="0" max="100" value="50" ${attrString} style="${styleString}">`;
+            break;
+          case "toggle":
+          case "switch":
+            html = `<label style="position: relative; display: inline-flex; cursor: pointer; ${styleString}"><input type="checkbox" style="display: none;" ${attrString}><span style="position: relative; display: inline-block; width: 56px; height: 32px; background-color: #ccc; border-radius: 32px; transition: 0.3s;"></span></label>`;
+            break;
+          case "spinner":
+          case "loader":
+            html = `<div style="display: flex; align-items: center; justify-content: center; ${styleString}"><svg viewBox="0 0 50 50" style="width: 40px; height: 40px; animation: spin 1s linear infinite;"><circle cx="25" cy="25" r="20" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="31.4 94.2" stroke-linecap="round"/></svg></div>`;
+            break;
           case "image":
           case "img":
             html = `<img src="https://via.placeholder.com/300x200" ${attrString} style="${styleString}" alt="${contentText}">`;
@@ -32925,10 +32946,6 @@
           case "heading":
           case "title":
             html = `<h3 ${attrString} style="${styleString}">${contentText}</h3>`;
-            break;
-          case "text":
-          case "p":
-            html = `<p ${attrString} style="${styleString}">${contentText}</p>`;
             break;
           case "text":
           case "p":
@@ -32945,10 +32962,196 @@
       }
 
       /**
+       * Generate intelligent SVG shapes - handles predefined shapes and AI-generated custom paths
+       * Can generate: star, heart, bird, flower, complex shapes, and custom paths from description
+       */
+      function generateSVGShape(shapeType = "", properties = {}) {
+        const fill = properties.fill || "#3b82f6";
+        const size = properties.size || "100px";
+        const stroke = properties.stroke || "none";
+        const strokeWidth = properties.strokeWidth || "2";
+        const customPath = properties.customPath || null;
+        let html = "";
+
+        // If AI generated a custom SVG path, use it directly
+        if (customPath) {
+          html = `<svg viewBox="0 0 100 100" width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
+            ${customPath}
+          </svg>`;
+          return { html, width: size, height: size, isInlineSVG: true };
+        }
+
+        switch (shapeType.toLowerCase()) {
+          case "star":
+            html = `<svg viewBox="0 0 100 100" width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
+              <polygon points="50,10 61,40 92,40 67,60 78,90 50,70 22,90 33,60 8,40 39,40" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"/>
+            </svg>`;
+            break;
+
+          case "heart":
+            html = `<svg viewBox="0 0 100 100" width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
+              <path d="M50,90 C20,70 5,55 5,40 C5,25 15,15 25,15 C35,15 45,25 50,35 C55,25 65,15 75,15 C85,15 95,25 95,40 C95,55 80,70 50,90 Z" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"/>
+            </svg>`;
+            break;
+
+          case "bird":
+            html = `<svg viewBox="0 0 100 100" width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
+              <ellipse cx="50" cy="50" rx="30" ry="25" fill="${fill}"/>
+              <circle cx="65" cy="45" r="8" fill="${fill}"/>
+              <polygon points="70,45 80,40 75,50" fill="${fill}"/>
+              <path d="M30,60 Q20,65 15,70" stroke="${fill}" stroke-width="${strokeWidth}" fill="none"/>
+              <path d="M70,60 Q80,65 85,70" stroke="${fill}" stroke-width="${strokeWidth}" fill="none"/>
+            </svg>`;
+            break;
+
+          case "flower":
+            html = `<svg viewBox="0 0 100 100" width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="50" cy="50" r="15" fill="#FFD700"/>
+              <circle cx="50" cy="20" r="12" fill="${fill}"/>
+              <circle cx="75" cy="30" r="12" fill="${fill}"/>
+              <circle cx="80" cy="55" r="12" fill="${fill}"/>
+              <circle cx="75" cy="80" r="12" fill="${fill}"/>
+              <circle cx="50" cy="90" r="12" fill="${fill}"/>
+              <circle cx="25" cy="80" r="12" fill="${fill}"/>
+              <circle cx="20" cy="55" r="12" fill="${fill}"/>
+              <circle cx="25" cy="30" r="12" fill="${fill}"/>
+            </svg>`;
+            break;
+
+          case "polygon":
+            const sides = parseInt(properties.sides) || 6;
+            let points = "";
+            for (let i = 0; i < sides; i++) {
+              const angle = (i * 2 * Math.PI) / sides - Math.PI / 2;
+              const x = 50 + 40 * Math.cos(angle);
+              const y = 50 + 40 * Math.sin(angle);
+              points += `${x},${y} `;
+            }
+            html = `<svg viewBox="0 0 100 100" width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
+              <polygon points="${points}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"/>
+            </svg>`;
+            break;
+
+          case "wave":
+            html = `<svg viewBox="0 0 200 100" width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+              <path d="M0,50 Q50,0 100,50 T200,50" stroke="${fill}" stroke-width="3" fill="none" stroke-linecap="round"/>
+              <path d="M0,70 Q50,20 100,70 T200,70" stroke="${fill}" stroke-width="2" fill="none" stroke-linecap="round" opacity="0.7"/>
+            </svg>`;
+            break;
+
+          case "spiral":
+            html = `<svg viewBox="0 0 100 100" width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
+              <path d="M50,50 Q30,50 30,30 Q30,10 50,10 Q70,10 70,30 Q70,50 50,50 Q40,50 40,40 Q40,30 50,30" 
+                stroke="${fill}" stroke-width="2" fill="none" stroke-linecap="round"/>
+            </svg>`;
+            break;
+
+          case "mandala":
+            html = `<svg viewBox="0 0 100 100" width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="50" cy="50" r="5" fill="${fill}"/>
+              <circle cx="50" cy="50" r="15" fill="none" stroke="${fill}" stroke-width="1"/>
+              <circle cx="50" cy="50" r="25" fill="none" stroke="${fill}" stroke-width="1"/>
+              <circle cx="50" cy="50" r="35" fill="none" stroke="${fill}" stroke-width="1"/>
+              <circle cx="50" cy="50" r="45" fill="none" stroke="${fill}" stroke-width="1"/>
+              ${Array(8)
+                .fill(0)
+                .map((_, i) => {
+                  const angle = (i * Math.PI) / 4;
+                  const x1 = 50 + 10 * Math.cos(angle);
+                  const y1 = 50 + 10 * Math.sin(angle);
+                  const x2 = 50 + 45 * Math.cos(angle);
+                  const y2 = 50 + 45 * Math.sin(angle);
+                  return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${fill}" stroke-width="0.5"/>`;
+                })
+                .join("")}
+            </svg>`;
+            break;
+
+          case "lightning":
+            html = `<svg viewBox="0 0 100 100" width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
+              <polyline points="50,10 40,40 60,40 30,90 45,50 25,50 50,10" fill="none" stroke="${fill}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>`;
+            break;
+
+          case "gear":
+            html = `<svg viewBox="0 0 100 100" width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="50" cy="50" r="30" fill="${fill}"/>
+              <circle cx="50" cy="50" r="15" fill="white"/>
+              ${Array(12)
+                .fill(0)
+                .map((_, i) => {
+                  const angle = (i * Math.PI) / 6;
+                  return `<rect x="${50 + 42 * Math.cos(angle) - 2}" y="${50 + 42 * Math.sin(angle) - 2}" width="4" height="4" fill="${fill}"/>`;
+                })
+                .join("")}
+            </svg>`;
+            break;
+
+          case "tree":
+            html = `<svg viewBox="0 0 100 100" width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
+              <polygon points="50,10 35,35 40,35 20,60 30,60 10,85 90,85 70,60 80,60 60,35 65,35" fill="${fill}"/>
+            </svg>`;
+            break;
+
+          case "cube":
+            html = `<svg viewBox="0 0 100 100" width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
+              <path d="M30,40 L70,40 L85,55 L45,55 Z" fill="${fill}" opacity="0.8"/>
+              <path d="M30,40 L30,75 L45,90 L45,55 Z" fill="${fill}" opacity="0.6"/>
+              <path d="M70,40 L70,75 L85,90 L85,55 Z" fill="${fill}" opacity="0.7"/>
+            </svg>`;
+            break;
+
+          case "pyramid":
+            html = `<svg viewBox="0 0 100 100" width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
+              <polygon points="50,20 20,80 80,80" fill="${fill}"/>
+              <polygon points="50,20 80,80 50,70" fill="${fill}" opacity="0.7"/>
+            </svg>`;
+            break;
+
+          case "sphere":
+            html = `<svg viewBox="0 0 100 100" width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="50" cy="50" r="40" fill="${fill}" opacity="0.8"/>
+              <ellipse cx="50" cy="35" rx="25" ry="15" fill="white" opacity="0.3"/>
+            </svg>`;
+            break;
+
+          case "circuit":
+            html = `<svg viewBox="0 0 100 100" width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
+              <rect x="20" y="20" width="60" height="60" fill="none" stroke="${fill}" stroke-width="2"/>
+              <line x1="50" y1="20" x2="50" y2="80" stroke="${fill}" stroke-width="1"/>
+              <line x1="20" y1="50" x2="80" y2="50" stroke="${fill}" stroke-width="1"/>
+              <circle cx="50" cy="50" r="5" fill="${fill}"/>
+            </svg>`;
+            break;
+
+          case "yinyang":
+            html = `<svg viewBox="0 0 100 100" width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="50" cy="50" r="45" fill="none" stroke="#000" stroke-width="2"/>
+              <path d="M50,5 A45,45 0 0,1 50,95 A22.5,22.5 0 0,1 50,50 A22.5,22.5 0 0,0 50,5 Z" fill="#000"/>
+              <circle cx="50" cy="27.5" r="6" fill="white"/>
+              <circle cx="50" cy="72.5" r="6" fill="black"/>
+            </svg>`;
+            break;
+
+          default:
+            // Fallback to colorful circle
+            html = `<svg viewBox="0 0 100 100" width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="50" cy="50" r="40" fill="${fill}"/>
+            </svg>`;
+        }
+
+        return { html, width: size, height: size, isInlineSVG: true };
+      }
+
+      /**
        * Parse and apply INSERT_ELEMENT_SPEC action from AI agent.
        * Supports full HTML/CSS/attributes for flexible element creation.
        * Format: INSERT_ELEMENT_SPEC {...JSON...}
-       * Allows: html, css, style, class, width, height, x, y, attributes, animations, etc.
+       * Allows: html, css, style, class, width, height, x, y, attributes, animations, setup, script, etc.
+       *
+       * Special properties:
+       * - setup: Function to run after element is inserted (receives wrapper element)
+       * - script: Inline JavaScript code as string to execute on wrapper (receives wrapper as parameter)
        */
       function applyInsertElementSpec(specJson = {}) {
         try {
@@ -33369,6 +33572,26 @@
           const canvas = document.getElementById("web-canvas");
           if (canvas) {
             canvas.appendChild(wrapper);
+
+            // Call setup function if provided
+            if (typeof spec.setup === "function") {
+              try {
+                spec.setup(wrapper);
+              } catch (setupErr) {
+                console.error("Setup function error:", setupErr);
+              }
+            }
+
+            // Execute inline script if provided
+            if (spec.script) {
+              try {
+                const scriptFn = new Function("wrapper", String(spec.script));
+                scriptFn(wrapper);
+              } catch (scriptErr) {
+                console.error("Script execution error:", scriptErr);
+              }
+            }
+
             hydrateCanvasElement(wrapper);
             saveToHistory();
             selectElement(wrapper);
@@ -33870,11 +34093,114 @@
           }
         }
 
-        // First try to match complex style descriptions
+        // CHECK FOR SPECIFIC INTERACTIVE COMPONENTS FIRST (before complex parsing)
+        // These need to be checked BEFORE the generic input/field patterns catch them
+
+        // Slider - "insert slider", "add yellow slider", "insert a long slider", etc.
+        if (/\b(?:slider|range\s+input|input\s+range|slide)\b/.test(text)) {
+          const color = extractColorFromPrompt(text, "#3b82f6");
+          const componentSpec = generateRealElementHTML("slider", { color });
+          if (componentSpec) {
+            return {
+              type: "range",
+              label: "slider",
+              html: componentSpec.html,
+              script:
+                "const sliderInput = wrapper.querySelector('input[type=range]'); if(sliderInput) { sliderInput.addEventListener('input', (e) => { console.log('Slider value:', e.target.value); }); }",
+              styles: {
+                width: componentSpec.width,
+                height: componentSpec.height,
+              },
+            };
+          }
+        }
+
+        // Color Picker - "insert color picker", "add color", "pick a color", etc.
+        if (
+          /\b(?:color\s+picker|colorpicker|pick\s+color|color\s+selector)\b/.test(
+            text,
+          )
+        ) {
+          const color = extractColorFromPrompt(text, "#3b82f6");
+          const componentSpec = generateRealElementHTML("color", { color });
+          if (componentSpec) {
+            return {
+              type: "color",
+              label: "color picker",
+              html: componentSpec.html,
+              setup: componentSpec.setup,
+              script:
+                "const colorInput = wrapper.querySelector('input[type=color]'); if(colorInput) { colorInput.addEventListener('change', (e) => { console.log('Color changed:', e.target.value); }); }",
+              styles: {
+                width: componentSpec.width,
+                height: componentSpec.height,
+              },
+            };
+          }
+        }
+
+        // Toggle/Switch - "insert toggle", "add switch", "toggle button", etc.
+        if (/\b(?:toggle|switch|on\/off|on-off)\b/.test(text)) {
+          const color = extractColorFromPrompt(text, "#10b981");
+          const componentSpec = generateRealElementHTML("toggle", { color });
+          if (componentSpec) {
+            return {
+              type: "toggle",
+              label: "toggle",
+              html: componentSpec.html,
+              css: componentSpec.css,
+              script:
+                "const toggleCheckbox = wrapper.querySelector('input[type=checkbox]'); if(toggleCheckbox) { toggleCheckbox.addEventListener('change', (e) => { console.log('Toggle state:', e.target.checked); }); }",
+              styles: {
+                width: componentSpec.width,
+                height: componentSpec.height,
+              },
+            };
+          }
+        }
+
+        // Spinner/Loader - "insert spinner", "add loader", "loading animation", etc.
+        if (/\b(?:spinner|loader|loading|spin)\b/.test(text)) {
+          const color = extractColorFromPrompt(text, "#3b82f6");
+          const componentSpec = generateRealElementHTML("spinner", { color });
+          if (componentSpec) {
+            return {
+              type: "div",
+              label: "spinner",
+              html: componentSpec.html,
+              css: componentSpec.css,
+              styles: {
+                width: componentSpec.width,
+                height: componentSpec.height,
+              },
+            };
+          }
+        }
+
+        // Modal/Dialog - "insert modal", "add dialog", "popup", etc.
+        if (/\b(?:modal|dialog|popup|modal\s+dialog)\b/.test(text)) {
+          const color = extractColorFromPrompt(text, "#3b82f6");
+          const componentSpec = generateRealElementHTML("modal", { color });
+          if (componentSpec) {
+            return {
+              type: "div",
+              label: "modal",
+              html: componentSpec.html,
+              css: componentSpec.css,
+              styles: {
+                width: componentSpec.width,
+                height: componentSpec.height,
+              },
+            };
+          }
+        }
+
+        // Now try complex parsing for everything else
         const complexSpec = parseComplexInsertDescription(text);
         if (complexSpec) return complexSpec;
 
         // NEW EXPANDED ELEMENT TYPES - Handle sliders, toggles, spinners, modals, etc.
+
         /**
          * Generate real professional HTML for complex interactive elements
          * Not just divs - actual functional components!
@@ -33887,19 +34213,9 @@
           // Real slider with range input
           if (elementType === "slider") {
             return {
-              html: `<div class="ml-slider-container" style="padding: 10px; display: flex; flex-direction: column; gap: 8px;">
-                    <input type="range" min="0" max="100" value="50" class="ml-slider" style="width: 100%; cursor: pointer; accent-color: ${color};">
-                    <span class="ml-slider-value" style="font-size: 12px; color: #666;">Value: <span id="ml-slider-display">50</span></span>
-                  </div>`,
-              css: `.ml-slider-container { position: relative; }
-                    .ml-slider { -webkit-appearance: none; width: 100%; height: 6px; border-radius: 3px; background: linear-gradient(to right, ${color} 0%, ${color} 50%, #e5e7eb 50%, #e5e7eb 100%); outline: none; }
-                    .ml-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; border-radius: 50%; background: ${color}; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
-                    .ml-slider::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: ${color}; cursor: pointer; border: none; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }`,
-              attributes: {
-                oninput: `document.getElementById('ml-slider-display').textContent = this.value; this.style.background = 'linear-gradient(to right, ${color} 0%, ${color} ' + (this.value) + '%, #e5e7eb ' + (this.value) + '%, #e5e7eb 100%)';`,
-              },
+              html: `<input type="range" min="0" max="100" value="50" class="ml-slider-input" style="width: 100%; height: 100%; cursor: pointer; accent-color: ${color};">`,
               width: "240px",
-              height: "60px",
+              height: "44px",
             };
           }
 
@@ -34109,74 +34425,167 @@
             };
           }
 
+          // Color picker input
+          if (elementType === "color" || elementType === "colorpicker") {
+            return {
+              html: `<div style="display: flex; flex-direction: column; gap: 12px;">
+                    <label style="font-size: 14px; font-weight: 600; color: #333;">Choose Color</label>
+                    <div style="display: flex; gap: 12px; align-items: center;">
+                      <input type="color" value="${color}" class="ml-color-picker" style="width: 60px; height: 60px; border: none; border-radius: 8px; cursor: pointer;">
+                      <input type="text" class="ml-color-text" value="${color}" style="padding: 8px 12px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 12px; font-family: monospace; width: 120px;" readonly>
+                    </div>
+                  </div>`,
+              width: "280px",
+              height: "120px",
+              setup: function (wrapper) {
+                const colorInput = wrapper.querySelector(".ml-color-picker");
+                const colorText = wrapper.querySelector(".ml-color-text");
+                if (colorInput && colorText) {
+                  colorInput.addEventListener("input", (e) => {
+                    colorText.value = e.target.value;
+                  });
+                }
+              },
+            };
+          }
+
+          // Range slider input
+          if (elementType === "range" || elementType === "slider-range") {
+            const colorForGradient = color;
+            return {
+              html: `<div style="display: flex; flex-direction: column; gap: 12px;">
+                    <label style="font-size: 14px; font-weight: 600; color: #333;">Range Slider</label>
+                    <input type="range" min="0" max="100" value="50" class="ml-range-input" data-color="${colorForGradient}" style="width: 100%; height: 6px; border-radius: 3px; background: linear-gradient(to right, ${colorForGradient} 0%, ${colorForGradient} 50%, #e5e7eb 50%, #e5e7eb 100%); outline: none; -webkit-appearance: none; appearance: none; cursor: pointer;">
+                    <span class="ml-range-value" style="font-size: 12px; color: #666; font-weight: 600;">Value: <strong class="ml-range-number">50</strong></span>
+                  </div>`,
+              css: `.ml-range-input::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; border-radius: 50%; background: ${color}; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+                    .ml-range-input::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: ${color}; cursor: pointer; border: none; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }`,
+              width: "280px",
+              height: "100px",
+              setup: function (wrapper) {
+                const rangeInput = wrapper.querySelector(".ml-range-input");
+                const rangeNumber = wrapper.querySelector(".ml-range-number");
+                const rangeColor = rangeInput.getAttribute("data-color");
+                if (rangeInput && rangeNumber) {
+                  rangeInput.addEventListener("input", (e) => {
+                    rangeNumber.textContent = e.target.value;
+                    e.target.style.background =
+                      "linear-gradient(to right, " +
+                      rangeColor +
+                      " 0%, " +
+                      rangeColor +
+                      " " +
+                      e.target.value +
+                      "%, #e5e7eb " +
+                      e.target.value +
+                      "%, #e5e7eb 100%)";
+                  });
+                }
+              },
+            };
+          }
+
+          // Card component
+          if (elementType === "card") {
+            return {
+              html: `<div class="ml-card" style="border-radius: 12px; background: white; border: 1px solid #e5e7eb; box-shadow: 0 4px 12px rgba(0,0,0,0.08); overflow: hidden;">
+                    <div style="height: 200px; background: linear-gradient(135deg, ${color}dd 0%, ${color}44 100%); display: flex; align-items: flex-end; padding: 20px;">
+                      <h3 style="margin: 0; color: white; font-size: 20px; font-weight: 700;">Card Title</h3>
+                    </div>
+                    <div style="padding: 20px;">
+                      <p style="margin: 0 0 16px 0; color: #666; font-size: 14px; line-height: 1.6;">This is a professional card component with an image header, title, and description area.</p>
+                      <button style="padding: 8px 16px; background-color: ${color}; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 12px;">Learn More</button>
+                    </div>
+                  </div>`,
+              width: "280px",
+              height: "auto",
+            };
+          }
+
+          // Textarea input
+          if (elementType === "textarea") {
+            return {
+              html: `<div style="display: flex; flex-direction: column; gap: 8px;">
+                    <label style="font-size: 14px; font-weight: 600; color: #333;">Message</label>
+                    <textarea placeholder="Enter your message..." class="ml-textarea" style="width: 100%; padding: 12px 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; font-family: inherit; resize: vertical; min-height: 120px; transition: border-color 0.3s; outline: none;" onfocus="this.style.borderColor='${color}'" onblur="this.style.borderColor='#e5e7eb'"></textarea>
+                  </div>`,
+              width: "100%",
+              height: "160px",
+            };
+          }
+
+          // Password input
+          if (elementType === "password") {
+            return {
+              html: `<div style="display: flex; flex-direction: column; gap: 8px;">
+                    <label style="font-size: 14px; font-weight: 600; color: #333;">Password</label>
+                    <input type="password" placeholder="Enter password..." class="ml-password" style="width: 100%; padding: 12px 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; transition: border-color 0.3s; outline: none;" onfocus="this.style.borderColor='${color}'" onblur="this.style.borderColor='#e5e7eb'">
+                  </div>`,
+              width: "280px",
+              height: "60px",
+            };
+          }
+
+          // Email input
+          if (elementType === "email") {
+            return {
+              html: `<div style="display: flex; flex-direction: column; gap: 8px;">
+                    <label style="font-size: 14px; font-weight: 600; color: #333;">Email Address</label>
+                    <input type="email" placeholder="example@email.com" class="ml-email" style="width: 100%; padding: 12px 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; transition: border-color 0.3s; outline: none;" onfocus="this.style.borderColor='${color}'" onblur="this.style.borderColor='#e5e7eb'">
+                  </div>`,
+              width: "280px",
+              height: "60px",
+            };
+          }
+
+          // Date picker input
+          if (elementType === "date") {
+            return {
+              html: `<div style="display: flex; flex-direction: column; gap: 8px;">
+                    <label style="font-size: 14px; font-weight: 600; color: #333;">Select Date</label>
+                    <input type="date" class="ml-date" style="width: 100%; padding: 12px 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; transition: border-color 0.3s; outline: none;" onfocus="this.style.borderColor='${color}'" onblur="this.style.borderColor='#e5e7eb'">
+                  </div>`,
+              width: "280px",
+              height: "60px",
+            };
+          }
+
+          // Progress bar
+          if (elementType === "progress") {
+            return {
+              html: `<div style="display: flex; flex-direction: column; gap: 12px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                      <label style="font-size: 14px; font-weight: 600; color: #333;">Progress</label>
+                      <span id="ml-progress-percent" style="font-size: 12px; font-weight: 600; color: ${color};">65%</span>
+                    </div>
+                    <progress id="ml-progress-bar" value="65" max="100" style="width: 100%; height: 8px; border-radius: 4px; background-color: #e5e7eb; accent-color: ${color};"></progress>
+                  </div>`,
+              width: "280px",
+              height: "70px",
+            };
+          }
+
+          // Accordion
+          if (elementType === "accordion") {
+            return {
+              html: `<div class="ml-accordion" style="border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
+                    <div style="border-bottom: 1px solid #e5e7eb;">
+                      <button class="ml-accordion-btn" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'block' : 'none'; this.style.color = this.nextElementSibling.style.display === 'none' ? '#333' : '${color}'" style="width: 100%; padding: 16px; text-align: left; border: none; background: none; cursor: pointer; font-size: 14px; font-weight: 600; color: #333; transition: color 0.3s; display: flex; justify-content: space-between; align-items: center;">Section 1 <span>▼</span></button>
+                      <div style="padding: 16px; background-color: #f9fafb; display: none;">Content for section 1 goes here.</div>
+                    </div>
+                    <div style="border-bottom: 1px solid #e5e7eb;">
+                      <button class="ml-accordion-btn" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'block' : 'none'; this.style.color = this.nextElementSibling.style.display === 'none' ? '#333' : '${color}'" style="width: 100%; padding: 16px; text-align: left; border: none; background: none; cursor: pointer; font-size: 14px; font-weight: 600; color: #333; transition: color 0.3s; display: flex; justify-content: space-between; align-items: center;">Section 2 <span>▼</span></button>
+                      <div style="padding: 16px; background-color: #f9fafb; display: none;">Content for section 2 goes here.</div>
+                    </div>
+                  </div>`,
+              width: "100%",
+              height: "auto",
+            };
+          }
+
           return null;
         }
 
-        if (/\bslider\b/.test(text)) {
-          const color = extractColorFromPrompt(text, "#3b82f6");
-          const componentSpec = generateRealElementHTML("slider", { color });
-          if (componentSpec) {
-            return {
-              type: "div",
-              label: "slider",
-              html: componentSpec.html,
-              css: componentSpec.css,
-              attributes: componentSpec.attributes,
-              styles: {
-                width: componentSpec.width,
-                height: componentSpec.height,
-              },
-            };
-          }
-        }
-        if (/\b(toggle|switch)\b/.test(text)) {
-          const color = extractColorFromPrompt(text, "#10b981");
-          const componentSpec = generateRealElementHTML("toggle", { color });
-          if (componentSpec) {
-            return {
-              type: "div",
-              label: "toggle",
-              html: componentSpec.html,
-              css: componentSpec.css,
-              styles: {
-                width: componentSpec.width,
-                height: componentSpec.height,
-              },
-            };
-          }
-        }
-        if (/\b(spinner|loader|loading)\b/.test(text)) {
-          const color = extractColorFromPrompt(text, "#3b82f6");
-          const componentSpec = generateRealElementHTML("spinner", { color });
-          if (componentSpec) {
-            return {
-              type: "div",
-              label: "spinner",
-              html: componentSpec.html,
-              css: componentSpec.css,
-              styles: {
-                width: componentSpec.width,
-                height: componentSpec.height,
-              },
-            };
-          }
-        }
-        if (/\b(modal|dialog)\b/.test(text)) {
-          const color = extractColorFromPrompt(text, "#3b82f6");
-          const componentSpec = generateRealElementHTML("modal", { color });
-          if (componentSpec) {
-            return {
-              type: "div",
-              label: "modal",
-              html: componentSpec.html,
-              css: componentSpec.css,
-              styles: {
-                width: componentSpec.width,
-                height: componentSpec.height,
-              },
-            };
-          }
-        }
         if (/\b(badge|tag|chip)\b/.test(text)) {
           const color = extractColorFromPrompt(text, "#ec4899");
           const componentSpec = generateRealElementHTML("badge", { color });
@@ -34321,6 +34730,153 @@
           }
         }
 
+        // NEW PROFESSIONAL COMPONENTS
+        if (/\b(color\s+picker|colorpicker|color)\b/.test(text)) {
+          const color = extractColorFromPrompt(text, "#3b82f6");
+          const componentSpec = generateRealElementHTML("color", { color });
+          if (componentSpec) {
+            return {
+              type: "color",
+              label: "color picker",
+              html: componentSpec.html,
+              setup: componentSpec.setup,
+              styles: {
+                width: componentSpec.width,
+                height: componentSpec.height,
+              },
+            };
+          }
+        }
+        if (/\b(range|range\s+slider|slider\s+range)\b/.test(text)) {
+          const color = extractColorFromPrompt(text, "#3b82f6");
+          const componentSpec = generateRealElementHTML("range", { color });
+          if (componentSpec) {
+            return {
+              type: "div",
+              label: "range slider",
+              html: componentSpec.html,
+              css: componentSpec.css,
+              setup: componentSpec.setup,
+              styles: {
+                width: componentSpec.width,
+                height: componentSpec.height,
+              },
+            };
+          }
+        }
+        if (/\b(card|card\s+component|panel)\b/.test(text)) {
+          const color = extractColorFromPrompt(text, "#3b82f6");
+          const componentSpec = generateRealElementHTML("card", { color });
+          if (componentSpec) {
+            return {
+              type: "div",
+              label: "card",
+              html: componentSpec.html,
+              setup: componentSpec.setup,
+              styles: {
+                width: componentSpec.width,
+                height: componentSpec.height,
+              },
+            };
+          }
+        }
+        if (/\b(textarea|text\s+area|message\s+box)\b/.test(text)) {
+          const color = extractColorFromPrompt(text, "#3b82f6");
+          const componentSpec = generateRealElementHTML("textarea", { color });
+          if (componentSpec) {
+            return {
+              type: "div",
+              label: "textarea",
+              html: componentSpec.html,
+              setup: componentSpec.setup,
+              styles: {
+                width: componentSpec.width,
+                height: componentSpec.height,
+              },
+            };
+          }
+        }
+        if (/\b(password|pwd)\b/.test(text)) {
+          const color = extractColorFromPrompt(text, "#3b82f6");
+          const componentSpec = generateRealElementHTML("password", { color });
+          if (componentSpec) {
+            return {
+              type: "div",
+              label: "password input",
+              html: componentSpec.html,
+              setup: componentSpec.setup,
+              styles: {
+                width: componentSpec.width,
+                height: componentSpec.height,
+              },
+            };
+          }
+        }
+        if (/\b(email|email\s+input)\b/.test(text)) {
+          const color = extractColorFromPrompt(text, "#3b82f6");
+          const componentSpec = generateRealElementHTML("email", { color });
+          if (componentSpec) {
+            return {
+              type: "div",
+              label: "email input",
+              html: componentSpec.html,
+              setup: componentSpec.setup,
+              styles: {
+                width: componentSpec.width,
+                height: componentSpec.height,
+              },
+            };
+          }
+        }
+        if (/\b(date|date\s+picker)\b/.test(text)) {
+          const color = extractColorFromPrompt(text, "#3b82f6");
+          const componentSpec = generateRealElementHTML("date", { color });
+          if (componentSpec) {
+            return {
+              type: "div",
+              label: "date picker",
+              html: componentSpec.html,
+              setup: componentSpec.setup,
+              styles: {
+                width: componentSpec.width,
+                height: componentSpec.height,
+              },
+            };
+          }
+        }
+        if (/\b(progress|progress\s+bar)\b/.test(text)) {
+          const color = extractColorFromPrompt(text, "#3b82f6");
+          const componentSpec = generateRealElementHTML("progress", { color });
+          if (componentSpec) {
+            return {
+              type: "div",
+              label: "progress bar",
+              html: componentSpec.html,
+              setup: componentSpec.setup,
+              styles: {
+                width: componentSpec.width,
+                height: componentSpec.height,
+              },
+            };
+          }
+        }
+        if (/\b(accordion|collapse|collapsible)\b/.test(text)) {
+          const color = extractColorFromPrompt(text, "#3b82f6");
+          const componentSpec = generateRealElementHTML("accordion", { color });
+          if (componentSpec) {
+            return {
+              type: "div",
+              label: "accordion",
+              html: componentSpec.html,
+              setup: componentSpec.setup,
+              styles: {
+                width: componentSpec.width,
+                height: componentSpec.height,
+              },
+            };
+          }
+        }
+
         // Then fall back to predefined starters and original element types
         if (/\bfeature(?:\s+block|\s+row|\s+section)?\b/.test(text)) {
           return { starter: "feature", label: "feature block" };
@@ -34451,6 +35007,15 @@
       function parseComplexInsertDescription(prompt = "") {
         const text = String(prompt || "").toLowerCase();
 
+        // Don't process if it looks like a specific component keyword
+        if (
+          /\b(?:slider|range\s+input|color\s+picker|toggle|spinner|modal|dialog|checkbox|radio|dropdown|card|accordion|badge|alert|progress|tabs)\b/.test(
+            text,
+          )
+        ) {
+          return null; // Let the specific component handlers deal with it
+        }
+
         // Determine element type
         let elementType = "div";
         let baseLabel = "element";
@@ -34471,7 +35036,10 @@
         } else if (/\b(image|img|photo)\b/.test(text)) {
           elementType = "img";
           baseLabel = "image";
-        } else if (/\b(input|field)\b/.test(text)) {
+        } else if (
+          /\b(input|field|text\s+field)\b/.test(text) &&
+          !/\b(?:range|slider)\b/.test(text)
+        ) {
           elementType = "input";
           baseLabel = "input";
         } else if (/\b(card|box|container)\b/.test(text)) {
@@ -34699,6 +35267,8 @@
               html: insertSpec.html,
               css: insertSpec.css || "",
               animations: insertSpec.animations || "",
+              setup: insertSpec.setup,
+              script: insertSpec.script,
               style: {
                 position: "absolute",
                 width: String(insertSpec.styles?.width || "260px"),
@@ -35714,20 +36284,47 @@
           textarea: { type: "textarea", label: "textarea" },
 
           // Interactive elements (NEW)
-          slider: { type: "div", label: "slider", class: "ml-slider-element" },
-          toggle: { type: "div", label: "toggle", class: "ml-toggle-element" },
+          slider: {
+            type: "range",
+            label: "slider",
+            class: "ml-slider-element",
+          },
+          range: {
+            type: "range",
+            label: "range slider",
+            class: "ml-range-element",
+          },
+          toggle: {
+            type: "toggle",
+            label: "toggle",
+            class: "ml-toggle-element",
+          },
+          switch: {
+            type: "toggle",
+            label: "switch",
+            class: "ml-switch-element",
+          },
           spinner: {
-            type: "div",
+            type: "spinner",
             label: "spinner",
             class: "ml-spinner-element",
           },
-          switch: { type: "div", label: "switch", class: "ml-switch-element" },
           checkbox: {
             type: "input",
             label: "checkbox",
             attrs: { type: "checkbox" },
           },
           radio: { type: "input", label: "radio", attrs: { type: "radio" } },
+          color: {
+            type: "color",
+            label: "color picker",
+            attrs: { type: "color" },
+          },
+          colorpicker: {
+            type: "color",
+            label: "color picker",
+            attrs: { type: "color" },
+          },
           select: { type: "select", label: "dropdown" },
           dropdown: { type: "select", label: "dropdown" },
 
@@ -36080,21 +36677,83 @@
             }
 
             // Create insertion from command spec
-            const insertResult = applyInsertElementSpec({
-              html:
-                generateElementFromSpec(spec) ||
-                `<${spec.type}></${spec.type}>`,
-              css: "", // CSS already in styles
-              animations: "", // Already in styles
-              style: spec.styles || {},
-              attributes: spec.attributes || {},
-            });
+            let insertResult;
+
+            // NEW: Check if this is a component command
+            if (spec.isComponent) {
+              // Use buildDeterministicInsertSpec to handle component types
+              // Check if this is an SVG shape spec
+              if (spec.isSVG && spec.shapeType) {
+                const svgShape = generateSVGShape(
+                  spec.shapeType,
+                  spec.properties || {},
+                );
+                insertResult = applyInsertElementSpec({
+                  html: svgShape.html,
+                  css: "",
+                  animations: "",
+                  style: {
+                    width: svgShape.width,
+                    height: svgShape.height,
+                  },
+                  attributes: {},
+                });
+              } else {
+                const componentInsertSpec = buildDeterministicInsertSpec(
+                  `insert ${spec.componentType}`,
+                  currentCode,
+                );
+                if (
+                  componentInsertSpec &&
+                  componentInsertSpec.success !== false
+                ) {
+                  insertResult = applyInsertElementSpec(componentInsertSpec);
+                } else {
+                  aiChatMessages.push({
+                    role: "assistant",
+                    text: `⚠️ Could not recognize component type: ${spec.componentType}`,
+                  });
+                  setAiAgentStage("done");
+                  renderBuilderAiChat();
+                  return;
+                }
+              }
+            } else {
+              // Check if this is an SVG shape spec (regular element path)
+              if (spec.isSVG && spec.shapeType) {
+                const svgShape = generateSVGShape(
+                  spec.shapeType,
+                  spec.properties || {},
+                );
+                insertResult = applyInsertElementSpec({
+                  html: svgShape.html,
+                  css: "",
+                  animations: "",
+                  style: {
+                    width: svgShape.width,
+                    height: svgShape.height,
+                  },
+                  attributes: {},
+                });
+              } else {
+                // Regular element spec from formatted command
+                insertResult = applyInsertElementSpec({
+                  html:
+                    generateElementFromSpec(spec) ||
+                    `<${spec.type}></${spec.type}>`,
+                  css: "", // CSS already in styles
+                  animations: "", // Already in styles
+                  style: spec.styles || {},
+                  attributes: spec.attributes || {},
+                });
+              }
+            }
 
             if (insertResult.success) {
               syncActiveBuilderFileFromCanvas({ skipHistory: true });
               aiChatMessages.push({
                 role: "assistant",
-                text: `✓ Inserted ${spec.type} with Groq-formatted specifications.`,
+                text: `✓ Inserted ${spec.isComponent ? spec.componentType : spec.type} element.`,
               });
               setAiAgentStage("done");
               renderBuilderAiChat();
