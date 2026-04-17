@@ -2167,9 +2167,18 @@
         position: relative;
         margin-bottom: 0;
         flex: 1;
-        display: flex;
-        align-items: center;
-        gap: 0.6rem;
+      }
+      .ai-model-logo {
+        position: absolute;
+        top: -0.5rem;
+        right: 0.8rem;
+        width: 72px;
+        height: 72px;
+        border-radius: 1rem;
+        object-fit: cover;
+        border: 2px solid rgba(148, 163, 184, 0.3);
+        box-shadow: 0 8px 24px rgba(2, 6, 23, 0.5);
+        z-index: 10;
       }
       .ai-model-icon {
         width: 20px;
@@ -21130,9 +21139,9 @@
                   </div>
                   <div id="ai-chat-popup" class="ai-chat-popup hidden" onclick="if(event.target.id === 'ai-chat-popup') closeBuilderAiChat();">
                       <div class="ai-chat-shell">
+                          <img src="/mediafiles/wf.jpg" alt="AI Logo" class="ai-model-logo" />
                           <div class="ai-chat-topbar">
                               <div class="ai-chat-model-wrap">
-                                  <img src="/mediafiles/wf.jpg" alt="AI" class="ai-model-icon" />
                                   <select id="ai-model-picker" onchange="changeAiModel(this.value)" class="ai-chat-model-picker">
                                       <option value="workflow">Workflow AI ↗</option>
                                       <option value="xtra">Xtra AI (Auto-Best)</option>
