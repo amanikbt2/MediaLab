@@ -2056,10 +2056,10 @@
       }
       .ai-chat-topbar {
         display: flex;
-        align-items: flex-start;
-        justify-content: flex-end;
+        align-items: center;
+        justify-content: space-between;
         gap: 0.9rem;
-        margin-bottom: 0.85rem;
+        margin-bottom: 0.6rem;
       }
       .ai-chat-title {
         font-size: 11px;
@@ -2080,13 +2080,14 @@
         display: none;
       }
       .ai-xp-display {
-        font-size: 13px;
+        font-size: 12px;
         font-weight: 700;
         letter-spacing: 0.04em;
         color: #fbbf24;
         display: inline-flex;
         align-items: center;
         gap: 0.25rem;
+        white-space: nowrap;
       }
       .ai-xp-display sup {
         font-size: 0.65em;
@@ -2094,8 +2095,15 @@
         font-weight: 600;
         margin-left: 0.15rem;
       }
+      .ai-xp-progress-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 0.8rem;
+        margin-bottom: 0.85rem;
+        padding: 0 1rem;
+      }
       #ai-xp-progress-bar {
-        margin: 0.3rem 1rem 0.6rem 1rem;
+        flex: 1;
         height: 0.25rem;
       }
       .ai-xp-change {
@@ -2157,7 +2165,8 @@
       }
       .ai-chat-model-wrap {
         position: relative;
-        margin-bottom: 0.9rem;
+        margin-bottom: 0;
+        flex: 1;
       }
       .ai-chat-model-picker {
         width: 100%;
@@ -21111,21 +21120,21 @@
                   <div id="ai-chat-popup" class="ai-chat-popup hidden" onclick="if(event.target.id === 'ai-chat-popup') closeBuilderAiChat();">
                       <div class="ai-chat-shell">
                           <div class="ai-chat-topbar">
-                              <div class="ai-chat-top-actions">
-                                  <span id="ai-xp-display" class="ai-xp-display">0XP</span>
-                                  <button onclick="closeBuilderAiChat()" class="ai-chat-close" title="Close chat">
-                                      <i class="fas fa-times text-sm"></i>
-                                  </button>
+                              <div class="ai-chat-model-wrap">
+                                  <select id="ai-model-picker" onchange="changeAiModel(this.value)" class="ai-chat-model-picker">
+                                      <option value="workflow">Workflow AI ↗</option>
+                                      <option value="xtra">Xtra AI (Auto-Best)</option>
+                                  </select>
                               </div>
+                              <button onclick="closeBuilderAiChat()" class="ai-chat-close" title="Close chat">
+                                  <i class="fas fa-times text-sm"></i>
+                              </button>
                           </div>
-                          <div id="ai-xp-progress-bar" class="bg-white/10 rounded-full overflow-hidden">
-                              <div class="h-full w-0 bg-gradient-to-r from-amber-400 via-yellow-300 to-orange-400 transition-all duration-300" style="height: 0.25rem;"></div>
-                          </div>
-                          <div class="ai-chat-model-wrap">
-                              <select id="ai-model-picker" onchange="changeAiModel(this.value)" class="ai-chat-model-picker">
-                                  <option value="workflow">Workflow AI ↗</option>
-                                  <option value="xtra">Xtra AI (Auto-Best)</option>
-                              </select>
+                          <div class="ai-xp-progress-wrapper">
+                              <div id="ai-xp-progress-bar" class="bg-white/10 rounded-full overflow-hidden">
+                                  <div class="h-full w-0 bg-gradient-to-r from-amber-400 via-yellow-300 to-orange-400 transition-all duration-300" style="height: 0.25rem;"></div>
+                              </div>
+                              <span id="ai-xp-display" class="ai-xp-display">0XP</span>
                           </div>
                           <div class="ai-chat-stage">
                               <div id="ai-chat-messages" class="ai-chat-messages"></div>
