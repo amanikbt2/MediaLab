@@ -1755,20 +1755,19 @@
         overflow: visible;
       }
       .builder-view-switcher {
-        position: sticky;
-        bottom: 0.6rem;
-        z-index: 130;
-        display: flex;
+        position: relative;
+        z-index: 40;
+        display: inline-flex;
         flex-wrap: wrap;
         align-items: center;
         justify-content: center;
         gap: 0.45rem;
-        margin-top: 0.7rem;
         padding: 0.5rem 0.7rem;
         border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 999px;
         background: rgba(2, 6, 23, 0.76);
         backdrop-filter: blur(12px);
+        box-shadow: 0 16px 40px rgba(2, 6, 23, 0.2);
       }
       .section-hidden {
         display: none !important;
@@ -21276,6 +21275,9 @@
                                       <i class="fas fa-video text-[11px] animate-pulse"></i>
                                   </button>
                               </div>
+                              <div class="flex flex-1 min-w-[260px] justify-center px-1 sm:px-3">
+                                  <div id="builder-view-switcher" class="builder-view-switcher"></div>
+                              </div>
                               <div id="builder-responsive-controls" class="hidden items-center gap-2 rounded-lg border border-cyan-400/20 bg-cyan-500/[0.08] px-2.5 py-1.5">
                                   <span class="text-[9px] font-black uppercase tracking-[0.2em] text-cyan-200">Responsive Width</span>
                                   <input id="builder-responsive-width" type="range" min="320" max="1680" value="1280" oninput="setBuilderViewportWidth(this.value)" class="h-1.5 w-36 accent-cyan-400" />
@@ -21288,7 +21290,6 @@
                               <div id="web-canvas" data-page-background="#ffffff" class="builder-grid bg-white relative shadow-[0_60px_150px_rgba(0,0,0,0.55)] rounded-[1.2rem] sm:rounded-[2rem] overflow-hidden transition-transform duration-500">
                               </div>
                           </div>
-                          <div id="builder-view-switcher" class="builder-view-switcher"></div>
                       </div>
                   </div>
                   </div>
@@ -32453,6 +32454,40 @@
           ),
         };
       }
+      function sanitizeExportDomTree(rootNode) {
+        if (!(rootNode instanceof HTMLElement)) return;
+        const builderDataAttrs = [
+          "data-ml-wrapper-style",
+          "data-ml-inner-style",
+          "data-animation-stack",
+          "data-flex-item-mode",
+          "data-flex-item-size",
+          "data-custom-css-rules",
+          "data-custom-css-scope",
+          "data-builder-primary-target",
+          "data-page-background",
+          "data-base-width",
+        ];
+        const sanitizeNode = (node, options = {}) => {
+          if (!(node instanceof HTMLElement)) return;
+          builderDataAttrs.forEach((attr) => node.removeAttribute(attr));
+          if (options.clearRootClass) {
+            node.removeAttribute("class");
+          } else if (node.hasAttribute("class")) {
+            const wrapperClasses = filterExportClasses(node.classList);
+            if (wrapperClasses.length) {
+              node.className = [...new Set(wrapperClasses)].join(" ").trim();
+            } else {
+              node.removeAttribute("class");
+            }
+          }
+          if (node.style.pointerEvents === "none") {
+            node.style.removeProperty("pointer-events");
+          }
+        };
+        sanitizeNode(rootNode, { clearRootClass: true });
+        rootNode.querySelectorAll("*").forEach((node) => sanitizeNode(node));
+      }
       function extractPositioningStyles(styleStr = "") {
         const styles = {};
         const styleMap = {};
@@ -32499,8 +32534,11 @@
         options = {},
       ) {
         const sectionTargetIds = new Set();
+        const eventNames = new Set();
         interactionEntries.forEach((entry) => {
+          const eventName = String(entry?.eventName || "").trim();
           const action = entry?.action || {};
+          if (eventName) eventNames.add(eventName);
           if (!action.actionType) return;
           if (action.actionType === "addSection" && action.targetId) {
             sectionTargetIds.add(String(action.targetId));
@@ -32520,6 +32558,8 @@
               '      section.style.visibility = "hidden";',
               '      section.style.pointerEvents = "none";',
               '      section.style.opacity = "0";',
+              "      const body = section.querySelector(':scope > .element-body');",
+              '      if (body) body.style.pointerEvents = "none";',
               "    });",
               "  }",
               "  function switchSection(targetId) {",
@@ -32531,6 +32571,8 @@
               '      target.style.visibility = "visible";',
               '      target.style.pointerEvents = "auto";',
               '      target.style.opacity = "1";',
+              "      const body = target.querySelector(':scope > .element-body');",
+              '      if (body) body.style.pointerEvents = "auto";',
               "    }",
               "  }",
               defaultSectionId
@@ -32584,14 +32626,25 @@
               "      }",
               "    }",
               "  }",
-              "  document.querySelectorAll('[data-interactions]').forEach((source) => {",
-              "    const interactions = parseMediaLabInteractions(source.dataset.interactions || '{}');",
-              "    Object.entries(interactions).forEach(([eventName, action]) => {",
-              "      if (!eventName || !action || !action.actionType) return;",
-              "      source.addEventListener(eventName, (event) => {",
-              "        runMediaLabInteraction(source, action, event);",
-              "      });",
-              "    });",
+              "  function findInteractionOrigin(event) {",
+              "    if (!event) return null;",
+              "    const path = typeof event.composedPath === 'function' ? event.composedPath() : [];",
+              "    for (const entry of path) {",
+              "      if (entry instanceof Element && entry.hasAttribute('data-interactions')) return entry;",
+              "    }",
+              "    const target = event.target instanceof Element ? event.target : null;",
+              "    return target ? target.closest('[data-interactions]') : null;",
+              "  }",
+              `  ${JSON.stringify(Array.from(eventNames))}.forEach((eventName) => {`,
+              "    if (!eventName) return;",
+              "    document.addEventListener(eventName, (event) => {",
+              "      const origin = findInteractionOrigin(event);",
+              "      if (!origin) return;",
+              "      const interactions = parseMediaLabInteractions(origin.dataset.interactions || '{}');",
+              "      const action = interactions[eventName];",
+              "      if (!action || !action.actionType) return;",
+              "      runMediaLabInteraction(origin, action, event);",
+              "    }, true);",
               "  });",
             ].join("\n")
           : "";
@@ -32641,6 +32694,23 @@
         clone.querySelectorAll("[contenteditable]").forEach((node) => {
           node.removeAttribute("contenteditable");
         });
+        const interactionEntries = [];
+        clone.querySelectorAll("[data-interactions]").forEach((sourceNode) => {
+          const sourceId = String(sourceNode.id || "").trim();
+          if (!sourceId) return;
+          Object.entries(
+            normalizeElementInteractions(
+              JSON.parse(sourceNode.dataset.interactions || "{}"),
+            ),
+          ).forEach(([eventName, action]) => {
+            interactionEntries.push({
+              sourceId,
+              eventName,
+              action,
+            });
+          });
+        });
+        sanitizeExportDomTree(clone);
         const cloneDefaultSectionId =
           getDefaultSectionIdForRuntime(clone) || "section_main";
         clone.querySelectorAll('[data-ml-role="section"]').forEach((section) => {
@@ -32679,22 +32749,6 @@
           ),
           String(dynamicCss || "").trim(),
         ];
-        const interactionEntries = [];
-        clone.querySelectorAll(".canvas-element").forEach((sourceNode) => {
-          const sourceId = String(sourceNode.id || "").trim();
-          if (!sourceId) return;
-          Object.entries(
-            normalizeElementInteractions(
-              JSON.parse(sourceNode.dataset.interactions || "{}"),
-            ),
-          ).forEach(([eventName, action]) => {
-            interactionEntries.push({
-              sourceId,
-              eventName,
-              action,
-            });
-          });
-        });
         const css = cssBlocks.join("\n\n");
         const globalImportCss = String(builderImportedGlobalCss || "").trim();
         const body = formatHtmlFragment(clone.outerHTML, "  ");
@@ -32822,6 +32876,23 @@
         clone.querySelectorAll("[contenteditable]").forEach((node) => {
           node.removeAttribute("contenteditable");
         });
+        const interactionEntries = [];
+        clone.querySelectorAll("[data-interactions]").forEach((sourceNode) => {
+          const clonedNodeId = String(sourceNode.id || "").trim();
+          if (!clonedNodeId) return;
+          Object.entries(
+            normalizeElementInteractions(
+              JSON.parse(sourceNode.dataset.interactions || "{}"),
+            ),
+          ).forEach(([eventName, action]) => {
+            interactionEntries.push({
+              sourceId: clonedNodeId,
+              eventName,
+              action,
+            });
+          });
+        });
+        sanitizeExportDomTree(clone);
 
         const cloneDefaultSectionId =
           getDefaultSectionIdForRuntime(clone) || "section_main";
@@ -32848,23 +32919,6 @@
           canvas.offsetHeight,
           parseFloat(canvas.style.height || "0") || 0,
         );
-
-        const interactionEntries = [];
-        clone.querySelectorAll(".canvas-element").forEach((sourceNode) => {
-          const clonedNodeId = String(sourceNode.id || "").trim();
-          if (!clonedNodeId) return;
-          Object.entries(
-            normalizeElementInteractions(
-              JSON.parse(sourceNode.dataset.interactions || "{}"),
-            ),
-          ).forEach(([eventName, action]) => {
-            interactionEntries.push({
-              sourceId: clonedNodeId,
-              eventName,
-              action,
-            });
-          });
-        });
 
         const interactionScript = buildInteractionScriptForExport(
           interactionEntries,
