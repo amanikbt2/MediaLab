@@ -26768,6 +26768,76 @@
         });
         return normalized;
       }
+      function getElementInteractions(el) {
+        if (!(el instanceof HTMLElement)) return {};
+        try {
+          return normalizeElementInteractions(
+            JSON.parse(el.dataset.interactions || "{}"),
+          );
+        } catch {
+          return {};
+        }
+      }
+      function executeBuilderElementInteraction(source, eventName, event) {
+        if (!(source instanceof HTMLElement)) return false;
+        const interactions = getElementInteractions(source);
+        const action = interactions[String(eventName || "").trim()];
+        if (!action?.actionType || source.classList.contains("locked")) {
+          return false;
+        }
+        const targetId = String(action.targetId || "").trim();
+        try {
+          if (action.actionType === "alert" && action.value) {
+            window.alert(action.value);
+            return true;
+          }
+          if (action.actionType === "redirect" && action.url) {
+            window.open(action.url, "_blank", "noopener,noreferrer");
+            return true;
+          }
+          if (action.actionType === "toggle" && targetId) {
+            const target = document.getElementById(targetId);
+            if (!target) return false;
+            target.classList.toggle(action.value || "hidden");
+            scheduleSyncStyleTag();
+            saveToHistory();
+            return true;
+          }
+          if (action.actionType === "addSection" && targetId) {
+            const nextSectionId = setActiveBuilderSection(targetId, {
+              skipHistory: false,
+            });
+            if (!nextSectionId) return false;
+            showBuilderSnackbar(
+              `Switched to ${getBuilderSectionDisplayName(document.getElementById(nextSectionId))}.`,
+              "success",
+            );
+            return true;
+          }
+          if (action.actionType === "playSound" && action.soundUrl) {
+            const audio = new Audio(action.soundUrl);
+            audio.play().catch(() => {});
+            return true;
+          }
+          if (action.actionType === "customCode" && action.code) {
+            const runner = new Function(
+              "event",
+              "source",
+              String(action.code || ""),
+            );
+            runner(event, source);
+            return true;
+          }
+        } catch (error) {
+          console.error("MediaLab builder interaction failed:", error);
+          showBuilderSnackbar(
+            "Interaction failed. Check the action configuration.",
+            "error",
+          );
+          return false;
+        }
+        return false;
+      }
       function getDefaultBuilderInteractionCode(eventName = "click") {
         const label = getBuilderInteractionLabel(eventName);
         return `// MediaLab custom interaction for ${label}
@@ -26915,10 +26985,12 @@
           badge.classList.toggle("hidden", !hasInteractions);
           badge.classList.toggle("flex", hasInteractions);
         }
+        el.style.cursor = hasInteractions ? "pointer" : "";
       }
       function addObject(type, styles, attrs) {
         const canvas = document.getElementById("web-canvas");
         const canvasContainer = document.getElementById("canvas-container");
+        ensureBuilderSections({ skipHistory: true });
         ensureBuilderGuides(canvas);
         const wrap = document.createElement("div");
         wrap.id = attrs?.id || generateBuilderElementId();
@@ -27043,7 +27115,7 @@
         );
         hydrateCanvasElement(wrap);
         refreshElementInteractionBadge(wrap);
-        canvas.appendChild(wrap);
+        appendCanvasElementToActiveSection(wrap, { skipEnsureSections: true });
         scheduleSyncStyleTag();
         handleBuilderTutorialEvent("element-created", {
           type,
@@ -30188,6 +30260,12 @@
         el.onpointerdown = (e) => handleObjectInteraction(e, el);
         el.onclick = (e) => {
           e.stopPropagation();
+          if (
+            e.target?.closest?.(".drag-handle, .resizer, .absolute.-top-8, .absolute.-top-10, .builder-controls")
+          ) {
+            return;
+          }
+          executeBuilderElementInteraction(el, "click", e);
         };
         el.ondblclick = (e) => {
           if (e.target?.closest?.(".drag-handle")) {
@@ -30332,21 +30410,104 @@
         let node = target.classList?.contains("canvas-element")
           ? target
           : target.closest(".canvas-element");
+        if (!node) return null;
+        if (node.parentElement === canvas) return node;
+        const directSectionAncestor = node.parentElement?.closest?.(
+          '[data-ml-role="section"]',
+        );
+        if (
+          directSectionAncestor &&
+          String(node.dataset?.mlRole || "") !== "section"
+        ) {
+          return node;
+        }
         while (
           node &&
           node.parentElement &&
           node.parentElement !== canvas &&
           node.parentElement.closest?.(".canvas-element")
         ) {
-          node = node.parentElement.closest(".canvas-element");
+          const parentCanvasElement = node.parentElement.closest(".canvas-element");
+          if (!parentCanvasElement || parentCanvasElement === node) break;
+          if (String(parentCanvasElement.dataset?.mlRole || "") === "section") {
+            break;
+          }
+          node = parentCanvasElement;
         }
-        if (!node || node.parentElement !== canvas) return null;
+        if (!node) return null;
+        if (node.parentElement === canvas) return node;
+        if (
+          String(node.dataset?.mlRole || "") !== "section" &&
+          node.closest?.('[data-ml-role="section"]')
+        ) {
+          return node;
+        }
+        if (node.parentElement !== canvas) return null;
         return node;
       }
       function getCanvasSectionElements() {
         return getCanvasTopLevelElements().filter(
           (el) => String(el.dataset?.mlRole || "") === "section",
         );
+      }
+      function getBuilderSectionContentHost(sectionEl = null) {
+        if (!(sectionEl instanceof HTMLElement)) return null;
+        return sectionEl.querySelector(":scope > .element-body") || sectionEl;
+      }
+      function getActiveBuilderSectionElement() {
+        const sections = getCanvasSectionElements();
+        if (!sections.length) return null;
+        return (
+          sections.find((section) => section.id === currentActiveSectionId) ||
+          sections.find((section) => section.id === "section_main") ||
+          sections[0]
+        );
+      }
+      function appendCanvasElementToActiveSection(element, options = {}) {
+        if (!(element instanceof HTMLElement)) return null;
+        if (String(element.dataset?.mlRole || "") === "section") {
+          const canvas = document.getElementById("web-canvas");
+          if (canvas && element.parentElement !== canvas) {
+            canvas.appendChild(element);
+          }
+          return element;
+        }
+        const canvas = document.getElementById("web-canvas");
+        if (!canvas) return null;
+        if (!options.skipEnsureSections) {
+          ensureBuilderSections({ skipHistory: true });
+        }
+        const activeSection = getActiveBuilderSectionElement();
+        const host = getBuilderSectionContentHost(activeSection);
+        if (!host) {
+          canvas.appendChild(element);
+          return element;
+        }
+        host.appendChild(element);
+        return element;
+      }
+      function normalizeCanvasSectionOwnership(options = {}) {
+        const canvas = document.getElementById("web-canvas");
+        if (!canvas) return;
+        const sections = getCanvasSectionElements();
+        if (!sections.length) return;
+        const targetSection =
+          sections.find((section) => section.id === "section_main") ||
+          sections[0];
+        const host = getBuilderSectionContentHost(targetSection);
+        if (!host) return;
+        Array.from(canvas.children)
+          .filter(
+            (child) =>
+              child.classList?.contains("canvas-element") &&
+              String(child.dataset?.mlRole || "") !== "section",
+          )
+          .forEach((child) => {
+            host.appendChild(child);
+          });
+        if (!options.skipHistory) {
+          scheduleSyncStyleTag();
+        }
       }
       function getBuilderSectionDisplayName(sectionEl) {
         if (!sectionEl) return "Section";
@@ -30383,7 +30544,13 @@
         section.style.display = "none";
         section.style.zIndex = "1";
         const body = section.querySelector(".element-body");
-        if (body) body.innerHTML = "";
+        if (body) {
+          body.innerHTML = "";
+          body.style.position = "relative";
+          body.style.width = "100%";
+          body.style.height = "100%";
+          body.style.overflow = "visible";
+        }
         hydrateCanvasElement(section);
         refreshElementInteractionBadge(section);
         return section;
@@ -30420,7 +30587,23 @@
             section.classList.add("section-hidden");
             section.classList.remove("section-active");
           }
+          const body = getBuilderSectionContentHost(section);
+          if (body) {
+            body.style.pointerEvents = isActive ? "auto" : "none";
+          }
         });
+        getCanvasTopLevelElements()
+          .filter(
+            (element) => String(element.dataset?.mlRole || "") !== "section",
+          )
+          .forEach((element) => {
+            element.style.display = "none";
+            element.style.visibility = "hidden";
+            element.style.pointerEvents = "none";
+          });
+        if (selectedEl && !target.contains(selectedEl)) {
+          deselectAll();
+        }
 
         // Trigger UI update to refresh switcher buttons
         renderBuilderViewSwitcher();
@@ -30468,6 +30651,7 @@
             sections.find((section) => section.id === "section_main")?.id ||
             sections[0].id;
         }
+        normalizeCanvasSectionOwnership({ skipHistory: true });
         setActiveBuilderSection(currentActiveSectionId, {
           skipHistory: true,
           ...options,
@@ -32357,13 +32541,21 @@
               "  function hideAllSections() {",
               "    document.querySelectorAll('[data-ml-role=\"section\"]').forEach((section) => {",
               '      section.style.display = "none";',
+              '      section.style.visibility = "hidden";',
+              '      section.style.pointerEvents = "none";',
+              '      section.style.opacity = "0";',
               "    });",
               "  }",
               "  function switchSection(targetId) {",
               "    if (!targetId) return;",
               "    hideAllSections();",
               "    const target = document.getElementById(targetId);",
-              '    if (target) target.style.display = "block";',
+              '    if (target) {',
+              '      target.style.display = "block";',
+              '      target.style.visibility = "visible";',
+              '      target.style.pointerEvents = "auto";',
+              '      target.style.opacity = "1";',
+              "    }",
               "  }",
               defaultSectionId
                 ? `  switchSection(${JSON.stringify(defaultSectionId)});`
@@ -32540,6 +32732,16 @@
           node.removeAttribute("contenteditable");
         });
 
+        const cloneDefaultSectionId =
+          getDefaultSectionIdForRuntime(clone) || "section_main";
+        clone.querySelectorAll('[data-ml-role="section"]').forEach((section) => {
+          const isDefault = String(section.id || "") === cloneDefaultSectionId;
+          section.style.display = isDefault ? "block" : "none";
+          section.style.visibility = isDefault ? "visible" : "hidden";
+          section.style.pointerEvents = isDefault ? "auto" : "none";
+          section.style.opacity = isDefault ? "1" : "0";
+        });
+
         // Use canvas HTML directly without decompilation for accurate positioning
         let canvasHtml = clone.outerHTML;
 
@@ -32610,6 +32812,10 @@
             }
             .canvas-element.in-layout-flow {
               position: static !important;
+            }
+            [data-ml-role="section"] {
+              width: 100%;
+              min-height: 100%;
             }
             .element-body {
               width: auto;
@@ -34288,6 +34494,7 @@
        */
       function applyInsertElementSpec(specJson = {}) {
         try {
+          ensureBuilderSections({ skipHistory: true });
           const spec =
             typeof specJson === "string" ? JSON.parse(specJson) : specJson;
 
@@ -34704,7 +34911,9 @@
           // Add to canvas and activate
           const canvas = document.getElementById("web-canvas");
           if (canvas) {
-            canvas.appendChild(wrapper);
+            appendCanvasElementToActiveSection(wrapper, {
+              skipEnsureSections: true,
+            });
 
             // Call setup function if provided
             if (typeof spec.setup === "function") {
