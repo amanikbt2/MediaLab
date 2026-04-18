@@ -1758,16 +1758,75 @@
         position: relative;
         z-index: 40;
         display: inline-flex;
-        flex-wrap: wrap;
         align-items: center;
-        justify-content: center;
-        gap: 0.45rem;
-        padding: 0.5rem 0.7rem;
+        gap: 0.28rem;
+        min-height: 2.08rem;
+        max-width: min(100%, 700px);
+        padding: 0.12rem 0.22rem 0.12rem 0.28rem;
         border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 999px;
-        background: rgba(2, 6, 23, 0.76);
+        border-radius: 0.85rem;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01)),
+          rgba(8, 11, 19, 0.92);
         backdrop-filter: blur(12px);
-        box-shadow: 0 16px 40px rgba(2, 6, 23, 0.2);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.06),
+          0 10px 22px rgba(2, 6, 23, 0.18);
+        overflow: hidden;
+        transition: padding 0.18s ease, gap 0.18s ease, width 0.18s ease;
+      }
+      .builder-view-switcher-toggle {
+        border: none;
+        background: transparent;
+        color: rgba(241, 245, 249, 0.9);
+        font-size: 9px;
+        font-weight: 900;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.28rem;
+        padding: 0.16rem 0.26rem;
+        white-space: nowrap;
+        cursor: pointer;
+        transition: color 0.2s ease, opacity 0.2s ease;
+      }
+      .builder-view-switcher-toggle:hover {
+        color: #ffffff;
+      }
+      .builder-view-switcher-toggle-icon {
+        color: rgba(148, 163, 184, 0.82);
+        font-size: 10px;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.12rem;
+      }
+      .builder-view-switcher-track {
+        display: inline-flex;
+        align-items: center;
+        gap: 0;
+        min-width: 0;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scrollbar-width: none;
+        max-width: 100%;
+        opacity: 1;
+        transition: opacity 0.16s ease;
+      }
+      .builder-view-switcher-track::-webkit-scrollbar {
+        display: none;
+      }
+      .builder-view-switcher.is-collapsed .builder-view-switcher-track {
+        display: none;
+        opacity: 0;
+        pointer-events: none;
+      }
+      .builder-view-switcher.is-collapsed .builder-view-switcher-create {
+        display: none !important;
+      }
+      .builder-view-switcher.is-collapsed {
+        gap: 0;
+        padding-right: 0.22rem;
       }
       .section-hidden {
         display: none !important;
@@ -1780,59 +1839,115 @@
         visibility: visible !important;
       }
       .builder-view-switcher-chip {
-        border: 1px solid rgba(148, 163, 184, 0.28);
-        border-radius: 999px;
-        background: rgba(15, 23, 42, 0.7);
-        color: #cbd5e1;
-        font-size: 10px;
-        font-weight: 800;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
-        padding: 0.38rem 0.72rem;
-        transition: all 0.2s ease;
-      }
-      .builder-view-switcher-chip {
         cursor: pointer;
         display: flex;
         align-items: center;
-        gap: 0.35rem;
+        gap: 0.24rem;
+        position: relative;
+        min-height: 1.72rem;
+        padding: 0.14rem 0.62rem;
+        border: none;
+        border-left: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 0;
+        background: transparent;
+        color: rgba(226, 232, 240, 0.92);
+        font-size: 9px;
+        font-weight: 900;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+        white-space: nowrap;
+        flex: 0 0 auto;
+        transition:
+          color 0.2s ease,
+          background 0.2s ease,
+          text-shadow 0.2s ease;
+      }
+      .builder-view-switcher-chip-label {
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .builder-view-switcher-chip-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.18rem;
+        position: absolute;
+        right: 0.26rem;
+        top: 50%;
+        transform: translateY(-50%);
+        opacity: 0;
+        pointer-events: none;
+        padding-left: 0.18rem;
+        background: linear-gradient(90deg, rgba(8, 11, 19, 0), rgba(8, 11, 19, 0.92) 28%);
+        transition: opacity 0.15s ease;
       }
       .builder-view-switcher-chip:hover {
-        border-color: rgba(34, 211, 238, 0.45);
-        color: #cffafe;
-        background: rgba(15, 23, 42, 0.85);
+        color: #ffffff;
+        background: linear-gradient(180deg, rgba(59, 130, 246, 0.08), rgba(59, 130, 246, 0));
       }
       .builder-view-switcher-chip.is-active {
-        border-color: rgba(34, 211, 238, 0.55);
-        background: rgba(6, 182, 212, 0.25);
-        color: #67e8f9;
-        box-shadow:
-          0 0 20px rgba(34, 211, 238, 0.25),
-          inset 0 0 1px rgba(34, 211, 238, 0.5);
+        color: #1f8fff;
+        text-shadow: 0 0 18px rgba(31, 143, 255, 0.35);
+      }
+      .builder-view-switcher-chip.is-active::after {
+        content: "";
+        position: absolute;
+        left: 0.38rem;
+        right: 0.38rem;
+        bottom: 0.05rem;
+        height: 2px;
+        border-radius: 999px;
+        background: linear-gradient(90deg, rgba(31, 143, 255, 0.15), #1f8fff, rgba(31, 143, 255, 0.15));
+        box-shadow: 0 0 12px rgba(31, 143, 255, 0.6);
       }
       .builder-view-switcher-btn {
-        width: 18px;
-        height: 18px;
+        width: 16px;
+        height: 16px;
         display: flex;
         align-items: center;
         justify-content: center;
-        border: none;
-        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.04);
         color: #cbd5e1;
-        border-radius: 0.3rem;
-        font-size: 8px;
+        border-radius: 999px;
+        font-size: 6px;
         cursor: pointer;
         transition: all 0.15s ease;
         opacity: 0;
         pointer-events: none;
       }
+      .builder-view-switcher-chip:hover .builder-view-switcher-chip-actions,
+      .builder-view-switcher-chip.is-active .builder-view-switcher-chip-actions {
+        opacity: 1;
+        pointer-events: auto;
+      }
       .builder-view-switcher-chip:hover .builder-view-switcher-btn {
         opacity: 1;
         pointer-events: auto;
       }
+      .builder-view-switcher-chip.is-active .builder-view-switcher-btn {
+        opacity: 0.9;
+        pointer-events: auto;
+      }
       .builder-view-switcher-btn:hover {
-        background: rgba(34, 211, 238, 0.3);
-        color: #67e8f9;
+        background: rgba(31, 143, 255, 0.2);
+        color: #7dd3fc;
+        border-color: rgba(31, 143, 255, 0.35);
+      }
+      .builder-view-switcher-create {
+        margin-left: 0.14rem;
+        min-height: 1.72rem;
+        min-width: 1.72rem;
+        padding: 0.14rem;
+        border: 1px solid rgba(31, 143, 255, 0.75);
+        border-radius: 0.65rem;
+        background: rgba(8, 15, 30, 0.72);
+        color: #1f8fff;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        justify-content: center;
+      }
+      .builder-view-switcher-create:hover {
+        color: #5db8ff;
+        background: rgba(19, 41, 82, 0.8);
       }
       .builder-section-view {
         position: absolute;
@@ -2588,28 +2703,97 @@
       #btn-magic-fix {
         border: 1px solid rgba(251, 191, 36, 0.28);
         background: rgba(251, 191, 36, 0.08);
+        position: relative;
+        overflow: visible;
       }
       #btn-magic-fix:hover {
         background: rgba(251, 191, 36, 0.16);
       }
-      #btn-magic-fix .fa-magic.is-spinning {
-        animation: mlMagicFixShake 0.6s ease-in-out infinite;
+      #btn-magic-fix::before,
+      #btn-magic-fix::after {
+        content: "";
+        position: absolute;
+        inset: -3px;
+        border-radius: inherit;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+      }
+      #btn-magic-fix.magic-fix-running {
+        border-color: rgba(56, 189, 248, 0.58);
+        background:
+          radial-gradient(circle at 50% 50%, rgba(59, 130, 246, 0.14), rgba(12, 18, 34, 0.92) 66%),
+          rgba(16, 24, 40, 0.95);
+        box-shadow:
+          0 0 0 1px rgba(56, 189, 248, 0.12),
+          0 0 18px rgba(56, 189, 248, 0.22),
+          inset 0 0 16px rgba(37, 99, 235, 0.12);
+      }
+      #btn-magic-fix.magic-fix-running::before {
+        opacity: 1;
+        background:
+          conic-gradient(
+            from 220deg,
+            rgba(34, 211, 238, 0) 0deg,
+            rgba(34, 211, 238, 0) 232deg,
+            rgba(56, 189, 248, 0.18) 248deg,
+            rgba(96, 165, 250, 0.96) 277deg,
+            rgba(34, 211, 238, 0.78) 304deg,
+            rgba(34, 211, 238, 0) 328deg,
+            rgba(34, 211, 238, 0) 360deg
+          );
+        -webkit-mask:
+          radial-gradient(farthest-side, transparent calc(100% - 2px), #000 0),
+          linear-gradient(#000 0 0);
+        -webkit-mask-composite: source-in;
+        mask:
+          radial-gradient(farthest-side, transparent calc(100% - 2px), #000 0),
+          linear-gradient(#000 0 0);
+        animation: mlMagicFixOrbit 2s linear infinite;
+        filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.55));
+      }
+      #btn-magic-fix.magic-fix-running::after {
+        inset: -7px;
+        opacity: 1;
+        border: 1px solid rgba(96, 165, 250, 0.26);
+        box-shadow:
+          0 0 14px rgba(56, 189, 248, 0.18),
+          inset 0 0 8px rgba(34, 211, 238, 0.08);
+        animation: mlMagicFixPulseRing 1.5s ease-in-out infinite;
+      }
+      #magic-fix-icon.is-spinning {
+        animation: mlMagicFixShake 2s linear infinite;
+        color: #7dd3fc;
+        filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.55));
       }
       @keyframes mlMagicFixShake {
         0% {
-          transform: rotate(-90deg);
-        }
-        25% {
-          transform: rotate(90deg);
+          transform: rotate(0deg);
         }
         50% {
-          transform: rotate(-90deg);
-        }
-        75% {
-          transform: rotate(90deg);
+          transform: rotate(180deg);
         }
         100% {
-          transform: rotate(-90deg);
+          transform: rotate(360deg);
+        }
+      }
+      @keyframes mlMagicFixOrbit {
+        from {
+          transform: rotate(0deg);
+        }
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @keyframes mlMagicFixPulseRing {
+        0%,
+        100% {
+          transform: scale(0.98);
+          opacity: 0.45;
+        }
+        50% {
+          transform: scale(1.05);
+          opacity: 0.95;
         }
       }
       @keyframes mlMagicWipeSweep {
@@ -21274,10 +21458,9 @@
                                   <button id="builder-collab-video-toggle" type="button" onclick="toggleCollaborationVideo()" class="toolbar-item hidden inline-flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-slate-300 hover:text-cyan-100 opacity-40 pointer-events-none">
                                       <i class="fas fa-video text-[11px] animate-pulse"></i>
                                   </button>
-                              </div>
-                              <div class="flex flex-1 min-w-[260px] justify-center px-1 sm:px-3">
                                   <div id="builder-view-switcher" class="builder-view-switcher"></div>
                               </div>
+                              <div class="flex-1 min-w-0"></div>
                               <div id="builder-responsive-controls" class="hidden items-center gap-2 rounded-lg border border-cyan-400/20 bg-cyan-500/[0.08] px-2.5 py-1.5">
                                   <span class="text-[9px] font-black uppercase tracking-[0.2em] text-cyan-200">Responsive Width</span>
                                   <input id="builder-responsive-width" type="range" min="320" max="1680" value="1280" oninput="setBuilderViewportWidth(this.value)" class="h-1.5 w-36 accent-cyan-400" />
@@ -23437,6 +23620,7 @@
       let builderInteractionDraft = null;
       let builderInteractionPickMode = false;
       let currentActiveSectionId = "section_main";
+      let builderSectionSwitcherCollapsed = true;
       let builderImportedGlobalCss = "";
       let builderLastSavedFingerprint = "";
       let aiChatMessages = [];
@@ -30668,34 +30852,38 @@
           return;
         }
         shell.classList.remove("hidden");
+        shell.classList.toggle(
+          "is-collapsed",
+          !!builderSectionSwitcherCollapsed,
+        );
         let html =
-          '<span class="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400 px-1">Sections</span>';
+          '<button type="button" class="builder-view-switcher-toggle" onclick="toggleBuilderSectionSwitcherCollapse()"><span>Sections</span><span class="builder-view-switcher-toggle-icon"><i class="fas fa-grip-lines-vertical"></i><i class="fas fa-ellipsis-v"></i></span></button><div class="builder-view-switcher-track">';
         sections.forEach((section) => {
-          const isActive = section.id === currentActiveSectionId;
           const label = escapeHtmlText(getBuilderSectionDisplayName(section));
           const sectionId = escapeInlineJsString(section.id);
-          const activeClass = isActive ? " is-active" : "";
+          const activeClass =
+            section.id === currentActiveSectionId ? " is-active" : "";
           html +=
             '<button type="button" onclick="setActiveBuilderSection(\'' +
             sectionId +
             '\', { skipHistory: true })" class="builder-view-switcher-chip' +
             activeClass +
-            '"><span>' +
+            '"><span class="builder-view-switcher-chip-label">' +
             label +
-            "</span>";
-          if (isActive) {
-            html +=
-              '<div class="flex gap-1"><button class="builder-view-switcher-btn" onclick="event.stopPropagation(); renameBuilderSection(\'' +
-              sectionId +
-              '\');"><i class="fas fa-edit"></i></button><button class="builder-view-switcher-btn" onclick="event.stopPropagation(); deleteBuilderSection(\'' +
-              sectionId +
-              '\');"><i class="fas fa-trash"></i></button></div>';
-          }
+            '</span><span class="builder-view-switcher-chip-actions"><button class="builder-view-switcher-btn" onclick="event.stopPropagation(); renameBuilderSection(\'' +
+            sectionId +
+            '\');"><i class="fas fa-edit"></i></button><button class="builder-view-switcher-btn" onclick="event.stopPropagation(); deleteBuilderSection(\'' +
+            sectionId +
+            '\');"><i class="fas fa-trash"></i></button></span>';
           html += "</button>";
         });
         html +=
-          '<button type="button" class="builder-view-switcher-chip" onclick="createNewBuilderSectionFromUI()" style="gap: 0.2rem; padding: 0.38rem 0.5rem;"><i class="fas fa-plus" style="font-size: 9px;"></i>New</button>';
+          '<button type="button" class="builder-view-switcher-chip builder-view-switcher-create" onclick="createNewBuilderSectionFromUI()" title="New section"><i class="fas fa-plus"></i></button></div>';
         shell.innerHTML = html;
+      }
+      function toggleBuilderSectionSwitcherCollapse() {
+        builderSectionSwitcherCollapsed = !builderSectionSwitcherCollapsed;
+        renderBuilderViewSwitcher();
       }
       function renameBuilderSection(sectionId) {
         const section = document.getElementById(sectionId);
@@ -39008,7 +39196,10 @@
         aiModelRecoveryInFlight = false;
         aiModelSwitchingInFlight = false;
         if (canvas) canvas.classList.add("magic-fix-active");
-        if (magicBtn) magicBtn.disabled = true;
+        if (magicBtn) {
+          magicBtn.disabled = true;
+          magicBtn.classList.add("magic-fix-running");
+        }
         if (magicIcon) magicIcon.classList.add("is-spinning");
 
         // Model fallback list for auto-retry
@@ -39133,7 +39324,10 @@
         } finally {
           aiMagicFixRunning = false;
           if (canvas) canvas.classList.remove("magic-fix-active");
-          if (magicBtn) magicBtn.disabled = false;
+          if (magicBtn) {
+            magicBtn.disabled = false;
+            magicBtn.classList.remove("magic-fix-running");
+          }
           if (magicIcon) magicIcon.classList.remove("is-spinning");
           const editor = document.getElementById("builder-code-editor");
           if (editor) editor.classList.remove("magic-blur-preparing");
