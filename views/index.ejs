@@ -32424,7 +32424,7 @@
         const cleanNode = sourceNode.cloneNode(true);
         cleanNode
           .querySelectorAll(
-            ".resizer, .absolute.-top-10, .builder-selection-chip, .builder-controls, .builder-layout-scroll-btn",
+            ".resizer, .absolute.-top-8, .absolute.-top-10, .builder-selection-chip, .builder-controls, .builder-layout-scroll-btn, .interaction-badge, .drag-handle",
           )
           .forEach((ui) => ui.remove());
         cleanNode
@@ -32583,6 +32583,14 @@
             "body",
             `margin: 0; min-height: 100vh; background: ${pageBackground}; font-family: Inter, system-ui, sans-serif; position: relative; overflow-x: hidden;`,
           ),
+          formatCssRule(
+            ".element-body",
+            "box-sizing: border-box; width: 100%; height: 100%; overflow: visible;",
+          ),
+          formatCssRule(
+            '[data-ml-role="section"] > .element-body',
+            "position: relative; width: 100%; height: 100%; overflow: visible;",
+          ),
           String(dynamicCss || "").trim(),
         ];
         const exportNodes = [];
@@ -32717,7 +32725,7 @@
         // Remove ALL editor-specific elements and UI
         clone
           .querySelectorAll(
-            ".resizer, .drag-handle, .builder-selection-chip, .builder-guide, .builder-layout-guide-overlay, .builder-layout-slot-guide, .builder-selection-box, .builder-layout-scroll-assist, .absolute.-top-10, [contenteditable='true'], [data-editor], .builder-*",
+            ".resizer, .drag-handle, .builder-selection-chip, .builder-guide, .builder-layout-guide-overlay, .builder-layout-slot-guide, .builder-selection-box, .builder-layout-scroll-assist, .absolute.-top-8, .absolute.-top-10, .builder-controls, .interaction-badge, [contenteditable='true'], [data-editor]",
           )
           .forEach((node) => {
             if (node.hasAttribute?.("contenteditable")) {
@@ -32818,10 +32826,17 @@
               min-height: 100%;
             }
             .element-body {
-              width: auto;
-              height: auto;
+              position: relative;
+              width: 100%;
+              height: 100%;
               box-sizing: border-box;
-              display: contents;
+              overflow: visible;
+            }
+            [data-ml-role="section"] > .element-body {
+              position: relative;
+              width: 100%;
+              height: 100%;
+              overflow: visible;
             }
             #medialab-run-stage,
             #medialab-run-stage * {
