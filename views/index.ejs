@@ -1766,14 +1766,21 @@
         border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 0.85rem;
         background:
-          linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01)),
+          linear-gradient(
+            180deg,
+            rgba(255, 255, 255, 0.04),
+            rgba(255, 255, 255, 0.01)
+          ),
           rgba(8, 11, 19, 0.92);
         backdrop-filter: blur(12px);
         box-shadow:
           inset 0 1px 0 rgba(255, 255, 255, 0.06),
           0 10px 22px rgba(2, 6, 23, 0.18);
         overflow: hidden;
-        transition: padding 0.18s ease, gap 0.18s ease, width 0.18s ease;
+        transition:
+          padding 0.18s ease,
+          gap 0.18s ease,
+          width 0.18s ease;
       }
       .builder-view-switcher-toggle {
         border: none;
@@ -1789,7 +1796,9 @@
         padding: 0.16rem 0.26rem;
         white-space: nowrap;
         cursor: pointer;
-        transition: color 0.2s ease, opacity 0.2s ease;
+        transition:
+          color 0.2s ease,
+          opacity 0.2s ease;
       }
       .builder-view-switcher-toggle:hover {
         color: #ffffff;
@@ -1877,12 +1886,20 @@
         opacity: 0;
         pointer-events: none;
         padding-left: 0.18rem;
-        background: linear-gradient(90deg, rgba(8, 11, 19, 0), rgba(8, 11, 19, 0.92) 28%);
+        background: linear-gradient(
+          90deg,
+          rgba(8, 11, 19, 0),
+          rgba(8, 11, 19, 0.92) 28%
+        );
         transition: opacity 0.15s ease;
       }
       .builder-view-switcher-chip:hover {
         color: #ffffff;
-        background: linear-gradient(180deg, rgba(59, 130, 246, 0.08), rgba(59, 130, 246, 0));
+        background: linear-gradient(
+          180deg,
+          rgba(59, 130, 246, 0.08),
+          rgba(59, 130, 246, 0)
+        );
       }
       .builder-view-switcher-chip.is-active {
         color: #1f8fff;
@@ -1896,7 +1913,12 @@
         bottom: 0.05rem;
         height: 2px;
         border-radius: 999px;
-        background: linear-gradient(90deg, rgba(31, 143, 255, 0.15), #1f8fff, rgba(31, 143, 255, 0.15));
+        background: linear-gradient(
+          90deg,
+          rgba(31, 143, 255, 0.15),
+          #1f8fff,
+          rgba(31, 143, 255, 0.15)
+        );
         box-shadow: 0 0 12px rgba(31, 143, 255, 0.6);
       }
       .builder-view-switcher-btn {
@@ -1916,7 +1938,8 @@
         pointer-events: none;
       }
       .builder-view-switcher-chip:hover .builder-view-switcher-chip-actions,
-      .builder-view-switcher-chip.is-active .builder-view-switcher-chip-actions {
+      .builder-view-switcher-chip.is-active
+        .builder-view-switcher-chip-actions {
         opacity: 1;
         pointer-events: auto;
       }
@@ -2722,7 +2745,11 @@
       #btn-magic-fix.magic-fix-running {
         border-color: rgba(56, 189, 248, 0.58);
         background:
-          radial-gradient(circle at 50% 50%, rgba(59, 130, 246, 0.14), rgba(12, 18, 34, 0.92) 66%),
+          radial-gradient(
+            circle at 50% 50%,
+            rgba(59, 130, 246, 0.14),
+            rgba(12, 18, 34, 0.92) 66%
+          ),
           rgba(16, 24, 40, 0.95);
         box-shadow:
           0 0 0 1px rgba(56, 189, 248, 0.12),
@@ -2731,17 +2758,16 @@
       }
       #btn-magic-fix.magic-fix-running::before {
         opacity: 1;
-        background:
-          conic-gradient(
-            from 220deg,
-            rgba(34, 211, 238, 0) 0deg,
-            rgba(34, 211, 238, 0) 232deg,
-            rgba(56, 189, 248, 0.18) 248deg,
-            rgba(96, 165, 250, 0.96) 277deg,
-            rgba(34, 211, 238, 0.78) 304deg,
-            rgba(34, 211, 238, 0) 328deg,
-            rgba(34, 211, 238, 0) 360deg
-          );
+        background: conic-gradient(
+          from 220deg,
+          rgba(34, 211, 238, 0) 0deg,
+          rgba(34, 211, 238, 0) 232deg,
+          rgba(56, 189, 248, 0.18) 248deg,
+          rgba(96, 165, 250, 0.96) 277deg,
+          rgba(34, 211, 238, 0.78) 304deg,
+          rgba(34, 211, 238, 0) 328deg,
+          rgba(34, 211, 238, 0) 360deg
+        );
         -webkit-mask:
           radial-gradient(farthest-side, transparent calc(100% - 2px), #000 0),
           linear-gradient(#000 0 0);
@@ -4572,7 +4598,7 @@
             class="toolbar-item flex-shrink-0 flex items-center gap-x-3 bg-gray-800 px-5 py-2.5 rounded-3xl cursor-pointer"
           >
             <i class="fas fa-store text-cyan-400"></i>
-            <span class="font-medium text-sm text-gray-200">Marketplace</span>
+            <span class="font-medium text-sm text-gray-200">Blueprints</span>
             <span
               class="text-[7px] font-black bg-cyan-500 text-gray-950 px-1.5 py-0.5 rounded ml-1 uppercase"
               >New</span
@@ -4660,7 +4686,7 @@
               ></i>
               <span
                 class="font-bold text-sm text-gray-400 group-hover:text-white"
-                >Marketplace</span
+                >Blueprints</span
               >
             </div>
             <div
@@ -4738,7 +4764,7 @@
               >
                 <i class="fas fa-store text-cyan-400"></i
                 ><span class="font-medium text-sm text-gray-200"
-                  >Marketplace</span
+                  >Blueprints</span
                 >
                 <span
                   class="text-[7px] font-black bg-cyan-500 text-gray-950 px-1.5 py-0.5 rounded ml-1 uppercase"
@@ -5614,12 +5640,12 @@
       >
         <div class="flex items-start justify-between gap-4 mb-5">
           <div>
-            <div class="feature-gate-badge mb-3">Marketplace Project</div>
+            <div class="feature-gate-badge mb-3">Blueprints Project</div>
             <h3
               id="marketplace-detail-title"
               class="text-2xl sm:text-3xl font-semibold tracking-tight text-white"
             >
-              MediaLab Marketplace
+              MediaLab Blueprints
             </h3>
             <p
               id="marketplace-detail-subtitle"
@@ -5687,7 +5713,7 @@
           Why do you want to remove this sale?
         </h3>
         <p class="mt-3 text-sm leading-6 text-slate-400">
-          This removes the listing from public marketplace discovery and keeps
+          This removes the listing from public blueprints discovery and keeps
           the reason visible in your sales history.
         </p>
         <div class="mt-5 space-y-3">
@@ -12049,7 +12075,7 @@
                               item,
                               "h-full w-full",
                             )
-                          : `<img src="${escapeHtmlText(getMarketplacePreviewImageAt(item) || item.previewImage || "")}" data-marketplace-preview-id="${escapeHtmlText(String(item._id || ""))}" alt="${escapeHtmlText(item.title || "Marketplace project")}" class="h-full w-full object-cover transition-all duration-[1400ms] ease-out group-hover:scale-[1.03]" />`
+                          : `<img src="${escapeHtmlText(getMarketplacePreviewImageAt(item) || item.previewImage || "")}" data-marketplace-preview-id="${escapeHtmlText(String(item._id || ""))}" alt="${escapeHtmlText(item.title || "Blueprint")}" class="h-full w-full object-cover transition-all duration-[1400ms] ease-out group-hover:scale-[1.03]" />`
                       }
                       ${
                         isTemplateItem
@@ -12270,7 +12296,7 @@
         if (!items.length) {
           return `<div class="rounded-[2rem] border border-dashed border-white/10 bg-slate-900/70 p-10 text-center">
                   <p class="text-xl font-semibold text-white">No purchased projects yet</p>
-                  <p class="mt-3 text-sm leading-6 text-slate-400">Purchased marketplace projects will appear here with their current approval status.</p>
+                  <p class="mt-3 text-sm leading-6 text-slate-400">Purchased blueprints will appear here with their current approval status.</p>
                 </div>`;
         }
         return `<div class="space-y-4">
@@ -21087,7 +21113,9 @@
                               <button id="tab-arrange" onclick="toggleBuilderTab('arrange', event)" class="builder-tab">Arrange</button>
                               <button id="tab-templates" onclick="toggleBuilderTab('templates', event)" class="builder-tab">Templates</button>
                               <button id="tab-community" onclick="toggleBuilderTab('community', event)" class="builder-tab">Community</button>
-                              <button id="builder-code-toggle" onclick="toggleBuilderCodeMode()" class="builder-tab">Code</button>
+                              <button id="builder-code-toggle" onclick="toggleBuilderCodeMode()" class="w-9 h-9 shrink-0 flex items-center justify-center text-cyan-300 hover:text-white border border-cyan-400/20 rounded-xl bg-cyan-500/10 transition-colors shadow-[0_0_0_1px_rgba(6,182,212,0.12)]">
+                                  <i class="fas fa-code text-sm"></i>
+                              </button>
                               <button id="tab-exit" onclick="quickExitStudio(); hideBuilderPanels();" class="builder-tab builder-tab-exit">Exit</button>
                           </div>
                           </div>
@@ -30446,7 +30474,9 @@
         el.onclick = (e) => {
           e.stopPropagation();
           if (
-            e.target?.closest?.(".drag-handle, .resizer, .absolute.-top-8, .absolute.-top-10, .builder-controls")
+            e.target?.closest?.(
+              ".drag-handle, .resizer, .absolute.-top-8, .absolute.-top-10, .builder-controls",
+            )
           ) {
             return;
           }
@@ -30612,7 +30642,8 @@
           node.parentElement !== canvas &&
           node.parentElement.closest?.(".canvas-element")
         ) {
-          const parentCanvasElement = node.parentElement.closest(".canvas-element");
+          const parentCanvasElement =
+            node.parentElement.closest(".canvas-element");
           if (!parentCanvasElement || parentCanvasElement === node) break;
           if (String(parentCanvasElement.dataset?.mlRole || "") === "section") {
             break;
@@ -32795,7 +32826,7 @@
               "    if (!targetId) return;",
               "    hideAllSections();",
               "    const target = document.getElementById(targetId);",
-              '    if (target) {',
+              "    if (target) {",
               '      target.style.display = "block";',
               '      target.style.visibility = "visible";',
               '      target.style.pointerEvents = "auto";',
@@ -32941,15 +32972,18 @@
         sanitizeExportDomTree(clone);
         const cloneDefaultSectionId =
           getDefaultSectionIdForRuntime(clone) || "section_main";
-        clone.querySelectorAll('[data-ml-role="section"]').forEach((section) => {
-          const isDefault = String(section.id || "") === cloneDefaultSectionId;
-          section.style.display = isDefault ? "block" : "none";
-          section.style.visibility = isDefault ? "visible" : "hidden";
-          section.style.pointerEvents = isDefault ? "auto" : "none";
-          section.style.opacity = isDefault ? "1" : "0";
-          section.classList.toggle("section-active", isDefault);
-          section.classList.toggle("section-hidden", !isDefault);
-        });
+        clone
+          .querySelectorAll('[data-ml-role="section"]')
+          .forEach((section) => {
+            const isDefault =
+              String(section.id || "") === cloneDefaultSectionId;
+            section.style.display = isDefault ? "block" : "none";
+            section.style.visibility = isDefault ? "visible" : "hidden";
+            section.style.pointerEvents = isDefault ? "auto" : "none";
+            section.style.opacity = isDefault ? "1" : "0";
+            section.classList.toggle("section-active", isDefault);
+            section.classList.toggle("section-hidden", !isDefault);
+          });
         const cssBlocks = [
           formatCssRule(
             "html, body",
@@ -32959,10 +32993,7 @@
             "body",
             `margin: 0; min-height: 100vh; min-width: ${Math.max(320, Math.round(width))}px; background: ${pageBackground}; font-family: Inter, system-ui, sans-serif; position: relative; overflow: hidden;`,
           ),
-          formatCssRule(
-            ".canvas-element",
-            "position: absolute;",
-          ),
+          formatCssRule(".canvas-element", "position: absolute;"),
           formatCssRule(
             ".element-body",
             "position: relative; box-sizing: border-box; width: 100%; height: 100%; overflow: visible;",
@@ -33069,7 +33100,11 @@
 
         // Preserve exact inline styles and exported layout styles of all canvas elements.
         const preserveElementStyles = (cloned, original) => {
-          if (!(cloned instanceof HTMLElement) || !(original instanceof HTMLElement)) return;
+          if (
+            !(cloned instanceof HTMLElement) ||
+            !(original instanceof HTMLElement)
+          )
+            return;
 
           const wrapperStyle = String(
             original.style.cssText || original.dataset.mlWrapperStyle || "",
@@ -33078,7 +33113,9 @@
             cloned.style.cssText = wrapperStyle;
           } else {
             const positioningStyle = extractPositioningStyles(
-              String(original.dataset.mlWrapperStyle || original.style.cssText || ""),
+              String(
+                original.dataset.mlWrapperStyle || original.style.cssText || "",
+              ),
             );
             if (positioningStyle) cloned.style.cssText = positioningStyle;
           }
@@ -33086,7 +33123,9 @@
           const originalInner = getElementInnerNode(original);
           const clonedInner = getElementInnerNode(cloned);
           const innerStyle = String(
-            originalInner?.style?.cssText || original.dataset.mlInnerStyle || "",
+            originalInner?.style?.cssText ||
+              original.dataset.mlInnerStyle ||
+              "",
           ).trim();
           if (clonedInner && innerStyle) clonedInner.style.cssText = innerStyle;
 
@@ -33175,13 +33214,16 @@
 
         const cloneDefaultSectionId =
           getDefaultSectionIdForRuntime(clone) || "section_main";
-        clone.querySelectorAll('[data-ml-role="section"]').forEach((section) => {
-          const isDefault = String(section.id || "") === cloneDefaultSectionId;
-          section.style.display = isDefault ? "block" : "none";
-          section.style.visibility = isDefault ? "visible" : "hidden";
-          section.style.pointerEvents = isDefault ? "auto" : "none";
-          section.style.opacity = isDefault ? "1" : "0";
-        });
+        clone
+          .querySelectorAll('[data-ml-role="section"]')
+          .forEach((section) => {
+            const isDefault =
+              String(section.id || "") === cloneDefaultSectionId;
+            section.style.display = isDefault ? "block" : "none";
+            section.style.visibility = isDefault ? "visible" : "hidden";
+            section.style.pointerEvents = isDefault ? "auto" : "none";
+            section.style.opacity = isDefault ? "1" : "0";
+          });
 
         // Use canvas HTML directly without decompilation for accurate positioning
         let canvasHtml = clone.outerHTML;
@@ -35053,6 +35095,38 @@
             inspectorBtn.style.background = "#1e293b";
           });
 
+          // Create visibility button
+          const visibilityBtn = document.createElement("button");
+          visibilityBtn.className = "builder-visibility-btn";
+          Object.assign(visibilityBtn.style, {
+            width: "28px",
+            height: "28px",
+            background: "#1e293b",
+            color: "#94a3b8",
+            borderRadius: "8px",
+            border: "1px solid rgba(255,255,255,0.1)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            pointerEvents: "auto",
+            cursor: "pointer",
+            padding: "0",
+            fontSize: "0",
+          });
+          visibilityBtn.innerHTML = '<i class="fas fa-eye" style="font-size:10px;"></i>';
+          visibilityBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            if (typeof toggleCanvasElementVisibility === "function") {
+              toggleCanvasElementVisibility(wrapper);
+            }
+          });
+          visibilityBtn.addEventListener("mouseover", () => {
+            visibilityBtn.style.background = "#0f172a";
+          });
+          visibilityBtn.addEventListener("mouseout", () => {
+            visibilityBtn.style.background = "#1e293b";
+          });
+
           // Create delete button
           const deleteBtn = document.createElement("button");
           Object.assign(deleteBtn.style, {
@@ -35090,6 +35164,7 @@
           });
 
           dragDiv.appendChild(dragHandle);
+          dragDiv.appendChild(visibilityBtn);
           dragDiv.appendChild(inspectorBtn);
           dragDiv.appendChild(deleteBtn);
 
@@ -39476,6 +39551,31 @@
         highlight.scrollLeft = editor.scrollLeft;
         if (lineGutter) lineGutter.scrollTop = editor.scrollTop;
       }
+      function toggleCanvasElementVisibility(wrapper) {
+        if (!wrapper) return;
+        const isHidden = wrapper.getAttribute("data-builder-state") === "hidden";
+        if (isHidden) {
+          wrapper.removeAttribute("data-builder-state");
+          wrapper.style.opacity = "";
+          // Update icon to eye
+          const icon = wrapper.querySelector(".builder-visibility-btn i");
+          if (icon) {
+            icon.className = "fas fa-eye text-[10px]";
+            icon.parentElement.style.color = "#94a3b8"; // slate-400
+          }
+        } else {
+          wrapper.setAttribute("data-builder-state", "hidden");
+          wrapper.style.opacity = "0.2"; // Dim it but keep it clickable
+          // Update icon to eye-slash
+          const icon = wrapper.querySelector(".builder-visibility-btn i");
+          if (icon) {
+            icon.className = "fas fa-eye-slash text-[10px]";
+            icon.parentElement.style.color = "#f43f5e"; // rose-500
+          }
+        }
+        saveToHistory();
+      }
+
       function buildEditorHandles(type) {
         const handles = ["tl", "tr", "bl", "br", "mt", "mb", "ml", "mr"]
           .map(
@@ -39485,8 +39585,9 @@
           .join("");
         return `
               ${handles}
-              <div class="absolute -top-8 left-0 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-all z-[60]">
+                  <div class="absolute -top-8 left-0 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-all z-[60]">
                   <div class="drag-handle w-7 h-7 bg-gradient-to-br from-cyan-500 to-blue-600 text-white rounded-lg border border-white/20 shadow-2xl flex items-center justify-center cursor-grab active:cursor-grabbing pointer-events-auto hover:shadow-cyan-500/50 transition-all"><i class="fas fa-arrows-alt text-[10px]"></i></div>
+                  <button onclick="toggleCanvasElementVisibility(this.closest('.canvas-element'))" class="builder-visibility-btn w-7 h-7 bg-gray-950 text-slate-400 rounded-lg border border-white/10 flex items-center justify-center pointer-events-auto hover:bg-slate-800 transition-all"><i class="fas fa-eye text-[10px]"></i></button>
                   <button onclick="openSmartInspector('${type}', this.closest('.canvas-element'))" class="w-7 h-7 bg-gray-950 text-cyan-400 rounded-lg border border-white/10 flex items-center justify-center pointer-events-auto hover:bg-cyan-950 transition-all"><i class="fas fa-sliders-h text-[10px]"></i></button>
                   <button onclick="handleBuilderDeleteAction(this.closest('.canvas-element'))" class="w-7 h-7 bg-gray-950 text-red-500 rounded-lg border border-white/10 flex items-center justify-center pointer-events-auto hover:bg-red-950 transition-all"><i class="fas fa-trash-alt text-[10px]"></i></button>
               </div>`;
@@ -39576,6 +39677,15 @@
         )
           return tag;
         if (tag === "input") return content.getAttribute("type") || "input";
+        if (
+          tag === "section" ||
+          tag === "nav" ||
+          tag === "header" ||
+          tag === "footer" ||
+          tag === "main" ||
+          tag === "aside"
+        )
+          return "section";
         return content.textContent?.trim() ? "text" : "div";
       }
       function importCodeNodesToCanvas(nodes, options = {}) {
@@ -39616,10 +39726,13 @@
           body.style.boxSizing = "border-box";
           body.style.overflow = "visible";
           const primary =
-            body.querySelector(":scope > .ml-content") || body.firstElementChild;
+            body.querySelector(":scope > .ml-content") ||
+            body.firstElementChild;
           if (!(primary instanceof HTMLElement)) return;
           const primaryTag = String(primary.tagName || "").toLowerCase();
-          const primaryPosition = String(primary.style.position || "").toLowerCase();
+          const primaryPosition = String(
+            primary.style.position || "",
+          ).toLowerCase();
           if (primaryPosition === "fixed" || primaryPosition === "sticky") {
             primary.style.position = "relative";
             primary.style.left = "0px";
@@ -39628,9 +39741,15 @@
           primary.style.boxSizing = primary.style.boxSizing || "border-box";
           primary.style.maxWidth = "100%";
           if (
-            ["button", "a", "input", "textarea", "select", "img", "canvas"].includes(
-              primaryTag,
-            )
+            [
+              "button",
+              "a",
+              "input",
+              "textarea",
+              "select",
+              "img",
+              "canvas",
+            ].includes(primaryTag)
           ) {
             primary.style.width = primary.style.width || "100%";
             primary.style.height = primary.style.height || "100%";
@@ -39642,11 +39761,13 @@
               node.style.maxWidth = "100%";
               if (!node.style.display) node.style.display = "block";
             });
-          body.querySelectorAll("button, input, textarea, select").forEach((node) => {
-            if (!(node instanceof HTMLElement)) return;
-            node.style.maxWidth = "100%";
-            node.style.boxSizing = node.style.boxSizing || "border-box";
-          });
+          body
+            .querySelectorAll("button, input, textarea, select")
+            .forEach((node) => {
+              if (!(node instanceof HTMLElement)) return;
+              node.style.maxWidth = "100%";
+              node.style.boxSizing = node.style.boxSizing || "border-box";
+            });
         };
         const clampImportedWrapperToCanvas = (wrapper) => {
           if (!(wrapper instanceof HTMLElement)) return;
@@ -39654,9 +39775,15 @@
           const body = wrapper.querySelector(":scope > .element-body");
           const rect = wrapper.getBoundingClientRect();
           let width =
-            parsePx(wrapper.style.width) || rect.width || wrapper.offsetWidth || 200;
+            parsePx(wrapper.style.width) ||
+            rect.width ||
+            wrapper.offsetWidth ||
+            200;
           let height =
-            parsePx(wrapper.style.height) || rect.height || wrapper.offsetHeight || 100;
+            parsePx(wrapper.style.height) ||
+            rect.height ||
+            wrapper.offsetHeight ||
+            100;
           let left = parsePx(wrapper.style.left);
           let top = parsePx(wrapper.style.top);
           if (!Number.isFinite(left)) left = wrapper.offsetLeft || 0;
@@ -39741,153 +39868,170 @@
         };
         builderImportedProject = null;
         builderRawImportDocument = "";
-        canvas.innerHTML = "";
+        
+        // Pass 1: Measure
+        reportProgress?.(25, "Measuring imported layout...");
+        const measureContainer = document.createElement("div");
+        measureContainer.style.cssText = "position: absolute; top: 0; left: 0; width: 100vw; min-height: 100vh; opacity: 0.001; pointer-events: none; z-index: -9999; overflow: hidden;";
+        
+        const clones = Array.from(nodes).map(n => n.cloneNode(true));
+        clones.forEach(c => measureContainer.appendChild(c));
+        document.body.appendChild(measureContainer);
+        
+        measureContainer.offsetHeight; // force reflow
+
+        const flatElements = [];
+        const canvasRect = canvas.getBoundingClientRect();
+        const containerRect = measureContainer.getBoundingClientRect();
+        
+        function traverseAndMeasure(node) {
+          if (!(node instanceof HTMLElement)) return;
+          const tag = node.tagName.toLowerCase();
+          if (["style", "script", "meta", "link", "title", "noscript", "template"].includes(tag)) return;
+          
+          const rect = node.getBoundingClientRect();
+          const comp = window.getComputedStyle(node);
+          
+          const hasBg = comp.backgroundColor !== "rgba(0, 0, 0, 0)" && comp.backgroundColor !== "transparent";
+          const hasBorder = comp.borderWidth && comp.borderWidth !== "0px";
+          const hasTextContent = Array.from(node.childNodes).some(n => n.nodeType === Node.TEXT_NODE && n.textContent.trim().length > 0);
+          const isInteractive = ["button", "input", "select", "textarea", "a", "img"].includes(tag);
+          const isSvgWrapper = node.querySelector("svg") !== null || tag === "svg" || tag === "path";
+          
+          let skip = false;
+          // Skip generic layout wrappers with no visual styling/text
+          if (tag === "div" && !hasBg && !hasBorder && !hasTextContent && !isInteractive && !isSvgWrapper) {
+             skip = true;
+          }
+          
+          const bakedStyles = {
+            color: comp.color,
+            fontFamily: comp.fontFamily,
+            fontSize: comp.fontSize,
+            fontWeight: comp.fontWeight,
+            lineHeight: comp.lineHeight,
+            textAlign: comp.textAlign,
+            backgroundColor: comp.backgroundColor,
+            borderRadius: comp.borderRadius,
+            border: comp.border,
+            boxShadow: comp.boxShadow,
+            padding: comp.padding,
+            display: comp.display,
+            justifyContent: comp.justifyContent,
+            alignItems: comp.alignItems,
+            flexDirection: comp.flexDirection,
+            gap: comp.gap
+          };
+
+          if (!skip && tag !== "svg" && tag !== "path") {
+            flatElements.push({
+               originalNode: node,
+               rect: rect,
+               bakedStyles: bakedStyles,
+               type: detectImportedCanvasType(node),
+               tag: tag
+            });
+          }
+          
+          if (tag !== "svg" && !isInteractive) {
+             Array.from(node.children).forEach(traverseAndMeasure);
+          }
+        }
+        
+        clones.forEach(traverseAndMeasure);
+        
+        // Pass 2: Extract & Place
+        const total = Math.max(1, flatElements.length);
+        
+        // Clear canvas (except guides)
+        Array.from(canvas.children).forEach(c => {
+           if (c.id !== "builder-guides") c.remove();
+        });
         ensureBuilderGuides(canvas);
         initCanvasSelection(canvas);
-        const totalNodes = Math.max(1, Array.isArray(nodes) ? nodes.length : 0);
-        const canvasRect = canvas.getBoundingClientRect();
-        nodes.forEach((node, index) => {
-          if (!(node instanceof HTMLElement)) return;
-          const skipTag = String(node.tagName || "").toUpperCase();
-          if (
-            [
-              "STYLE",
-              "SCRIPT",
-              "META",
-              "LINK",
-              "TITLE",
-              "NOSCRIPT",
-              "TEMPLATE",
-            ].includes(skipTag)
-          ) {
-            return;
-          }
-          reportProgress?.(
-            Math.min(92, 42 + Math.round(((index + 1) / totalNodes) * 48)),
-            `Building draggable objects (${index + 1}/${totalNodes})...`,
-          );
-          const type = detectImportedCanvasType(node);
-          const wrapper = document.createElement("div");
-          wrapper.id = node.id || `imported_${Date.now()}_${index}`;
-          wrapper.setAttribute("data-type", type);
-          wrapper.className =
-            "canvas-element absolute group transition-shadow active:cursor-grabbing";
-
-          // CRITICAL: Extract exact positioning from imported node
-          const importedStyleParts = node.classList?.contains("ml-container")
-            ? {
-                wrapperStyle: node.getAttribute("style") || "",
-                contentStyle: "",
+        
+        flatElements.forEach((item, index) => {
+           reportProgress?.(Math.min(92, 42 + Math.round(((index + 1) / total) * 48)), `Flattening objects (${index + 1}/${total})...`);
+           
+           const wrapper = document.createElement("div");
+           wrapper.id = item.originalNode.id || `imported_${Date.now()}_${index}`;
+           wrapper.setAttribute("data-type", item.type);
+           wrapper.className = "canvas-element absolute group transition-shadow active:cursor-grabbing";
+           
+           // Convert relative container rect to absolute canvas rect coordinates
+           // containerRect.left is the origin.
+           const left = item.rect.left - containerRect.left;
+           const top = item.rect.top - containerRect.top;
+           const width = item.rect.width;
+           const height = item.rect.height;
+           
+           let wrapperStyles = `position: absolute; left: ${Math.max(0, left)}px; top: ${Math.max(0, top)}px; width: ${Math.max(16, width)}px; height: ${Math.max(16, height)}px; box-sizing: border-box; margin: 0;`;
+           
+           // State parsing
+           let isHidden = false;
+           if (item.bakedStyles.display === "none" || item.bakedStyles.opacity === "0" || item.bakedStyles.visibility === "hidden" || item.originalNode.classList.contains("hidden")) {
+              isHidden = true;
+              wrapper.setAttribute("data-builder-state", "hidden");
+           }
+           
+           wrapper.setAttribute("style", wrapperStyles);
+           wrapper.innerHTML = `${buildEditorHandles(item.type)}<div class="element-body w-full h-full overflow-visible"></div>`;
+           
+           if (isHidden) {
+              wrapper.style.opacity = "0.2";
+              const icon = wrapper.querySelector(".builder-visibility-btn i");
+              if (icon) {
+                 icon.className = "fas fa-eye-slash text-[10px]";
+                 icon.parentElement.style.color = "#f43f5e";
               }
-            : splitImportedElementStyles(node.getAttribute("style") || "");
-
-          // Ensure position properties are absolute and properly formatted
-          const wrapperStyle = importedStyleParts.wrapperStyle || "";
-          const styleRules = {};
-
-          // Parse existing style
-          wrapperStyle.split(";").forEach((rule) => {
-            const [key, value] = rule.split(":").map((s) => s.trim());
-            if (key && value) styleRules[key] = value;
-          });
-
-          // Force absolute positioning with fallbacks
-          if (!styleRules.position || styleRules.position !== "absolute") {
-            styleRules.position = "absolute";
-          }
-          // Don't default left/top to 0px - will be captured from computed values
-          if (!styleRules.width) styleRules.width = "auto";
-          if (!styleRules.height) styleRules.height = "auto";
-
-          // Rebuild inline style with normalized values
-          const normalizedStyle = Object.entries(styleRules)
-            .map(([key, value]) => `${key}: ${value}`)
-            .join("; ");
-
-          wrapper.setAttribute("style", normalizedStyle);
-          wrapper.innerHTML = `${buildEditorHandles(type)}<div class="element-body w-full h-full overflow-visible"></div>`;
-          const body = wrapper.querySelector(".element-body");
-          const importedContent = (
-            node.classList?.contains("ml-container")
-              ? node.querySelector(".ml-content") || node.firstElementChild
-              : node
-          )?.cloneNode(true);
-          if (importedContent && !node.classList?.contains("ml-container")) {
-            if (importedStyleParts.contentStyle) {
-              importedContent.setAttribute(
-                "style",
-                importedStyleParts.contentStyle,
-              );
-            } else {
-              importedContent.removeAttribute("style");
-            }
-          }
-          body.innerHTML = importedContent
-            ? importedContent.outerHTML
-            : node.innerHTML;
-          stripImportedBuilderArtifacts(body);
-
-          // Normalize a common import shape: `.ml-content` is absolutely positioned inside a wrapper.
-          // Lift its box to the wrapper and reset the inner node to relative so selection/drag math matches visuals.
-          liftAbsoluteChildBoxToWrapper(wrapper);
-          normalizeImportedInnerContent(wrapper);
-          canvas.appendChild(wrapper);
-
-          // CRITICAL FIX: Verify and stabilize all position/size properties
-          // This prevents displacement in drag/resize operations
-          requestAnimationFrame(() => {
-            const compStyle = window.getComputedStyle(wrapper);
-            const rect = wrapper.getBoundingClientRect();
-
-            // Ensure position is absolute
-            if (compStyle.position !== "absolute") {
-              wrapper.style.position = "absolute";
-            }
-
-            // Get actual dimensions and position from rendered element
-            const computedW = parseFloat(compStyle.width);
-            const computedH = parseFloat(compStyle.height);
-            const computedL = parseFloat(compStyle.left);
-            const computedT = parseFloat(compStyle.top);
-
-            // Stabilize width - use offsetWidth if computed is unavailable
-            if (isNaN(computedW) || computedW < 30) {
-              wrapper.style.width =
-                Math.max(30, rect.width || wrapper.offsetWidth || 200) + "px";
-            } else if (!wrapper.style.width || wrapper.style.width === "auto") {
-              wrapper.style.width = Math.round(computedW) + "px";
-            }
-
-            // Stabilize height - use offsetHeight if computed is unavailable
-            if (isNaN(computedH) || computedH < 30) {
-              wrapper.style.height =
-                Math.max(30, rect.height || wrapper.offsetHeight || 100) + "px";
-            } else if (
-              !wrapper.style.height ||
-              wrapper.style.height === "auto"
-            ) {
-              wrapper.style.height = Math.round(computedH) + "px";
-            }
-
-            // Stabilize left position - CRITICAL: always capture computed/offset
-            if (isNaN(computedL)) {
-              // Use offsetLeft as fallback, not 0px (preserves import position)
-              wrapper.style.left = Math.round(wrapper.offsetLeft || 0) + "px";
-            } else if (!wrapper.style.left) {
-              wrapper.style.left = Math.round(computedL) + "px";
-            }
-
-            // Stabilize top position - CRITICAL: always capture computed/offset
-            if (isNaN(computedT)) {
-              // Use offsetTop as fallback, not 0px (preserves import position)
-              wrapper.style.top = Math.round(wrapper.offsetTop || 0) + "px";
-            } else if (!wrapper.style.top) {
-              wrapper.style.top = Math.round(computedT) + "px";
-            }
-            normalizeImportedInnerContent(wrapper);
-            clampImportedWrapperToCanvas(wrapper);
-          });
+           }
+           
+           const body = wrapper.querySelector(".element-body");
+           const contentNode = item.originalNode.cloneNode(true);
+           contentNode.removeAttribute("id");
+           
+           // Remove children that are also being extracted so they don't render twice!
+           Array.from(contentNode.children).forEach(child => {
+              if (child.tagName && child.tagName.toLowerCase() !== "svg" && child.tagName.toLowerCase() !== "path" && !["b","i","strong","em","span"].includes(child.tagName.toLowerCase())) {
+                 child.remove();
+              }
+           });
+           
+           // Interaction parsing
+           if (contentNode.hasAttribute("onclick")) {
+              const clickScript = contentNode.getAttribute("onclick");
+              if (clickScript.includes("display") && clickScript.includes("block")) {
+                 const targetMatch = clickScript.match(/getElementById\(['"]([^'"]+)['"]\)/);
+                 if (targetMatch) {
+                   wrapper.setAttribute("data-interaction", `click:toggleVisibility:${targetMatch[1]}`);
+                 }
+              } else {
+                 wrapper.setAttribute("data-interaction", `click:customFunction`);
+              }
+              contentNode.removeAttribute("onclick");
+           }
+           
+           // Apply baked styles to content Node to survive extraction
+           Object.entries(item.bakedStyles).forEach(([key, val]) => {
+              if (val && val !== "none" && val !== "normal" && val !== "rgba(0, 0, 0, 0)" && val !== "0px") {
+                 contentNode.style[key] = val;
+              }
+           });
+           
+           // Override display if hidden
+           if (isHidden) contentNode.style.display = "block";
+           
+           contentNode.style.margin = "0px";
+           contentNode.style.width = "100%";
+           contentNode.style.height = "100%";
+           contentNode.style.boxSizing = "border-box";
+           
+           body.innerHTML = contentNode.outerHTML;
+           stripImportedBuilderArtifacts(body);
+           canvas.appendChild(wrapper);
         });
+        
+        document.body.removeChild(measureContainer);
         normalizeCanvasLayerOrder();
         normalizeCanvasElementPositions();
         ensureCanvasElementsVisible({ aggressive: false });
