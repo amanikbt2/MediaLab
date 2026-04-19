@@ -38644,7 +38644,76 @@
           }
 
           // STAGE 2: Check if we have a parsed command from Groq formatter
-          if (managerResponse?.elementSpec && managerResponse?.parsedCommand) {
+          if (managerResponse?.elementSpecs && managerResponse.elementSpecs.length > 0) {
+            setAiAgentStage("applying");
+            let insertedCount = 0;
+            let lastComponentType = "";
+
+            for (const spec of managerResponse.elementSpecs) {
+              // Handle background image commands
+              if (spec.isBackgroundCommand) {
+                const target = spec.target || "body";
+                const canvas = target === "body"
+                  ? document.querySelector("body") || document.getElementById("builder-canvas")
+                  : document.querySelector(target);
+
+                if (canvas) {
+                  Object.assign(canvas.style, spec.styles);
+                  aiChatMessages.push({ role: "assistant", text: `✓ Applied background image to ${target}.` });
+                }
+                continue;
+              }
+
+              let insertResult;
+
+              if (spec.isComponent) {
+                if (spec.isSVG && spec.shapeType) {
+                  const svgShape = generateSVGShape(spec.shapeType, spec.properties || {});
+                  insertResult = applyInsertElementSpec({
+                    html: svgShape.html, css: "", animations: "",
+                    style: { width: svgShape.width, height: svgShape.height }, attributes: {}
+                  });
+                } else {
+                  const componentInsertSpec = buildDeterministicInsertSpec(`insert ${spec.componentType}`, currentCode);
+                  if (componentInsertSpec && componentInsertSpec.success !== false) {
+                    insertResult = applyInsertElementSpec(componentInsertSpec);
+                  }
+                }
+                lastComponentType = spec.componentType;
+              } else {
+                if (spec.isSVG && spec.shapeType) {
+                  const svgShape = generateSVGShape(spec.shapeType, spec.properties || {});
+                  insertResult = applyInsertElementSpec({
+                    html: svgShape.html, css: "", animations: "",
+                    style: { width: svgShape.width, height: svgShape.height }, attributes: {}
+                  });
+                } else {
+                  insertResult = applyInsertElementSpec({
+                    html: generateElementFromSpec(spec) || `<${spec.type}></${spec.type}>`,
+                    css: "", animations: "",
+                    style: spec.styles || {}, attributes: spec.attributes || {}
+                  });
+                }
+                lastComponentType = spec.type;
+              }
+
+              if (insertResult && insertResult.success) {
+                insertedCount++;
+              }
+            }
+
+            if (insertedCount > 0) {
+              syncActiveBuilderFileFromCanvas({ skipHistory: true });
+              aiChatMessages.push({
+                role: "assistant",
+                text: `✓ Built Super Component with ${insertedCount} elements.`
+              });
+              setAiAgentStage("done");
+              renderBuilderAiChat();
+              return;
+            }
+          } else if (managerResponse?.elementSpec && managerResponse?.parsedCommand) {
+            // Legacy single-item support
             setAiAgentStage("applying");
             const spec = managerResponse.elementSpec;
 

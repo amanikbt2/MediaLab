@@ -44,6 +44,7 @@ import {
   extractRenderDeploySuccessPayload,
 } from "./controllers/renderBlueprintController.js";
 import WorkflowBrain from "./WorkflowBrain.js";
+import { PremiumBrain } from "./PremiumBrain.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -4785,6 +4786,78 @@ app.post("/api/workflow/format-command", async (req, res) => {
     let modelUsed = "";
     let lastError = null;
 
+    // === PREMIUM DUAL-TIER: SUPER COMPONENTS ===
+    if (user.isPro && process.env.GEMINI_API_KEY) {
+      try {
+        const premiumSystemPrompt = `You are MediaLab's Premium Super Component Builder.
+Your task is to take a user's request for a complex UI element (like a form, pricing card, or hero section) and decompose it into multiple independent, professional builder commands.
+
+CRITICAL RULES:
+1. Output ONLY valid builder commands. No markdown, no explanations.
+2. Format: insert <tag> <property:value; property:value;>;
+3. VALID TAGS: div, section, card, button, text, heading, input, image. DO NOT use h1/h2/p (use 'heading' or 'text').
+4. DECOMPOSITION & LAYOUT: Since these elements will be dropped as INDEPENDENT siblings on a free-form canvas:
+   - The background container MUST have z-index: 1;
+   - All inner elements (text, inputs, buttons) MUST have z-index: 10; so they appear on top.
+   - Use 'margin-top' or 'top' coordinates to visually stack the elements into a cohesive component.
+5. MICRO-INTERACTIONS: Add hover states (e.g., transition:all 0.3s; hover-transform:scale(1.02);).
+6. Return each command on a new line.
+
+EXAMPLE: "Give me a beautiful login form"
+insert div width:400px; height:400px; padding:32px; background:#1a1a1a; border-radius:16px; z-index:1; position:absolute;
+insert heading text:Login; color:white; margin-top:40px; margin-left:40px; z-index:10; position:absolute;
+insert input type:email; placeholder:Email; width:320px; padding:14px; margin-top:120px; margin-left:40px; border-radius:8px; z-index:10; position:absolute;
+insert input type:password; placeholder:Password; width:320px; padding:14px; margin-top:190px; margin-left:40px; border-radius:8px; z-index:10; position:absolute;
+insert button text:Sign In; width:320px; padding:14px; margin-top:270px; margin-left:40px; border-radius:8px; background:blue; color:white; z-index:10; position:absolute;`;
+
+        const premiumResponse = await PremiumBrain.callGemini([
+          { role: "system", content: premiumSystemPrompt },
+          { role: "user", content: userInput }
+        ]);
+
+        console.log("================== PREMIUM AI RESPONSE ==================");
+        console.log(premiumResponse);
+        console.log("=========================================================");
+
+        if (premiumResponse && !premiumResponse.toLowerCase().includes("cannot-process")) {
+           groqResponse = premiumResponse;
+           modelUsed = "gemini-2.5-flash (Premium)";
+           const parsedCommands = workflowBrain.parseBuilderCommands(groqResponse);
+           
+           console.log("================== PARSED COMMANDS ==================");
+           console.log(JSON.stringify(parsedCommands, null, 2));
+           console.log("=====================================================");
+           
+           if (parsedCommands && parsedCommands.length > 0) {
+             formattedCommands = parsedCommands.map((cmd) => ({
+               command: `insert ${cmd.elementType} ${Object.entries(cmd.properties).map(([key, value]) => `${key}:${value}`).join("; ")};`,
+               elementType: cmd.elementType,
+               properties: cmd.properties,
+               isValid: cmd.isValid,
+             }));
+             
+             user.aiQuota.usedToday = Number(user.aiQuota.usedToday || 0) + 1;
+             user.aiQuota.lastUsed = now;
+             await user.save();
+             
+             return res.json({
+                success: true,
+                input: userInput,
+                commands: formattedCommands.map((cmd) => cmd.command),
+                parsedCommands: formattedCommands,
+                commandCount: formattedCommands.length,
+                modelUsed,
+                groqResponse,
+                creditsRemaining: hasUnlimitedAi ? null : Math.max(0, Number(user.aiQuota.dailyLimit || 10) - Number(user.aiQuota.usedToday || 0))
+             });
+           }
+        }
+      } catch (err) {
+         console.error("[PREMIUM AI] Error in Super Component generation, falling back to standard Groq:", err.message);
+      }
+    }
+    // === END PREMIUM TIER ===
+
     // Stage 1: Try each online model (Xtra AI) - send messy natural command to Groq
     for (const model of models) {
       try {
@@ -5072,6 +5145,70 @@ app.post("/api/ai/chat-edit", async (req, res) => {
     const isTutorialRequest = tutorialAnalysis.isTutorialRequest;
     const tutorialTopic = tutorialAnalysis.learningTopic;
     const tutorialLabel = tutorialAnalysis.topicLabel;
+
+    // === DUAL TIER ROUTING: PREMIUM USERS GET SUPER INTELLIGENT AGENT ===
+    if (user.isPro) {
+      try {
+        const premiumResult = await PremiumBrain.process({
+          prompt: enrichedPrompt,
+          mode,
+          contextCode,
+          activeFileName,
+          activeFileContent,
+          workspaceIndex,
+          agentContext,
+          agentPhase
+        });
+        
+        user.aiQuota.usedToday = Number(user.aiQuota.usedToday || 0) + 1;
+        user.aiQuota.lastUsed = now;
+        await user.save();
+        
+        if (premiumResult.updatedCode) await upsertAIContext(userContextKey, premiumResult.updatedCode);
+        else if (contextCode) await upsertAIContext(userContextKey, contextCode);
+        
+        await createUsageLog({
+          user,
+          action: "ai-chat-edit",
+          summary: `used Premium AI agent via gemini-1.5-flash`,
+          source: "ai",
+          metadata: {
+            modelUsed: "gemini-1.5-flash",
+            usedToday: Number(user.aiQuota.usedToday || 0),
+            dailyLimit: Number(user.aiQuota.dailyLimit || 10),
+          },
+        });
+        
+        return res.json({
+          success: true,
+          updatedCode: premiumResult.updatedCode,
+          assistantReply: premiumResult.assistantReply,
+          mode,
+          modelUsed: "gemini-1.5-flash",
+          modelRecoveryUsed: false,
+          modelSwitchUsed: false,
+          modelSwitchReason: "",
+          nlPreprocessing: nlPreprocessingResult,
+          tutorialMode: isTutorialRequest
+            ? {
+                enabled: true,
+                topic: tutorialTopic,
+                topicLabel: tutorialLabel,
+                confidence: tutorialAnalysis.tutorialConfidence,
+                type: tutorialAnalysis.tutorialType,
+                details: tutorialAnalysis.requestDetails,
+                message: "📚 Tutorial Mode Active - Learning-focused guidance enabled",
+              }
+            : null,
+          creditsRemaining: hasUnlimitedAi
+            ? null
+            : Math.max(0, Number(user.aiQuota.dailyLimit || 10) - Number(user.aiQuota.usedToday || 0)),
+        });
+      } catch (err) {
+        console.error("[PREMIUM AI] Error in Premium Loop, falling back to standard AI:", err.message);
+        // Fall back to standard logic below
+      }
+    }
 
     let models = await AIModel.find({ isActive: true })
       .sort({ priority: 1, status: -1, modelId: 1 })
@@ -5399,8 +5536,58 @@ app.post("/api/ai/manager", async (req, res) => {
       userInput: userInput.substring(0, 50),
     });
 
+    const user = await User.findById(req.user._id);
+
+    // === PREMIUM DUAL-TIER: SUPER COMPONENTS ===
+    console.log(`[AI Manager] User isPro status: ${user?.isPro ? 'TRUE' : 'FALSE'}`);
+    if (user && user.isPro && process.env.GEMINI_API_KEY) {
+      console.log("[AI Manager] ★ PREMIUM USER DETECTED - Using Gemini PremiumBrain ★");
+      try {
+        const premiumSystemPrompt = `You are MediaLab's Premium Super Component Builder.
+Your task is to take a user's request for a complex UI element (like a form, pricing card, or hero section) and decompose it into multiple independent, professional builder commands.
+
+CRITICAL RULES:
+1. Output ONLY valid builder commands. No markdown, no explanations.
+2. Format: insert <tag> <property:value; property:value;>;
+3. VALID TAGS: div, section, card, button, text, heading, input, image. DO NOT use h1/h2/p (use 'heading' or 'text').
+4. DECOMPOSITION & LAYOUT: Since these elements will be dropped as INDEPENDENT siblings on a free-form canvas:
+   - The background container MUST have z-index: 1;
+   - All inner elements (text, inputs, buttons) MUST have z-index: 10; so they appear on top.
+   - Use 'margin-top' or 'top' coordinates to visually stack the elements into a cohesive component.
+5. MICRO-INTERACTIONS: Add hover states (e.g., transition:all 0.3s; hover-transform:scale(1.02);).
+6. Return each command on a new line.
+
+EXAMPLE: "Give me a beautiful login form"
+insert div width:400px; height:400px; padding:32px; background:#1a1a1a; border-radius:16px; z-index:1; position:absolute;
+insert heading text:Login; color:white; margin-top:40px; margin-left:40px; z-index:10; position:absolute;
+insert input type:email; placeholder:Email; width:320px; padding:14px; margin-top:120px; margin-left:40px; border-radius:8px; z-index:10; position:absolute;
+insert input type:password; placeholder:Password; width:320px; padding:14px; margin-top:190px; margin-left:40px; border-radius:8px; z-index:10; position:absolute;
+insert button text:Sign In; width:320px; padding:14px; margin-top:270px; margin-left:40px; border-radius:8px; background:blue; color:white; z-index:10; position:absolute;`;
+
+        const premiumResponse = await PremiumBrain.callGemini([
+          { role: "system", content: premiumSystemPrompt },
+          { role: "user", content: userInput }
+        ]);
+
+        console.log("================== PREMIUM AI RESPONSE ==================");
+        console.log(premiumResponse);
+        console.log("=========================================================");
+
+        if (premiumResponse && !premiumResponse.toLowerCase().includes("cannot-process")) {
+           commandOutput = premiumResponse;
+           formattedCommand = premiumResponse;
+        }
+      } catch (err) {
+         console.error("[PREMIUM AI] Error in Super Component generation, falling back to standard Groq:", err.message);
+      }
+    } else {
+        console.log("[AI Manager] Standard User (or missing API key) - Routing to Groq");
+    }
+    // === END PREMIUM TIER ===
+
     // ENFORCE: When analyzeIntent is true, MUST use Groq - NO FALLBACK
-    const mustUseGroq = analyzeIntent && correctErrors;
+    let mustUseGroq = analyzeIntent && correctErrors;
+    if (formattedCommand) mustUseGroq = false; // Bypass Groq if Premium successfully generated commands
 
     if (!GROQ_API_KEY && mustUseGroq) {
       console.error(
@@ -6015,21 +6202,28 @@ Generate the COMPLETE builder command with ALL properties. Output ONLY the raw c
     // STAGE 2: Parse the formatted command if available
     let parsedCommand = null;
     let elementSpec = null;
+    let parsedCommands = [];
+    let elementSpecs = [];
+    
     if (formattedCommand && formattedCommand.startsWith("insert")) {
-      parsedCommand = parseBuilderCommand(formattedCommand);
-      if (parsedCommand && isValidBuilderCommand(parsedCommand)) {
-        elementSpec = commandToElementSpec(parsedCommand);
-        // Log appropriately based on command type
-        if (parsedCommand.type === "insert-component") {
-          console.log("[AI Manager] Parsed Component Command:", {
-            componentType: parsedCommand.componentType,
-          });
-        } else {
-          console.log("[AI Manager] Parsed Command:", {
-            type: parsedCommand.elementType,
-            properties: Object.keys(parsedCommand.properties || {}),
-          });
+      const commandLines = formattedCommand.split('\n').map(l => l.trim()).filter(l => l.startsWith('insert'));
+      
+      for (const cmdLine of commandLines) {
+        const parsed = parseBuilderCommand(cmdLine);
+        if (parsed && isValidBuilderCommand(parsed)) {
+          const spec = commandToElementSpec(parsed);
+          if (spec) {
+            parsedCommands.push(parsed);
+            elementSpecs.push(spec);
+          }
         }
+      }
+
+      if (parsedCommands.length > 0) {
+        parsedCommand = parsedCommands[0];
+        elementSpec = elementSpecs[0];
+        
+        console.log("[AI Manager] Parsed", parsedCommands.length, "Commands");
       }
     }
 
@@ -6043,6 +6237,8 @@ Generate the COMPLETE builder command with ALL properties. Output ONLY the raw c
       formattedCommand, // Raw command from Groq
       parsedCommand, // Parsed command object
       elementSpec, // Ready-to-use element specification
+      parsedCommands, // NEW: Array of parsed commands
+      elementSpecs, // NEW: Array of specs for Super Components
       analysisResult,
       reasoning: isAction
         ? "Input appears to be a code/design change command"
