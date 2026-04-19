@@ -1388,8 +1388,8 @@
 
         const poolHtml = totalKeys > 0 ? poolKeys.map(k => {
             const isReady = !k.exhausted || Date.now() > k.resetTime;
-            // Limit 1500 per day
-            const limit = 1500;
+            // Limit 500 for better visual progression (0.2% per request)
+            const limit = 500;
             const percent = Math.min(100, (Number(k.usageCount) / limit) * 100);
             const tone = resolveUsageProgressClasses(percent);
             
