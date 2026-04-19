@@ -5540,7 +5540,7 @@ app.post("/api/ai/manager", async (req, res) => {
 
     // === PREMIUM DUAL-TIER: SUPER COMPONENTS ===
     console.log(`[AI Manager] User isPro status: ${user?.isPro ? 'TRUE' : 'FALSE'}`);
-    if (user && user.isPro && process.env.GEMINI_API_KEY) {
+    if (user && user.isPro && (process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY)) {
       console.log("[AI Manager] ★ PREMIUM USER DETECTED - Using Gemini PremiumBrain ★");
       try {
         const premiumSystemPrompt = `You are MediaLab's Premium Super Component Builder.
@@ -5555,7 +5555,9 @@ CRITICAL RULES:
    - All inner elements (text, inputs, buttons) MUST have z-index: 10; so they appear on top.
    - Use 'top' and 'left' coordinates to visually stack the elements into a cohesive component.
 5. MICRO-INTERACTIONS: Add hover states (e.g., transition:all 0.3s; hover-transform:scale(1.02);).
-6. Return each command on a new line.
+6. BACKGROUNDS: If user asks to change canvas/body background, output ONLY: update-background target=body image=detailed search keyword; OR update-background target=body background=color or linear-gradient(...);
+7. IMAGES: ONLY generate an image if the user EXPLICITLY uses words like "image", "photo", or "picture". If they just ask for a noun (like "flower", "car") WITHOUT saying "image", you MUST construct it using CSS shapes or SVG! If generating an image, use Pollinations AI: src:https://image.pollinations.ai/prompt/[detailed_description_url_encoded]
+8. Return each command on a new line.
 
 EXAMPLE: "Give me a beautiful login form"
 insert div width:400px; height:400px; padding:32px; background:#1a1a1a; border-radius:16px; z-index:1; position:absolute; left:0px; top:0px;
@@ -6510,7 +6512,9 @@ function parseBuilderCommand(commandText = "") {
     propPairs.forEach((pair) => {
       const cleanPair = pair.trim();
       if (cleanPair.includes(":")) {
-        const [key, value] = cleanPair.split(":").map((s) => s.trim());
+        const parts = cleanPair.split(":");
+        const key = parts[0].trim();
+        const value = parts.slice(1).join(":").trim();
         if (key && value) {
           properties[key] = value;
         }
@@ -6530,58 +6534,11 @@ function parseBuilderCommand(commandText = "") {
 
 /**
  * Convert image descriptions to actual online image URLs
- * Supports animal names, landscapes, objects, etc.
+ * Uses Pollinations AI for guaranteed high-quality real-time generation
  */
 function generateImageUrl(description) {
-  const query = String(description || "")
-    .trim()
-    .toLowerCase();
-
-  // Use Unsplash API for image searches - free tier
-  // Format: https://api.unsplash.com/photos/random?query=<search>&w=1920&h=1080
-  // Or simpler: https://source.unsplash.com/1920x1080/?<search>
-
-  // For better reliability, use picsum.photos or create a mapping
-  const imageMap = {
-    cat: "https://images.unsplash.com/photo-1574158622682-e40e69881006?w=1920&h=1080&fit=crop",
-    dog: "https://images.unsplash.com/photo-1633722715463-d30628519d00?w=1920&h=1080&fit=crop",
-    mountain:
-      "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1920&h=1080&fit=crop",
-    ocean:
-      "https://images.unsplash.com/photo-1505142468610-359e7d316be0?w=1920&h=1080&fit=crop",
-    sunset:
-      "https://images.unsplash.com/photo-1495567720989-cebdbdd97913?w=1920&h=1080&fit=crop",
-    forest:
-      "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=1920&h=1080&fit=crop",
-    beach:
-      "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=1920&h=1080&fit=crop",
-    city: "https://images.unsplash.com/photo-1480714378408-67cf0d13bc1b?w=1920&h=1080&fit=crop",
-    space:
-      "https://images.unsplash.com/photo-1446776877081-d282a0f896e2?w=1920&h=1080&fit=crop",
-    nature:
-      "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=1920&h=1080&fit=crop",
-    landscape:
-      "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1920&h=1080&fit=crop",
-    portrait:
-      "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=1920&h=1080&fit=crop",
-    abstract:
-      "https://images.unsplash.com/photo-1541961017774-22349e4a1262?w=1920&h=1080&fit=crop",
-  };
-
-  // Check for exact match first
-  if (imageMap[query]) {
-    return imageMap[query];
-  }
-
-  // Check for partial matches
-  for (const [key, url] of Object.entries(imageMap)) {
-    if (query.includes(key) || key.includes(query.split(" ")[0])) {
-      return url;
-    }
-  }
-
-  // Fallback: Use Unsplash API with the description as query
-  return `https://source.unsplash.com/1920x1080/?${encodeURIComponent(query)}`;
+  const query = String(description || "").trim();
+  return `https://image.pollinations.ai/prompt/${encodeURIComponent(query)}?width=1920&height=1080&nologo=true`;
 }
 
 /**
@@ -6596,42 +6553,47 @@ function parseBackgroundCommand(commandText = "") {
     return null;
   }
 
-  // Extract properties: target=...; image=...; other-props=...
   const properties = {};
   const propParts = text.split(";").map((p) => p.trim());
 
   let imageDescription = null;
   let target = "body";
+  let backgroundValue = null;
 
   propParts.forEach((part) => {
-    if (part.includes("=")) {
-      const [key, value] = part.split("=").map((s) => s.trim());
-      if (key.toLowerCase() === "target") {
+    const eqIdx = part.indexOf("=");
+    if (eqIdx > -1) {
+      const key = part.substring(0, eqIdx).trim().toLowerCase();
+      const value = part.substring(eqIdx + 1).trim();
+      if (key === "target") {
         target = value.toLowerCase();
-      } else if (key.toLowerCase() === "image") {
+      } else if (key === "image") {
         imageDescription = value;
+      } else if (key === "background" || key === "color") {
+        backgroundValue = value;
       } else {
         properties[key] = value;
       }
     }
   });
 
-  if (!imageDescription) {
+  if (!imageDescription && !backgroundValue) {
     return null;
   }
 
-  // Generate actual image URL
-  const imageUrl = generateImageUrl(imageDescription);
+  const backgroundStyles = { ...properties };
+  let imageUrl = null;
 
-  // Merge default background styles with properties
-  const backgroundStyles = {
-    "background-image": `url('${imageUrl}')`,
-    "background-size": properties["background-size"] || "cover",
-    "background-position": properties["background-position"] || "center",
-    "background-attachment": properties["background-attachment"] || "scroll",
-    "background-repeat": properties["background-repeat"] || "no-repeat",
-    ...properties,
-  };
+  if (imageDescription) {
+    imageUrl = generateImageUrl(imageDescription);
+    backgroundStyles["background-image"] = `url('${imageUrl}')`;
+    backgroundStyles["background-size"] = properties["background-size"] || "cover";
+    backgroundStyles["background-position"] = properties["background-position"] || "center";
+    backgroundStyles["background-attachment"] = properties["background-attachment"] || "scroll";
+    backgroundStyles["background-repeat"] = properties["background-repeat"] || "no-repeat";
+  } else if (backgroundValue) {
+    backgroundStyles["background"] = backgroundValue;
+  }
 
   return {
     type: "update-background",
@@ -13832,6 +13794,7 @@ app.get(
             runs24h: totalRuns,
           },
           models: modelStats,
+          geminiPool: global.geminiKeyPool || {},
         },
       });
     } catch (error) {

@@ -1,11 +1,42 @@
 import nodeFetch from "node-fetch";
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const rawKeys = process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || "";
+const GEMINI_KEYS = rawKeys.split(",").map(k => k.trim()).filter(k => k.length > 0);
+
+if (!global.geminiKeyPool) {
+  global.geminiKeyPool = {};
+  GEMINI_KEYS.forEach((key, i) => {
+    // Provide a human readable index so we know which key is which without logging the full key
+    global.geminiKeyPool[key] = { id: `Key-${i+1}`, exhausted: false, resetTime: 0, usageCount: 0 };
+  });
+}
 
 export const PremiumBrain = {
+  getAvailableKey() {
+    const now = Date.now();
+    for (const key of GEMINI_KEYS) {
+      const state = global.geminiKeyPool[key];
+      if (state.exhausted && now > state.resetTime) {
+         state.exhausted = false; // Cooldown expired
+      }
+      if (!state.exhausted) {
+         return key;
+      }
+    }
+    return null;
+  },
+
+  markKeyExhausted(key, retryMs) {
+    if (global.geminiKeyPool[key]) {
+       global.geminiKeyPool[key].exhausted = true;
+       global.geminiKeyPool[key].resetTime = Date.now() + retryMs;
+       console.log(`[PremiumBrain] ${global.geminiKeyPool[key].id} (...${key.slice(-4)}) exhausted! Cooldown: ${retryMs/1000}s`);
+    }
+  },
+
   async process(params) {
-    if (!GEMINI_API_KEY) {
-      throw new Error("GEMINI_API_KEY is not configured for Premium features.");
+    if (GEMINI_KEYS.length === 0) {
+      throw new Error("GEMINI_API_KEYS is not configured for Premium features.");
     }
     
     // Agentic Loop: 1. Generate code, 2. Self-Review, 3. Output
@@ -27,13 +58,25 @@ export const PremiumBrain = {
     };
   },
 
-  async callGemini(messages) {
+  async callGemini(messages, retryCount = 0) {
+    // Prevent infinite loops if all keys fail repeatedly
+    if (retryCount >= GEMINI_KEYS.length) {
+       throw new Error("Gemini API Error: All keys in the rotation pool are currently exhausted/rate-limited.");
+    }
+
     // Combine system and user messages into a single prompt for Gemini native API
     const systemMessage = messages.find(m => m.role === "system")?.content || "";
     const userMessage = messages.find(m => m.role === "user")?.content || "";
     const combinedPrompt = `${systemMessage}\n\nUser Request:\n${userMessage}`;
 
-    const response = await nodeFetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+    const apiKey = this.getAvailableKey();
+    if (!apiKey) {
+       throw new Error("Gemini API Error: All keys in the rotation pool are currently exhausted/rate-limited.");
+    }
+
+    global.geminiKeyPool[apiKey].usageCount++;
+
+    const response = await nodeFetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -52,11 +95,27 @@ export const PremiumBrain = {
     
     if (!response.ok) {
        const err = await response.text();
+       
+       // Handle Quota/Rate Limit Errors intelligently
+       if (err.includes("429") || err.includes("RESOURCE_EXHAUSTED") || err.includes("quota")) {
+           let retryMs = 60000; // default 1 min
+           const match = err.match(/retryDelay["\s:]+["']?(\d+)s/);
+           if (match) retryMs = parseInt(match[1], 10) * 1000;
+           else {
+               const msgMatch = err.match(/retry in ([\d\.]+)s/);
+               if (msgMatch) retryMs = parseFloat(msgMatch[1]) * 1000;
+           }
+           this.markKeyExhausted(apiKey, retryMs);
+           
+           // Instantly retry with the next available key
+           console.log(`[PremiumBrain] Auto-Retrying with next key... (Attempt ${retryCount + 2}/${GEMINI_KEYS.length})`);
+           return await this.callGemini(messages, retryCount + 1);
+       }
        throw new Error(`Gemini API Error: ${err}`);
     }
     
     const data = await response.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text?.replace(/<think>[\s\S]*?<\/think>/g, "").trim() || "";
+    return data.candidates?.[0]?.content?.parts?.[0]?.text?.replace(/<think>[\s\S]*?<\/think>/gi, "").trim() || "";
   },
   
   buildGeneratePrompt(params) {

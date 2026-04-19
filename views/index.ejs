@@ -1446,6 +1446,11 @@
         background: rgba(2, 6, 23, 0.68);
         backdrop-filter: blur(14px);
       }
+      @keyframes rotate { 100% { transform: rotate(360deg); } }
+      @keyframes spin { 100% { transform: rotate(360deg); } }
+      @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.05); opacity: 0.8; } }
+      @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-20px); } }
+      @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
       @keyframes mlFadePulse {
         0%,
         100% {
@@ -2177,19 +2182,61 @@
         font-size: 10px;
         color: #94a3b8;
       }
+      .ai-thinking-wrapper {
+        align-self: flex-start;
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+        margin-top: 0.2rem;
+        margin-bottom: 0.5rem;
+        width: 100%;
+      }
       .ai-thinking-row {
         align-self: flex-start;
         display: inline-flex;
         align-items: center;
         gap: 0.45rem;
         padding: 0.45rem 0.7rem;
-        margin-top: 0.1rem;
         border-radius: 999px;
         border: 1px solid rgba(45, 212, 191, 0.24);
         background: rgba(9, 15, 29, 0.78);
         color: #b6c4d8;
         font-size: 11px;
         letter-spacing: 0.01em;
+      }
+      .ai-thinking-steps {
+        font-size: 9.5px;
+        color: #64748b;
+        padding: 0.4rem 0.6rem;
+        background: rgba(2, 6, 23, 0.4);
+        border: 1px solid rgba(255, 255, 255, 0.04);
+        border-radius: 0.5rem;
+        overflow: hidden;
+        height: 22px;
+        position: relative;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      }
+      .ai-thinking-step {
+        position: absolute;
+        left: 0.6rem;
+        right: 0.6rem;
+        line-height: 1.4;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        overflow: hidden;
+        opacity: 0;
+        transform: translateY(10px);
+        animation: aiThinkingSwipe 6s infinite;
+      }
+      .ai-thinking-step:nth-child(1) { animation-delay: 0s; }
+      .ai-thinking-step:nth-child(2) { animation-delay: 2s; }
+      .ai-thinking-step:nth-child(3) { animation-delay: 4s; }
+      @keyframes aiThinkingSwipe {
+        0% { transform: translateY(10px); opacity: 0; }
+        5% { transform: translateY(0); opacity: 1; }
+        25% { transform: translateY(0); opacity: 1; }
+        33% { transform: translateY(-10px); opacity: 0; }
+        100% { transform: translateY(-10px); opacity: 0; }
       }
       .ai-inline-status {
         margin-bottom: 0.7rem;
@@ -7656,7 +7703,7 @@
         },
         {
           id: "marketplace",
-          title: "Marketplace",
+          title: "Blueprints",
           icon: "fa-store",
           desc: "Sell and discover hosted MediaLab projects",
           isNew: true,
@@ -27095,6 +27142,11 @@
       }
       function getBuilderAnimationKeyframesCss() {
         return `
+      @keyframes rotate { 100% { transform: rotate(360deg); } }
+      @keyframes spin { 100% { transform: rotate(360deg); } }
+      @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.05); opacity: 0.8; } }
+      @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-20px); } }
+      @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
       @keyframes mlFadePulse { 0%, 100% { opacity: 0.28; transform: translateY(0px) scale(0.98); } 50% { opacity: 1; transform: translateY(-4px) scale(1); } }
       @keyframes mlBlinkSoft { 0%, 48%, 100% { opacity: 1; } 50%, 52% { opacity: 0.18; } }
       @keyframes mlHueShift { 0% { filter: hue-rotate(0deg) saturate(1); } 50% { filter: hue-rotate(90deg) saturate(1.15); } 100% { filter: hue-rotate(180deg) saturate(1); } }
@@ -34114,10 +34166,18 @@
         const showThinkingRow =
           !["idle", "done"].includes(aiAgentStage) || aiChatSending;
         if (showThinkingRow) {
+          const thinkingStepsHtml = `
+            <div class="ai-thinking-steps">
+              <div class="ai-thinking-step">Proposal: Analyzing canvas context and extracting active workspace styles...</div>
+              <div class="ai-thinking-step">Proposal: Formulating component layout and generating dynamic CSS keyframes...</div>
+              <div class="ai-thinking-step">Proposal: Injecting styles and constructing DOM elements for canvas drop...</div>
+            </div>
+          `;
           rows.push(
+            '<div class="ai-thinking-wrapper">' +
             '<div class="ai-thinking-row"><span class="ai-agent-stage-ring"></span><span>' +
               escapeHtmlText(stageText) +
-              "</span></div>",
+              "</span></div>" + thinkingStepsHtml + "</div>",
           );
         }
         messagesEl.innerHTML = rows.join("") || fallback;
@@ -34487,46 +34547,61 @@
        */
       function extractAgentActionBlocks(responseText = "") {
         const actions = [];
-        const regex = /\[ACTION\]\s*([\s\S]*?)\s*\[\/ACTION\]/gi;
-        let match;
-        while ((match = regex.exec(String(responseText || ""))) !== null) {
-          const raw = String(match[1] || "").trim();
-          if (!raw) continue;
+        const text = String(responseText || "");
+        
+        function parseBlock(raw, defaultType = null) {
+          raw = raw.trim();
+          if (!raw) return;
+          if (raw.startsWith("```json")) raw = raw.replace(/^```json\s*/i, "");
+          if (raw.endsWith("```")) raw = raw.replace(/\s*```$/i, "");
+          raw = raw.trim();
+
           const typedMatch = raw.match(
             /^\{([A-Za-z_][\w-]*)\}\s*(\{[\s\S]*\})$/,
           );
           if (typedMatch) {
-            const typedType = String(typedMatch[1] || "")
-              .trim()
-              .toUpperCase();
+            const typedType = String(typedMatch[1] || "").trim().toUpperCase();
             const typedPayload = String(typedMatch[2] || "").trim();
             try {
               const parsedPayload = JSON.parse(typedPayload);
               actions.push({ type: typedType, ...(parsedPayload || {}) });
-              continue;
+              return;
             } catch {}
           }
+          
+          const tryParse = (str) => {
+            const parsed = JSON.parse(str);
+            const items = Array.isArray(parsed) ? parsed : (parsed?.actions || [parsed]);
+            items.forEach(item => {
+              if (defaultType && !item.type) item.type = defaultType;
+              actions.push(item);
+            });
+          };
+
           try {
-            const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed))
-              parsed.forEach((item) => actions.push(item));
-            else if (parsed && Array.isArray(parsed.actions))
-              parsed.actions.forEach((item) => actions.push(item));
-            else actions.push(parsed);
+            tryParse(raw);
           } catch {
             try {
               const repaired = raw
                 .replace(/([{,]\s*)([A-Za-z_][\w-]*)\s*:/g, '$1"$2":')
                 .replace(/:\s*'([^']*)'/g, ': "$1"');
-              const parsed = JSON.parse(repaired);
-              if (Array.isArray(parsed))
-                parsed.forEach((item) => actions.push(item));
-              else if (parsed && Array.isArray(parsed.actions))
-                parsed.actions.forEach((item) => actions.push(item));
-              else actions.push(parsed);
+              tryParse(repaired);
             } catch {}
           }
         }
+
+        const regex = /\[ACTION\]\s*([\s\S]*?)\s*\[\/ACTION\]/gi;
+        let match;
+        while ((match = regex.exec(text)) !== null) {
+          parseBlock(match[1]);
+        }
+
+        const altRegex = /\[EDIT_CANVAS\]\s*([\s\S]*?)\s*\[\/EDIT_CANVAS\]/gi;
+        let altMatch;
+        while ((altMatch = altRegex.exec(text)) !== null) {
+          parseBlock(altMatch[1], "EDIT_CANVAS");
+        }
+
         return actions;
       }
       function inferBackgroundFromPrompt(prompt = "") {
@@ -34852,7 +34927,25 @@
             break;
           case "image":
           case "img":
-            html = `<img src="https://via.placeholder.com/300x200" ${attrString} style="${styleString}" alt="${contentText}">`;
+            let imgSrc = "https://via.placeholder.com/300x200";
+            if (styles.src || styles.image || styles.url) {
+               const rawSrc = String(styles.src || styles.image || styles.url).trim();
+               if (rawSrc.startsWith("http") || rawSrc.startsWith("data:")) {
+                  imgSrc = rawSrc;
+               } else {
+                  // Fallback to pollinations if it's just a descriptive prompt
+                  imgSrc = `https://image.pollinations.ai/prompt/${encodeURIComponent(rawSrc)}?width=800&height=800&nologo=true`;
+               }
+               // Remove from styles so it doesn't break CSS
+               delete styles.src;
+               delete styles.image;
+               delete styles.url;
+            }
+            // Re-generate styleString because we mutated styles
+            const updatedStyleString = Object.entries(styles)
+               .map(([key, value]) => `${key}:${value}`)
+               .join(";");
+            html = `<img src="${imgSrc}" ${attrString} style="${updatedStyleString}" alt="${contentText}">`;
             break;
           case "h1":
           case "h2":
@@ -35092,6 +35185,7 @@
           const wrapper = document.createElement("div");
           wrapper.id = id || `ml-inserted-${Date.now()}`;
           wrapper.setAttribute("data-type", "div"); // CRITICAL: Add data-type like addObject
+          wrapper.dataset.customHtml = "true"; // CRITICAL: Prevents builder from overwriting inner contents!
           wrapper.className =
             "canvas-element absolute group transition-shadow active:cursor-grabbing";
           if (className) {
@@ -35469,8 +35563,36 @@
             // Remove standalone < > characters that look like navigation arrows
             cleanHtml = cleanHtml.replace(/(?:<|&lt;)\s*(?:>|&gt;)/g, "");
 
-            tempContainer.innerHTML = cleanHtml;
-            contentElement = tempContainer.firstElementChild || tempContainer;
+            const bodyWrapper = document.createElement("div");
+            bodyWrapper.className = "element-body w-full h-full overflow-visible";
+            bodyWrapper.innerHTML = cleanHtml;
+
+            // Force AI root elements to dock securely to the wrapper to prevent mismatches
+            Array.from(bodyWrapper.children).forEach(child => {
+              if (child.tagName === "STYLE" || child.tagName === "SCRIPT") return;
+              if (child instanceof HTMLElement) {
+                child.style.position = "relative";
+                child.style.left = "0px";
+                child.style.top = "0px";
+                child.style.right = "auto";
+                child.style.bottom = "auto";
+                child.style.margin = "0px";
+                child.style.transform = "none";
+                if (!child.style.width) child.style.width = "100%";
+                if (!child.style.height) child.style.height = "100%";
+              }
+            });
+
+            contentElement = bodyWrapper;
+
+            // Execute scripts to enable interactive AI elements
+            const scripts = contentElement.querySelectorAll("script");
+            scripts.forEach((oldScript) => {
+              const newScript = document.createElement("script");
+              Array.from(oldScript.attributes).forEach((attr) => newScript.setAttribute(attr.name, attr.value));
+              newScript.appendChild(document.createTextNode(oldScript.innerHTML));
+              oldScript.parentNode.replaceChild(newScript, oldScript);
+            });
           } else if (text) {
             const textDiv = document.createElement("div");
             textDiv.textContent = String(text);
@@ -37622,6 +37744,7 @@
       function stripAgentActionBlocks(responseText = "") {
         return String(responseText || "")
           .replace(/\[ACTION\]\s*[\s\S]*?\s*\[\/ACTION\]/gi, "")
+          .replace(/\[EDIT_CANVAS\]\s*[\s\S]*?\s*\[\/EDIT_CANVAS\]/gi, "")
           .trim();
       }
       function hasActionableAgentPayload(responseText = "") {
@@ -37631,6 +37754,7 @@
         if (/REQUEST_FILE:\s*[^\n\r]+/i.test(text)) return true;
         if (/(UPDATE_FILE|CREATE_FILE|CREATE_FOLDER|EDIT_CANVAS):/i.test(text))
           return true;
+        if (/\[EDIT_CANVAS\]/i.test(text)) return true;
         if (
           /<(?:!doctype|html|head|body|div|section|main|style|script)[\s>]/i.test(
             text,
@@ -37713,8 +37837,8 @@
             return;
           }
           if (type === "UPDATE_FILE" || type === "CREATE_FILE") {
-            const targetPath = normalizeBuilderFilePath(action.path || "");
-            const content = String(action.content || "");
+            const targetPath = normalizeBuilderFilePath(action.path || action.file_path || action.filename || "");
+            const content = String(action.content || action.code || "");
             if (!targetPath) return;
             if (
               preserveExisting &&
@@ -37809,7 +37933,10 @@
             return;
           }
           if (type === "EDIT_CANVAS") {
-            const ops = Array.isArray(action.ops) ? action.ops : null;
+            let ops = Array.isArray(action.ops) ? action.ops : null;
+            if (!ops && (action.operation || action.op || action.action)) {
+              ops = [{...action, op: action.op || action.operation || action.action}];
+            }
             if (ops && ops.length) {
               const opApplied = applyCanvasOps(ops);
               if (opApplied.length) applied.push(...opApplied);
@@ -38696,7 +38823,34 @@
             let insertedCount = 0;
             let lastComponentType = "";
 
+            const canvasEl = document.getElementById("web-canvas");
+            const metrics = getBuilderCanvasMetrics(canvasEl);
+            const viewCenterX = metrics.scrollLeft + ((metrics.scroller.clientWidth || 300) / 2);
+            const viewCenterY = metrics.scrollTop + ((metrics.scroller.clientHeight || 500) / 2);
+            
+            let minLeft = Infinity;
+            let minTop = Infinity;
+            managerResponse.elementSpecs.forEach(spec => {
+              if (!spec.isBackgroundCommand && spec.styles) {
+                 const l = parseFloat(spec.styles.left) || 0;
+                 const t = parseFloat(spec.styles.top) || 0;
+                 if (l < minLeft) minLeft = l;
+                 if (t < minTop) minTop = t;
+              }
+            });
+            if (minLeft === Infinity) minLeft = 0;
+            if (minTop === Infinity) minTop = 0;
+
+            const offsetX = Math.max(0, viewCenterX - minLeft - 150);
+            const offsetY = Math.max(0, viewCenterY - minTop - 100);
+
             for (const spec of managerResponse.elementSpecs) {
+              if (spec.styles && !spec.isBackgroundCommand) {
+                const currentLeft = parseFloat(spec.styles.left) || 0;
+                const currentTop = parseFloat(spec.styles.top) || 0;
+                spec.styles.left = `${currentLeft + offsetX}px`;
+                spec.styles.top = `${currentTop + offsetY}px`;
+              }
               // Handle background image commands
               if (spec.isBackgroundCommand) {
                 const target = spec.target || "body";
@@ -38763,6 +38917,17 @@
             // Legacy single-item support
             setAiAgentStage("applying");
             const spec = managerResponse.elementSpec;
+
+            const canvasEl = document.getElementById("web-canvas");
+            if (canvasEl && spec.styles && !spec.isBackgroundCommand) {
+              const metrics = getBuilderCanvasMetrics(canvasEl);
+              const viewCenterX = metrics.scrollLeft + ((metrics.scroller.clientWidth || 300) / 2);
+              const viewCenterY = metrics.scrollTop + ((metrics.scroller.clientHeight || 500) / 2);
+              const w = parseFloat(spec.styles.width) || 300;
+              const h = parseFloat(spec.styles.height) || 200;
+              spec.styles.left = `${Math.max(0, viewCenterX - w/2)}px`;
+              spec.styles.top = `${Math.max(0, viewCenterY - h/2)}px`;
+            }
 
             // Handle background image commands
             if (spec.isBackgroundCommand) {
