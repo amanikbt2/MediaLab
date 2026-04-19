@@ -29808,6 +29808,9 @@
               Math.round(el.offsetLeft),
               Math.round(el.offsetTop),
             );
+            if (typeof autoSizeCanvasVertical === 'function') {
+              autoSizeCanvasVertical();
+            }
           });
         };
         scheduleCollaborationContentSync("move", 60);
@@ -35365,6 +35368,11 @@
             "top",
             "right",
             "bottom",
+            "margin",
+            "marginTop",
+            "marginLeft",
+            "marginRight",
+            "marginBottom",
             "width",
             "height",
             "zIndex",
@@ -35414,6 +35422,11 @@
             visibility: wrapperStyle.visibility ?? "visible",
             overflow: wrapperStyle.overflow ?? "visible",
             pointerEvents: wrapperStyle.pointerEvents ?? "auto",
+            margin: wrapperStyle.margin || "",
+            marginTop: wrapperStyle.marginTop || "",
+            marginLeft: wrapperStyle.marginLeft || "",
+            marginBottom: wrapperStyle.marginBottom || "",
+            marginRight: wrapperStyle.marginRight || "",
           });
           if (wrapperStyle.transform)
             wrapper.style.transform = wrapperStyle.transform;
@@ -35473,11 +35486,19 @@
             contentElement.style.width = contentElement.style.width || "100%";
             contentElement.style.height = contentElement.style.height || "100%";
             contentElement.style.boxSizing = "border-box";
-          }
-          if (contentElement) {
-            contentElement.style.width = contentElement.style.width || "100%";
-            contentElement.style.height = contentElement.style.height || "100%";
-            contentElement.style.boxSizing = "border-box";
+            // Lock inner element position so wrapper bounds perfectly match
+            contentElement.style.margin = "0px";
+            contentElement.style.marginTop = "0px";
+            contentElement.style.marginLeft = "0px";
+            contentElement.style.marginRight = "0px";
+            contentElement.style.marginBottom = "0px";
+            if (contentElement.style.position === "absolute" || contentElement.style.position === "fixed") {
+              contentElement.style.position = "relative";
+            }
+            contentElement.style.top = "0px";
+            contentElement.style.left = "0px";
+            contentElement.style.right = "auto";
+            contentElement.style.bottom = "auto";
           }
 
           // Apply data attributes
@@ -37293,7 +37314,33 @@
           });
         return ids;
       }
+
+      function autoSizeCanvasVertical() {
+        try {
+          const canvas = document.getElementById("web-canvas") || document.getElementById("builder-canvas");
+          if (!canvas) return;
+          const elements = canvas.querySelectorAll('.canvas-element');
+          let maxBottom = 0;
+          elements.forEach(el => {
+              const top = parseFloat(el.style.top) || el.offsetTop || 0;
+              const height = parseFloat(el.style.height) || el.offsetHeight || 0;
+              const bottom = top + height;
+              if (bottom > maxBottom) {
+                  maxBottom = bottom;
+              }
+          });
+          // 800px minimum height so the canvas is never unworkably small
+          const minCanvasHeight = 800; 
+          const calculatedHeight = maxBottom > 0 ? maxBottom + 60 : minCanvasHeight;
+          const finalHeight = Math.max(calculatedHeight, minCanvasHeight);
+          canvas.style.minHeight = `${finalHeight}px`;
+        } catch (err) {
+          console.error("Canvas auto-size failed:", err);
+        }
+      }
+
       function syncActiveBuilderFileFromCanvas(options = {}) {
+        autoSizeCanvasVertical();
         const { skipHistory = false, skipCodeApply = true } = options || {};
         const activePath =
           normalizeBuilderFilePath(activeBuilderFilePath || "index.html") ||
@@ -40866,6 +40913,17 @@
         };
         reader.readAsDataURL(file);
       }
+      function isCustomHtmlElement(el) {
+        if (!el) return false;
+        if (el.dataset.customHtml === "true") return true;
+        const body = el.querySelector(".element-body");
+        if (!body) return false;
+        if (body.querySelector("svg")) return true;
+        if (body.children.length > 1) return true;
+        const child = body.firstElementChild;
+        if (child && child.tagName === "DIV" && !child.hasAttribute("contenteditable")) return true;
+        return false;
+      }
       function updateInspectorPreview() {
         const preview = document.getElementById("inspector-preview");
         const s = normalizeBuilderStyles(
@@ -40981,10 +41039,12 @@
             currentInspectorState.styles.color || "#0f172a";
         }
         const previewBody = previewShell.querySelector(".element-body");
-        populateElementBody(previewBody, type, {
-          ...getDefaultElementAttributes(type),
-          ...a,
-        });
+        if (!isCustomHtmlElement(currentInspectorState.targetEl)) {
+          populateElementBody(previewBody, type, {
+            ...getDefaultElementAttributes(type),
+            ...a,
+          });
+        }
         previewShell
           .querySelectorAll("[contenteditable='true']")
           .forEach((editable) => {
@@ -41044,6 +41104,7 @@
           const body = el.querySelector(".element-body");
           if (
             body &&
+            !isCustomHtmlElement(el) &&
             !(
               currentInspectorState.type === "div" &&
               elementHasNestedCanvasChildren(el)

@@ -5553,16 +5553,16 @@ CRITICAL RULES:
 4. DECOMPOSITION & LAYOUT: Since these elements will be dropped as INDEPENDENT siblings on a free-form canvas:
    - The background container MUST have z-index: 1;
    - All inner elements (text, inputs, buttons) MUST have z-index: 10; so they appear on top.
-   - Use 'margin-top' or 'top' coordinates to visually stack the elements into a cohesive component.
+   - Use 'top' and 'left' coordinates to visually stack the elements into a cohesive component.
 5. MICRO-INTERACTIONS: Add hover states (e.g., transition:all 0.3s; hover-transform:scale(1.02);).
 6. Return each command on a new line.
 
 EXAMPLE: "Give me a beautiful login form"
-insert div width:400px; height:400px; padding:32px; background:#1a1a1a; border-radius:16px; z-index:1; position:absolute;
-insert heading text:Login; color:white; margin-top:40px; margin-left:40px; z-index:10; position:absolute;
-insert input type:email; placeholder:Email; width:320px; padding:14px; margin-top:120px; margin-left:40px; border-radius:8px; z-index:10; position:absolute;
-insert input type:password; placeholder:Password; width:320px; padding:14px; margin-top:190px; margin-left:40px; border-radius:8px; z-index:10; position:absolute;
-insert button text:Sign In; width:320px; padding:14px; margin-top:270px; margin-left:40px; border-radius:8px; background:blue; color:white; z-index:10; position:absolute;`;
+insert div width:400px; height:400px; padding:32px; background:#1a1a1a; border-radius:16px; z-index:1; position:absolute; left:0px; top:0px;
+insert heading text:Login; color:white; top:40px; left:40px; z-index:10; position:absolute;
+insert input type:email; placeholder:Email; width:320px; padding:14px; top:120px; left:40px; border-radius:8px; z-index:10; position:absolute;
+insert input type:password; placeholder:Password; width:320px; padding:14px; top:190px; left:40px; border-radius:8px; z-index:10; position:absolute;
+insert button text:Sign In; width:320px; padding:14px; top:270px; left:40px; border-radius:8px; background:blue; color:white; z-index:10; position:absolute;`;
 
         const premiumResponse = await PremiumBrain.callGemini([
           { role: "system", content: premiumSystemPrompt },
