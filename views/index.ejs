@@ -21872,15 +21872,15 @@
                                   <div id="builder-canvas-size-label" class="hidden text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Desktop Canvas</div>
                                   <div id="builder-viewport-panel" class="hidden flex-col items-start">
                                       <select id="builder-device-select" onchange="setBuilderViewportMode(this.value)" class="w-[210px] rounded-md border border-cyan-400/45 bg-transparent px-2 py-1.5 text-[11px] font-semibold text-slate-100 outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/80">
-                                          <option value="desktop">Desktop</option>
-                                          <option value="laptop">Laptop 1440</option>
-                                          <option value="tablet">iPad 1024</option>
-                                          <option value="tablet-portrait">iPad 768</option>
-                                          <option value="mobile">iPhone 14 Pro Max</option>
-                                          <option value="mobile-small">iPhone SE</option>
-                                          <option value="pixel">Pixel 7</option>
-                                          <option value="galaxy">Galaxy S8</option>
-                                          <option value="responsive">Responsive</option>
+                                          <option class="bg-slate-900 text-slate-200" value="desktop">Desktop</option>
+                                          <option class="bg-slate-900 text-slate-200" value="laptop">Laptop 1440</option>
+                                          <option class="bg-slate-900 text-slate-200" value="tablet">iPad 1024</option>
+                                          <option class="bg-slate-900 text-slate-200" value="tablet-portrait">iPad 768</option>
+                                          <option class="bg-slate-900 text-slate-200" value="mobile">iPhone 14 Pro Max</option>
+                                          <option class="bg-slate-900 text-slate-200" value="mobile-small">iPhone SE</option>
+                                          <option class="bg-slate-900 text-slate-200" value="pixel">Pixel 7</option>
+                                          <option class="bg-slate-900 text-slate-200" value="galaxy">Galaxy S8</option>
+                                          <option class="bg-slate-900 text-slate-200" value="responsive">Responsive</option>
                                       </select>
                                   </div>
                                   <button id="builder-terminal-toggle" type="button" onclick="toggleTerminalDrawer()" class="toolbar-item inline-flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-[10px] font-black uppercase tracking-[0.18em] text-slate-300 hover:text-cyan-100">
@@ -34535,11 +34535,25 @@
         const showThinkingRow =
           !["idle", "done"].includes(aiAgentStage) || aiChatSending;
         if (showThinkingRow) {
+          const lastUserMsg = [...aiChatMessages].reverse().find(m => m.role === "user");
+          const promptExtract = lastUserMsg ? escapeHtmlText(lastUserMsg.text.slice(0, 40)) + (lastUserMsg.text.length > 40 ? "..." : "") : "request";
+
+          let step1, step2, step3;
+          if (aiAgentStage === "parsing" || aiAgentStage === "applying") {
+              step1 = `Receiving layout data from Premium Brain...`;
+              step2 = `Parsing detached components into the DOM...`;
+              step3 = `Dropping elements onto the canvas...`;
+          } else {
+              step1 = `Reasoning about geometry for: "${promptExtract}"`;
+              step2 = `Deconstructing into independent elements...`;
+              step3 = `Generating raw HTML, CSS, and SVG paths...`;
+          }
+
           const thinkingStepsHtml = `
             <div class="ai-thinking-steps">
-              <div class="ai-thinking-step">Proposal: Analyzing canvas context and extracting active workspace styles...</div>
-              <div class="ai-thinking-step">Proposal: Formulating component layout and generating dynamic CSS keyframes...</div>
-              <div class="ai-thinking-step">Proposal: Injecting styles and constructing DOM elements for canvas drop...</div>
+              <div class="ai-thinking-step">${step1}</div>
+              <div class="ai-thinking-step">${step2}</div>
+              <div class="ai-thinking-step">${step3}</div>
             </div>
           `;
           rows.push(
@@ -36052,15 +36066,36 @@
             else bodyStyle[key] = value;
           });
 
-          // Compute wrapper positioning (prefer explicit x/y or style.left/top).
-          const posLeft = normalizeCssValue(
-            hasOwn(spec, "x") ? x : wrapperStyle.left,
-            "100px",
-          );
-          const posTop = normalizeCssValue(
-            hasOwn(spec, "y") ? y : wrapperStyle.top,
-            "100px",
-          );
+          // Smart positioning: Calculate center of current view
+          const canvasEl = document.getElementById("web-canvas");
+          let defaultLeft = "100px";
+          let defaultTop = "100px";
+          
+          if (canvasEl && typeof getBuilderCanvasMetrics === "function") {
+             const metrics = getBuilderCanvasMetrics(canvasEl);
+             const viewW = metrics.scroller?.clientWidth || 300;
+             const viewH = metrics.scroller?.clientHeight || 500;
+             // Calculate absolute center of the current scroll viewport
+             const centerX = metrics.scrollLeft + (viewW / 2);
+             const centerY = metrics.scrollTop + (viewH / 2);
+             defaultLeft = `${centerX}px`;
+             defaultTop = `${centerY}px`;
+          }
+
+          let rawLeft = hasOwn(spec, "x") ? x : wrapperStyle.left;
+          let rawTop = hasOwn(spec, "y") ? y : wrapperStyle.top;
+
+          // Compute wrapper positioning
+          let posLeft = normalizeCssValue(rawLeft, defaultLeft);
+          let posTop = normalizeCssValue(rawTop, defaultTop);
+
+          // Smart intercept: aggressively replace ANY percentage (like 50%) or "auto" with the true pixel center
+          if (posLeft.includes("%") || posLeft === "auto" || posLeft === "0px" || !rawLeft) {
+             posLeft = defaultLeft;
+          }
+          if (posTop.includes("%") || posTop === "auto" || posTop === "0px" || !rawTop) {
+             posTop = defaultTop;
+          }
 
           // Compute wrapper dimensions (prefer explicit width/height or style.width/height).
           const resolvedWidth = normalizeCssValue(

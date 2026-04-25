@@ -1,17 +1,17 @@
 {
   "AIzaSyBGJCcKLRur6vUwWApJTuw-ADFSrB586uk": {
     "id": "Key-1",
-    "exhausted": false,
+    "exhausted": true,
     "disabled": false,
-    "resetTime": 0,
-    "usageCount": 0
+    "resetTime": 1777151878810,
+    "usageCount": 1
   },
   "AIzaSyBr6oWi9on7jpgkmzd6PLaFWqCRyICqAEk": {
     "id": "Key-2",
     "exhausted": false,
     "disabled": false,
     "resetTime": 0,
-    "usageCount": 0
+    "usageCount": 4
   },
   "AIzaSyC6ej37cSxf26T-zV-baTbyHT0ZkITK2rM": {
     "id": "Key-3",
