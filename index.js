@@ -142,6 +142,13 @@ app.set("view engine", "ejs");
 // This is critical for Render/Heroku to handle HTTPS cookies correctly
 app.set("trust proxy", 1);
 
+// --- ENABLE WEBCONTAINER CROSS-ORIGIN ISOLATION ---
+app.use((req, res, next) => {
+  res.setHeader("Cross-Origin-Embedder-Policy", "credentialless");
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  next();
+});
+
 const APP_BASE_URL = String(
   process.env.APP_BASE_URL || "https://medialab.keysire.com",
 ).trim().replace(/\/+$/, "");
@@ -8926,6 +8933,7 @@ app.get("/api/github/projects", async (req, res) => {
             method: "GET",
             redirect: "follow",
             headers: { "User-Agent": "MediaLab-Deploy-Check" },
+            signal: AbortSignal.timeout(3000),
           });
           if (response.status < 400) {
             project.renderHostedConfirmed = true;
