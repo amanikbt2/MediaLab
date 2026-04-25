@@ -6,21 +6,9 @@ const STATE_FILE = path.join(process.cwd(), "ai_key_state.json");
 const rawKeys = process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || "";
 const GEMINI_KEYS = rawKeys.split(",").map(k => k.trim()).filter(k => k.length > 0);
 
-const KEY_LABELS = {
-  "AIzaSyDQRQBOM_e5epWed4hiA_Pzf-_81Rt_4Mg": "kbt1",
-  "AIzaSyAJE2mJpIlZt_P6mc_7axK7k1qAk8iALYA": "kbt2",
-  "AIzaSyB-IBL4wo43PEsRBUaSZtsM960IZPQp1eg": "s1",
-  "AIzaSyDPFa9m7MuYz-1SXlRStY4heAYhS3FqgAI": "s2",
-  "AIzaSyCeocpDWn_3Ac7PMSl0wCBLMrQ8JcJjOe0": "s3",
-  "AIzaSyDy4Ckgpl83LovGJxl6TRq8Uz9aVzl1l0U": "s4",
-  "AIzaSyCQtEoNPt1XSD11MwV-lNnQ2vpm8bpjhVs": "s5",
-  "AIzaSyBdmlKzQN665XamnQzD5Co9v8Z9OKJmJsc": "s6",
-  "AIzaSyAFGJtQ9c20mpt07KHj3Jsi7fuqH7rbfZY": "s7",
-  "AIzaSyDHcaolbHHFPOHogwvGhB7i65BFpvVHhtY": "s8",
-  "AIzaSyDdHnoe_XhT7NP9WFxYFQnpjFmFBdAZlu8": "s9",
-  "AIzaSyDxRnCXjGGovGjVvKnIbTY_qQ5dRfONmdw": "s10",
-  "AIzaSyCS6s3q0TPOLk_XGfekXovPHsPMYfTS3KM": "s12",
-};
+function getSafeKeyLabel(index = 0) {
+  return `Key-${index + 1}`;
+}
 
 function loadState() {
   if (fs.existsSync(STATE_FILE)) {
@@ -36,11 +24,12 @@ if (!global.geminiKeyPool) {
   const savedState = loadState();
   global.geminiKeyPool = {};
   GEMINI_KEYS.forEach((key, i) => {
-    const label = KEY_LABELS[key] || `Key-${i+1}`;
-    const saved = savedState[key] || { usageCount: 0, exhausted: false, resetTime: 0 };
+    const label = getSafeKeyLabel(i);
+    const saved = savedState[key] || { usageCount: 0, exhausted: false, disabled: false, resetTime: 0 };
     global.geminiKeyPool[key] = { 
       id: label, 
       exhausted: saved.exhausted || false, 
+      disabled: saved.disabled || false,
       resetTime: saved.resetTime || 0, 
       usageCount: saved.usageCount || 0 
     };
@@ -52,7 +41,7 @@ if (!global.geminiKeyPool) {
      console.log("[PremiumBrain] Running 3-Hour Health Check on Exhausted API Keys...");
      for (const key of GEMINI_KEYS) {
         const state = global.geminiKeyPool[key];
-        if (state.exhausted) {
+        if (state && state.exhausted && !state.disabled) {
            try {
              const res = await nodeFetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
                method: "POST", headers: { "Content-Type": "application/json" },
@@ -77,6 +66,9 @@ export const PremiumBrain = {
     let updated = false;
     for (const key of GEMINI_KEYS) {
       const state = global.geminiKeyPool[key];
+      if (!state || state.disabled) {
+         continue;
+      }
       if (state.exhausted && now > state.resetTime) {
          state.exhausted = false; // Cooldown expired
          state.usageCount = 0;
@@ -86,11 +78,25 @@ export const PremiumBrain = {
     if (updated) saveState(global.geminiKeyPool);
 
     for (const key of GEMINI_KEYS) {
-      if (!global.geminiKeyPool[key].exhausted) {
+      if (!global.geminiKeyPool[key].exhausted && !global.geminiKeyPool[key].disabled) {
          return key;
       }
     }
     return null;
+  },
+
+  getPoolStatusSummary() {
+    const states = GEMINI_KEYS.map((key) => global.geminiKeyPool[key]).filter(Boolean);
+    return {
+      totalKeys: GEMINI_KEYS.length,
+      readyKeys: states.filter((state) => !state.exhausted && !state.disabled).length,
+      exhaustedKeys: states.filter((state) => state.exhausted).length,
+      disabledKeys: states.filter((state) => state.disabled).length,
+    };
+  },
+
+  getKeyLabel(key = "") {
+    return global.geminiKeyPool[key]?.id || "unknown-key";
   },
 
   markKeyExhausted(key, retryMs) {
@@ -102,6 +108,18 @@ export const PremiumBrain = {
     }
   },
 
+  disableKey(key, reason = "disabled") {
+    if (global.geminiKeyPool[key]) {
+      global.geminiKeyPool[key].disabled = true;
+      global.geminiKeyPool[key].exhausted = true;
+      global.geminiKeyPool[key].resetTime = Number.MAX_SAFE_INTEGER;
+      saveState(global.geminiKeyPool);
+      console.log(
+        `[PremiumBrain] ${global.geminiKeyPool[key].id} disabled from rotation pool: ${reason}`,
+      );
+    }
+  },
+
   async process(params) {
     if (GEMINI_KEYS.length === 0) {
       throw new Error("GEMINI_API_KEYS is not configured for Premium features.");
@@ -109,6 +127,7 @@ export const PremiumBrain = {
     
     // Agentic Loop: 1. Generate code, 2. Self-Review, 3. Output
     console.log("[PremiumBrain] Initiating Agentic Loop for Pro User...");
+    console.log("[PremiumBrain] Pool status before request:", this.getPoolStatusSummary());
     let code = await this.callGemini(this.buildGeneratePrompt(params));
     
     // Self-reflection validator logic
@@ -141,6 +160,13 @@ export const PremiumBrain = {
     if (!apiKey) {
        throw new Error("Gemini API Error: All keys in the rotation pool are currently exhausted/rate-limited.");
     }
+
+    const keyLabel = this.getKeyLabel(apiKey);
+    console.log("[PremiumBrain] Using Gemini key from rotation pool:", {
+      keyLabel,
+      retryCount,
+      pool: this.getPoolStatusSummary(),
+    });
 
     global.geminiKeyPool[apiKey].usageCount++;
     saveState(global.geminiKeyPool);
@@ -175,10 +201,27 @@ export const PremiumBrain = {
                if (msgMatch) retryMs = parseFloat(msgMatch[1]) * 1000;
            }
            this.markKeyExhausted(apiKey, retryMs);
+           console.log("[PremiumBrain] Rotation handoff triggered:", {
+             exhaustedKey: keyLabel,
+             retryMs,
+             nextPoolState: this.getPoolStatusSummary(),
+           });
            
            // Instantly retry with the next available key
            console.log(`[PremiumBrain] Auto-Retrying with next key... (Attempt ${retryCount + 2}/${GEMINI_KEYS.length})`);
            return await this.callGemini(messages, retryCount + 1);
+       }
+       if (
+         err.includes("PERMISSION_DENIED") ||
+         err.includes("API key was reported as leaked") ||
+         err.includes("API_KEY_INVALID") ||
+         err.includes("invalid API key")
+       ) {
+           this.disableKey(apiKey, "permission denied / leaked / invalid");
+           if (retryCount + 1 < GEMINI_KEYS.length) {
+             console.log(`[PremiumBrain] Retrying with next safe key... (Attempt ${retryCount + 2}/${GEMINI_KEYS.length})`);
+             return await this.callGemini(messages, retryCount + 1);
+           }
        }
        throw new Error(`Gemini API Error: ${err}`);
     }

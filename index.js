@@ -142,11 +142,15 @@ app.set("view engine", "ejs");
 // This is critical for Render/Heroku to handle HTTPS cookies correctly
 app.set("trust proxy", 1);
 
+const APP_BASE_URL = String(
+  process.env.APP_BASE_URL || "https://medialab.keysire.com",
+).trim().replace(/\/+$/, "");
+
 const io = new Server(httpServer, {
   cors: {
     origin:
       process.env.NODE_ENV === "production"
-        ? "https://medialab-6b20.onrender.com"
+        ? APP_BASE_URL
         : ["http://localhost:3000", "http://127.0.0.1:3000"],
     credentials: true,
   },
@@ -166,6 +170,12 @@ const GROQ_API_KEY = String(
 let aiModelsLastRefreshedAt = 0;
 let aiModelsRefreshTimer = null;
 const aiModelCooldownUntil = new Map();
+
+function canUsePremiumBrain(user = null) {
+  return Boolean(
+    user?.isPro && (process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY),
+  );
+}
 
 function parseRateLimitRetryMs(errorMessage = "") {
   const text = String(errorMessage || "");
@@ -3664,8 +3674,8 @@ async function ensureUserReferralCode(user) {
 
 function buildReferralLink(code = "") {
   const normalizedCode = String(code || "").trim();
-  if (!normalizedCode) return "https://medialab-6b20.onrender.com/";
-  return `https://medialab-6b20.onrender.com/${encodeURIComponent(normalizedCode)}`;
+  if (!normalizedCode) return `${APP_BASE_URL}/`;
+  return `${APP_BASE_URL}/${encodeURIComponent(normalizedCode)}`;
 }
 
 // --- 2. FOLDER & STATIC SETUP ---
@@ -3680,7 +3690,7 @@ app.use(
   cors({
     origin:
       process.env.NODE_ENV === "production"
-        ? "https://medialab-6b20.onrender.com"
+        ? APP_BASE_URL
         : true,
     credentials: true,
   }),
@@ -4829,28 +4839,48 @@ app.post("/api/workflow/format-command", async (req, res) => {
     let lastError = null;
 
     // === PREMIUM DUAL-TIER: SUPER COMPONENTS ===
-    if (user.isPro && process.env.GEMINI_API_KEY) {
+    console.log("[AI Formatter] Premium eligibility:", {
+      isPro: Boolean(user?.isPro),
+      hasGeminiPool: Boolean(process.env.GEMINI_API_KEYS),
+      hasSingleGeminiKey: Boolean(process.env.GEMINI_API_KEY),
+      premiumEnabled: canUsePremiumBrain(user),
+    });
+    if (canUsePremiumBrain(user)) {
+      console.log(
+        "[AI Formatter] PremiumBrain route: Gemini rotation pool will be used for this request",
+      );
+      console.log(
+        "[AI Formatter] PREMIUM USER DETECTED - Using Gemini PremiumBrain rotation pool",
+      );
       try {
         const premiumSystemPrompt = `You are MediaLab's Premium Super Component Builder.
-Your task is to take a user's request for a complex UI element (like a form, pricing card, or hero section) and decompose it into multiple independent, professional builder commands.
+Your task is to take a user's request for a complex UI element and decompose it into MULTIPLE INDEPENDENT, detached components.
 
 CRITICAL RULES:
-1. Output ONLY valid builder commands. No markdown, no explanations.
-2. Format: insert <tag> <property:value; property:value;>;
-3. VALID TAGS: div, section, card, button, text, heading, input, image. DO NOT use h1/h2/p (use 'heading' or 'text').
-4. DECOMPOSITION & LAYOUT: Since these elements will be dropped as INDEPENDENT siblings on a free-form canvas:
-   - The background container MUST have z-index: 1;
-   - All inner elements (text, inputs, buttons) MUST have z-index: 10; so they appear on top.
-   - Use 'margin-top' or 'top' coordinates to visually stack the elements into a cohesive component.
-5. MICRO-INTERACTIONS: Add hover states (e.g., transition:all 0.3s; hover-transform:scale(1.02);).
-6. Return each command on a new line.
+1. DECOMPOSITION: You MUST decompose the user's requested object into multiple independent parts (e.g. for a car, output a chassis, wheels, windows as separate actions).
+2. FORMAT: Output EACH detached part as a separate [ACTION]{INSERT_ELEMENT_SPEC}...[/ACTION] block.
+3. DETACHED & DRAGGABLE: Do NOT wrap everything in one container. Every part must be its own [ACTION] block with its own absolute 'left' and 'top' style properties so they stack visually but can be dragged independently by the user on the canvas.
+4. CENTERING: Center the overall composition in the middle of the canvas by using properties like left:50%, top:50%, and transform:translate(-50%, -50%). For multiple parts, apply offsets to left/top (e.g. left:calc(50% + 20px)).
+5. REASONING: You MUST use <think>...</think> tags first to reason about the structure, geometry, and layout of the complex object before generating the actions.
+6. STYLING & SVG: Use advanced CSS, inline animations (@keyframes inside "css"), or raw SVG paths inside "html" to create beautiful, accurate, professional components.
 
-EXAMPLE: "Give me a beautiful login form"
-insert div width:400px; height:400px; padding:32px; background:#1a1a1a; border-radius:16px; z-index:1; position:absolute;
-insert heading text:Login; color:white; margin-top:40px; margin-left:40px; z-index:10; position:absolute;
-insert input type:email; placeholder:Email; width:320px; padding:14px; margin-top:120px; margin-left:40px; border-radius:8px; z-index:10; position:absolute;
-insert input type:password; placeholder:Password; width:320px; padding:14px; margin-top:190px; margin-left:40px; border-radius:8px; z-index:10; position:absolute;
-insert button text:Sign In; width:320px; padding:14px; margin-top:270px; margin-left:40px; border-radius:8px; background:blue; color:white; z-index:10; position:absolute;`;
+EXAMPLE OUTPUT:
+<think>The user wants a car. I will build it with 3 independent parts: a red chassis SVG, and two spinning wheels.</think>
+[ACTION]
+{
+  "type": "INSERT_ELEMENT_SPEC",
+  "html": "<svg viewBox='0 0 100 50'><rect width='100' height='50' fill='red' rx='10'/></svg>",
+  "style": { "left": "50%", "top": "50%", "transform": "translate(-50%, -50%)", "position": "absolute", "zIndex": "5" }
+}
+[/ACTION]
+[ACTION]
+{
+  "type": "INSERT_ELEMENT_SPEC",
+  "html": "<div class='wheel'></div>",
+  "css": ".wheel { border-radius:50%; background:#222; border: 4px dashed #666; animation: spin 2s linear infinite; } @keyframes spin { 100% { transform: rotate(360deg); } }",
+  "style": { "width": "30px", "height": "30px", "left": "calc(50% - 25px)", "top": "calc(50% + 25px)", "position": "absolute", "zIndex": "10" }
+}
+[/ACTION]`;
 
         const premiumResponse = await PremiumBrain.callGemini([
           { role: "system", content: premiumSystemPrompt },
@@ -4860,6 +4890,11 @@ insert button text:Sign In; width:320px; padding:14px; margin-top:270px; margin-
         console.log("================== PREMIUM AI RESPONSE ==================");
         console.log(premiumResponse);
         console.log("=========================================================");
+        console.log("[AI Formatter] PremiumBrain response metadata:", {
+          modelUsed: "gemini-2.5-flash",
+          route: "PremiumBrain.callGemini",
+          userIsPro: Boolean(user?.isPro),
+        });
 
         if (premiumResponse && !premiumResponse.toLowerCase().includes("cannot-process")) {
            groqResponse = premiumResponse;
@@ -4895,8 +4930,15 @@ insert button text:Sign In; width:320px; padding:14px; margin-top:270px; margin-
            }
         }
       } catch (err) {
-         console.error("[PREMIUM AI] Error in Super Component generation, falling back to standard Groq:", err.message);
+        console.error("[PREMIUM AI] Error in Super Component generation:", err.message);
+        return res.status(500).json({
+          success: false,
+          message: "Premium AI Error: " + err.message,
+          error: err.message
+        });
       }
+    } else {
+      console.log("[AI Formatter] Standard user or missing Gemini config - routing to Groq");
     }
     // === END PREMIUM TIER ===
 
@@ -5584,32 +5626,43 @@ app.post("/api/ai/manager", async (req, res) => {
     const user = authResolution.user;
 
     // === PREMIUM DUAL-TIER: SUPER COMPONENTS ===
-    console.log(`[AI Manager] User isPro status: ${user?.isPro ? 'TRUE' : 'FALSE'}`);
-    if (user && user.isPro && (process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY)) {
+    console.log("[AI Manager] Premium eligibility:", {
+      isPro: Boolean(user?.isPro),
+      hasGeminiPool: Boolean(process.env.GEMINI_API_KEYS),
+      hasSingleGeminiKey: Boolean(process.env.GEMINI_API_KEY),
+      premiumEnabled: canUsePremiumBrain(user),
+    });
+    if (canUsePremiumBrain(user)) {
       console.log("[AI Manager] ★ PREMIUM USER DETECTED - Using Gemini PremiumBrain ★");
       try {
         const premiumSystemPrompt = `You are MediaLab's Premium Super Component Builder.
-Your task is to take a user's request for a complex UI element (like a form, pricing card, or hero section) and decompose it into multiple independent, professional builder commands.
+Your task is to take a user's request for a complex UI element and decompose it into MULTIPLE INDEPENDENT, detached components.
 
 CRITICAL RULES:
-1. Output ONLY valid builder commands. No markdown, no explanations.
-2. Format: insert <tag> <property:value; property:value;>;
-3. VALID TAGS: div, section, card, button, text, heading, input, image. DO NOT use h1/h2/p (use 'heading' or 'text').
-4. DECOMPOSITION & LAYOUT: Since these elements will be dropped as INDEPENDENT siblings on a free-form canvas:
-   - The background container MUST have z-index: 1;
-   - All inner elements (text, inputs, buttons) MUST have z-index: 10; so they appear on top.
-   - Use 'top' and 'left' coordinates to visually stack the elements into a cohesive component.
-5. MICRO-INTERACTIONS: Add hover states (e.g., transition:all 0.3s; hover-transform:scale(1.02);).
-6. BACKGROUNDS: If user asks to change canvas/body background, output ONLY: update-background target=body image=detailed search keyword; OR update-background target=body background=color or linear-gradient(...);
-7. IMAGES: ONLY generate an image if the user EXPLICITLY uses words like "image", "photo", or "picture". If they just ask for a noun (like "flower", "car") WITHOUT saying "image", you MUST construct it using CSS shapes or SVG! If generating an image, use Pollinations AI: src:https://image.pollinations.ai/prompt/[detailed_description_url_encoded]
-8. Return each command on a new line.
+1. DECOMPOSITION: You MUST decompose the user's requested object into multiple independent parts (e.g. for a car, output a chassis, wheels, windows as separate actions).
+2. FORMAT: Output EACH detached part as a separate [ACTION]{INSERT_ELEMENT_SPEC}...[/ACTION] block.
+3. DETACHED & DRAGGABLE: Do NOT wrap everything in one container. Every part must be its own [ACTION] block with its own absolute 'left' and 'top' style properties so they stack visually but can be dragged independently by the user on the canvas.
+4. CENTERING: Center the overall composition in the middle of the canvas by using properties like left:50%, top:50%, and transform:translate(-50%, -50%). For multiple parts, apply offsets to left/top (e.g. left:calc(50% + 20px)).
+5. REASONING: You MUST use <think>...</think> tags first to reason about the structure, geometry, and layout of the complex object before generating the actions.
+6. STYLING & SVG: Use advanced CSS, inline animations (@keyframes inside "css"), or raw SVG paths inside "html" to create beautiful, accurate, professional components.
 
-EXAMPLE: "Give me a beautiful login form"
-insert div width:400px; height:400px; padding:32px; background:#1a1a1a; border-radius:16px; z-index:1; position:absolute; left:0px; top:0px;
-insert heading text:Login; color:white; top:40px; left:40px; z-index:10; position:absolute;
-insert input type:email; placeholder:Email; width:320px; padding:14px; top:120px; left:40px; border-radius:8px; z-index:10; position:absolute;
-insert input type:password; placeholder:Password; width:320px; padding:14px; top:190px; left:40px; border-radius:8px; z-index:10; position:absolute;
-insert button text:Sign In; width:320px; padding:14px; top:270px; left:40px; border-radius:8px; background:blue; color:white; z-index:10; position:absolute;`;
+EXAMPLE OUTPUT:
+<think>The user wants a car. I will build it with 3 independent parts: a red chassis SVG, and two spinning wheels.</think>
+[ACTION]
+{
+  "type": "INSERT_ELEMENT_SPEC",
+  "html": "<svg viewBox='0 0 100 50'><rect width='100' height='50' fill='red' rx='10'/></svg>",
+  "style": { "left": "50%", "top": "50%", "transform": "translate(-50%, -50%)", "position": "absolute", "zIndex": "5" }
+}
+[/ACTION]
+[ACTION]
+{
+  "type": "INSERT_ELEMENT_SPEC",
+  "html": "<div class='wheel'></div>",
+  "css": ".wheel { border-radius:50%; background:#222; border: 4px dashed #666; animation: spin 2s linear infinite; } @keyframes spin { 100% { transform: rotate(360deg); } }",
+  "style": { "width": "30px", "height": "30px", "left": "calc(50% - 25px)", "top": "calc(50% + 25px)", "position": "absolute", "zIndex": "10" }
+}
+[/ACTION]`;
 
         const premiumResponse = await PremiumBrain.callGemini([
           { role: "system", content: premiumSystemPrompt },
@@ -5619,15 +5672,26 @@ insert button text:Sign In; width:320px; padding:14px; top:270px; left:40px; bor
         console.log("================== PREMIUM AI RESPONSE ==================");
         console.log(premiumResponse);
         console.log("=========================================================");
+        console.log("[AI Manager] PremiumBrain response metadata:", {
+          modelUsed: "gemini-2.5-flash",
+          route: "PremiumBrain.callGemini",
+          userIsPro: Boolean(user?.isPro),
+        });
 
         if (premiumResponse && !premiumResponse.toLowerCase().includes("cannot-process")) {
            commandOutput = premiumResponse;
            formattedCommand = premiumResponse;
         }
       } catch (err) {
-         console.error("[PREMIUM AI] Error in Super Component generation, falling back to standard Groq:", err.message);
+         console.error("[PREMIUM AI] Error in Super Component generation:", err.message);
+         return res.json({
+            success: false,
+            message: "Premium AI Error: " + err.message,
+            error: err.message
+         });
       }
     } else {
+        console.log("[AI Manager] Standard user or missing Gemini config - Routing to Groq");
         console.log("[AI Manager] Standard User (or missing API key) - Routing to Groq");
     }
     // === END PREMIUM TIER ===
@@ -13842,7 +13906,7 @@ app.get(
             runs24h: totalRuns,
           },
           models: modelStats,
-          geminiPool: global.geminiKeyPool || {},
+          geminiPool: Object.values(global.geminiKeyPool || {}),
         },
       });
     } catch (error) {

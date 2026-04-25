@@ -35527,6 +35527,197 @@
         return { html, width: size, height: size, isInlineSVG: true };
       }
 
+      function parseWorkflowBuilderCommand(commandText = "") {
+        const text = String(commandText || "").trim();
+        if (!text) return null;
+
+        if (text.startsWith("update-background")) {
+          const properties = {};
+          let imageDescription = "";
+          let target = "body";
+          let backgroundValue = "";
+          text
+            .split(";")
+            .map((part) => part.trim())
+            .filter(Boolean)
+            .forEach((part) => {
+              const eqIndex = part.indexOf("=");
+              if (eqIndex === -1) return;
+              const key = part.slice(0, eqIndex).trim().toLowerCase();
+              const value = part.slice(eqIndex + 1).trim();
+              if (key === "target") target = value.toLowerCase();
+              else if (key === "image") imageDescription = value;
+              else if (key === "background" || key === "color")
+                backgroundValue = value;
+              else properties[key] = value;
+            });
+          if (!imageDescription && !backgroundValue) return null;
+          return {
+            type: "update-background",
+            target,
+            imageDescription,
+            backgroundValue,
+            properties,
+            rawCommand: text,
+          };
+        }
+
+        const svgMatch = text.match(/^insert\s+svg:(\w+(?:-\w+)*)(.*)$/i);
+        if (svgMatch) {
+          const [, shapeType, propsString] = svgMatch;
+          const properties = {};
+          propsString
+            .split(";")
+            .map((part) => part.trim())
+            .filter(Boolean)
+            .forEach((part) => {
+              const colonIndex = part.indexOf(":");
+              if (colonIndex === -1) return;
+              const key = part.slice(0, colonIndex).trim();
+              const value = part.slice(colonIndex + 1).trim();
+              if (key && value) properties[key] = value;
+            });
+          return {
+            type: "insert-svg",
+            shapeType: String(shapeType || "").toLowerCase(),
+            properties,
+            rawCommand: text,
+          };
+        }
+
+        const componentMatch = text.match(
+          /^insert\s+component:(\w+(?:-\w+)*)(.*)$/i,
+        );
+        if (componentMatch) {
+          const [, componentType, extras] = componentMatch;
+          return {
+            type: "insert-component",
+            componentType: String(componentType || "").toLowerCase(),
+            extras: String(extras || "").trim(),
+            rawCommand: text,
+          };
+        }
+
+        const insertMatch = text.match(/^insert\s+(\w+)\s*(.*)$/i);
+        if (!insertMatch) return null;
+
+        const [, elementType, propertiesString] = insertMatch;
+        const properties = {};
+        let content = null;
+        const contentMatch = String(propertiesString || "").match(
+          /content="([^"]*)"/i,
+        );
+        if (contentMatch) content = contentMatch[1];
+        String(propertiesString || "")
+          .split(";")
+          .map((part) => part.trim())
+          .filter((part) => part && !/^content=/i.test(part))
+          .forEach((part) => {
+            const colonIndex = part.indexOf(":");
+            if (colonIndex === -1) return;
+            const key = part.slice(0, colonIndex).trim();
+            const value = part.slice(colonIndex + 1).trim();
+            if (key && value) properties[key] = value;
+          });
+
+        return {
+          type: "insert",
+          elementType: String(elementType || "").toLowerCase(),
+          properties,
+          content,
+          rawCommand: text,
+        };
+      }
+
+      function workflowCommandToElementSpec(parsed = {}) {
+        if (!parsed || !parsed.type) return null;
+
+        if (parsed.type === "update-background") {
+          const styles = { ...(parsed.properties || {}) };
+          if (parsed.imageDescription) {
+            styles["background-image"] = `url('https://image.pollinations.ai/prompt/${encodeURIComponent(parsed.imageDescription)}?width=1920&height=1080&nologo=true')`;
+            styles["background-size"] = styles["background-size"] || "cover";
+            styles["background-position"] =
+              styles["background-position"] || "center";
+            styles["background-repeat"] =
+              styles["background-repeat"] || "no-repeat";
+          } else if (parsed.backgroundValue) {
+            styles.background = parsed.backgroundValue;
+          }
+          return {
+            type: "background",
+            target: parsed.target || "body",
+            styles,
+            imageDescription: parsed.imageDescription || "",
+            isBackgroundCommand: true,
+          };
+        }
+
+        if (parsed.type === "insert-svg") {
+          return {
+            isSVG: true,
+            shapeType: parsed.shapeType,
+            properties: parsed.properties || {},
+            rawCommand: parsed.rawCommand,
+          };
+        }
+
+        if (parsed.type === "insert-component") {
+          return {
+            isComponent: true,
+            componentType: parsed.componentType,
+            extras: parsed.extras || "",
+            rawCommand: parsed.rawCommand,
+          };
+        }
+
+        if (parsed.type === "insert") {
+          return {
+            type: parsed.elementType,
+            label: parsed.elementType,
+            styles: parsed.properties || {},
+            content: parsed.content,
+            attributes: {
+              class: `ml-${parsed.elementType || "element"}`,
+            },
+            rawCommand: parsed.rawCommand,
+          };
+        }
+
+        return null;
+      }
+
+      async function requestWorkflowCommandFallback(prompt = "") {
+        const res = await fetch("/api/workflow/format-command", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ input: prompt }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) return null;
+
+        const rawCommands = Array.isArray(data.commands)
+          ? data.commands
+          : Array.isArray(data.parsedCommands)
+            ? data.parsedCommands.map((entry) => entry.command).filter(Boolean)
+            : [];
+        const parsedCommands = rawCommands
+          .map((command) => parseWorkflowBuilderCommand(command))
+          .filter(Boolean);
+        const elementSpecs = parsedCommands
+          .map((parsed) => workflowCommandToElementSpec(parsed))
+          .filter(Boolean);
+
+        if (!elementSpecs.length) return null;
+        return {
+          parsedCommands,
+          elementSpecs,
+          formattedCommand: rawCommands.join("\n"),
+          source: "workflow-format-fallback",
+        };
+      }
+
       /**
        * Parse and apply INSERT_ELEMENT_SPEC action from AI agent.
        * Supports full HTML/CSS/attributes for flexible element creation.
@@ -38495,10 +38686,15 @@
         }
         return { applied, safety, shouldRefreshCanvas };
       }
-      async function runBuilderAiAgent(prompt = "", currentCode = "") {
+      async function runBuilderAiAgent(
+        prompt = "",
+        currentCode = "",
+        options = {},
+      ) {
         let responseText = "";
         let agentContext = String(aiHiddenAgentContext || "").trim();
         let strictExecutionRetried = false;
+        const silentUi = options?.silentUi === true;
         const workspaceIndex = getWorkspaceIndex();
         const activeFileName =
           normalizeBuilderFilePath(activeBuilderFilePath || "index.html") ||
@@ -38567,11 +38763,13 @@
           new Set([...searchedFiles, ...tracedFiles]),
         ).slice(0, 14);
         for (const path of preloadFiles) {
-          appendAiChatMessage({
-            role: "assistant",
-            text: `Reading ${path}...`,
-          });
-          renderBuilderAiChat();
+          if (!silentUi) {
+            appendAiChatMessage({
+              role: "assistant",
+              text: `Reading ${path}...`,
+            });
+            renderBuilderAiChat();
+          }
           const requestedContent = await fetchRequestedWorkspaceFile(path);
           const hiddenMessage = `REQUESTED_FILE ${path}\n${requestedContent}`;
           aiChatMessages.push({ role: "system_hidden", text: hiddenMessage });
@@ -38582,7 +38780,7 @@
         }
         setAiAgentStage("planning");
         const proposal = await runPhase("plan", agentContext);
-        if (proposal) {
+        if (proposal && !silentUi) {
           appendAiChatMessage(
             { role: "assistant", text: proposal },
             { typing: true },
@@ -38594,11 +38792,13 @@
           responseText = await runPhase("execute", agentContext);
           const requestedPath = parseRequestedFilePath(responseText);
           if (!requestedPath) break;
-          appendAiChatMessage({
-            role: "assistant",
-            text: `Reading ${requestedPath}...`,
-          });
-          renderBuilderAiChat();
+          if (!silentUi) {
+            appendAiChatMessage({
+              role: "assistant",
+              text: `Reading ${requestedPath}...`,
+            });
+            renderBuilderAiChat();
+          }
           const requestedContent =
             await fetchRequestedWorkspaceFile(requestedPath);
           const hiddenMessage = `REQUESTED_FILE ${requestedPath}\n${requestedContent}`;
@@ -39198,6 +39398,39 @@
             throw new Error("AI manager failed to process request");
           }
 
+          const hasAgentPayload = hasActionableAgentPayload(managerResponse?.formattedCommand || "");
+          if (
+            !isXtraAi &&
+            !(managerResponse?.elementSpecs?.length > 0) &&
+            !(managerResponse?.elementSpec && managerResponse?.parsedCommand) &&
+            !hasAgentPayload
+          ) {
+            const strictWorkflowResponse =
+              await requestWorkflowCommandFallback(prompt);
+            if (strictWorkflowResponse?.elementSpecs?.length) {
+              managerResponse = {
+                ...managerResponse,
+                decision: "Action",
+                formattedCommand:
+                  strictWorkflowResponse.formattedCommand ||
+                  managerResponse?.formattedCommand,
+                parsedCommands:
+                  strictWorkflowResponse.parsedCommands ||
+                  managerResponse?.parsedCommands ||
+                  [],
+                parsedCommand:
+                  strictWorkflowResponse.parsedCommands?.[0] ||
+                  managerResponse?.parsedCommand ||
+                  null,
+                elementSpecs: strictWorkflowResponse.elementSpecs,
+                elementSpec:
+                  strictWorkflowResponse.elementSpecs?.[0] ||
+                  managerResponse?.elementSpec ||
+                  null,
+              };
+            }
+          }
+
           // STAGE 2: Check if we have a parsed command from Groq formatter
           if (managerResponse?.elementSpecs && managerResponse.elementSpecs.length > 0) {
             setAiAgentStage("applying");
@@ -39425,14 +39658,19 @@
 
           // Fall back to original agent flow if no command spec
           const decision = managerResponse.decision;
-          if (decision === "Action") {
+          if (decision === "Action" || hasAgentPayload) {
             setAiAgentStage("parsing");
-            // Use Groq-formatted command if available
-            const agentPrompt = managerResponse.formattedCommand || prompt;
-            const agentReply = await runBuilderAiAgent(
-              agentPrompt,
-              currentCode,
-            );
+            let agentReply = managerResponse.formattedCommand || prompt;
+            
+            // Only call AI again if it doesn't already have an action payload
+            if (!hasActionableAgentPayload(agentReply)) {
+              agentReply = await runBuilderAiAgent(
+                agentReply,
+                currentCode,
+                { silentUi: !isXtraAi },
+              );
+            }
+            
             setAiAgentStage("parsing");
             let actionResult = executeAIActions(agentReply, prompt);
             const actions = actionResult?.applied || [];
@@ -39442,11 +39680,13 @@
               appendAiChatMessage(
                 {
                   role: "assistant",
-                  text: visibleReply || "Applying changes...",
+                  text: isXtraAi
+                    ? visibleReply || "Applying changes..."
+                    : `Applied ${actions.length} canvas change${actions.length === 1 ? "" : "s"}.`,
                 },
                 { typing: true },
               );
-            } else {
+            } else if (isXtraAi) {
               appendAiChatMessage(
                 {
                   role: "assistant",
@@ -39470,23 +39710,25 @@
               renderBuilderAiChat();
               // One strict retry: force non-destructive ops when the model attempted a risky replace.
               setAiAgentStage("thinking");
-              const retryReply = await runBuilderAiAgent(
-                [
-                  prompt,
+                const retryReply = await runBuilderAiAgent(
+                  [
+                    prompt,
                   "STRICT_RULE: Do NOT use UPDATE_FILE for small edits. Preserve existing canvas elements and IDs. Use UPDATE_CSS for background, MOVE_ELEMENT for position, and EDIT_CANVAS with ops[] for insert/remove/style tweaks.",
-                ]
-                  .filter(Boolean)
-                  .join("\n\n"),
-                currentCode,
-              );
+                  ]
+                    .filter(Boolean)
+                    .join("\n\n"),
+                  currentCode,
+                  { silentUi: !isXtraAi },
+                );
               const retryResult = executeAIActions(retryReply, prompt);
               if (retryResult?.applied?.length) {
                 appendAiChatMessage(
                   {
                     role: "assistant",
-                    text:
-                      stripAgentActionBlocks(retryReply) ||
-                      "Applied a safer incremental patch.",
+                    text: isXtraAi
+                      ? stripAgentActionBlocks(retryReply) ||
+                        "Applied a safer incremental patch."
+                      : `Applied ${retryResult.applied.length} safer canvas change${retryResult.applied.length === 1 ? "" : "s"}.`,
                   },
                   { typing: true },
                 );
@@ -39502,7 +39744,9 @@
                 appendAiChatMessage(
                   {
                     role: "assistant",
-                    text: "Canvas updated. Elements are ready for editing.",
+                    text: isXtraAi
+                      ? "Canvas updated. Elements are ready for editing."
+                      : "Canvas updated.",
                   },
                   { typing: true },
                 );
@@ -39512,18 +39756,29 @@
               syncActiveBuilderFileFromCanvas({ skipHistory: true });
             }
           } else {
-            setAiAgentStage("responding");
-            const chatResponse = await runBuilderAiChatResponse(prompt);
-            const visibleResponse = String(chatResponse || "").trim();
-            appendAiChatMessage(
-              {
-                role: "assistant",
-                text:
-                  visibleResponse ||
-                  "I'm here to help! What would you like to do?",
-              },
-              { typing: true },
-            );
+            if (isXtraAi) {
+              setAiAgentStage("responding");
+              const chatResponse = await runBuilderAiChatResponse(prompt);
+              const visibleResponse = String(chatResponse || "").trim();
+              appendAiChatMessage(
+                {
+                  role: "assistant",
+                  text:
+                    visibleResponse ||
+                    "I'm here to help! What would you like to do?",
+                },
+                { typing: true },
+              );
+            } else {
+              appendAiChatMessage(
+                {
+                  role: "assistant",
+                  text:
+                    "Workflow AI could not convert that request into canvas commands.",
+                },
+                { typing: true },
+              );
+            }
           }
           setAiAgentStage("done");
           renderBuilderAiChat();
