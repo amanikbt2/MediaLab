@@ -15430,7 +15430,7 @@
         try {
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 7000);
-          const controller = new AbortController(); clearTimeout(timeoutId); const timeoutId = setTimeout(() => controller.abort(), 8000); const res = await fetch("/api/github/projects", { credentials: "include", signal: controller.signal, signal: controller.signal }); clearTimeout(timeoutId);
+          const res = await fetch("/api/github/projects", { credentials: "include", signal: controller.signal });
           const data = await res.json();
           if (!res.ok || !data.success) {
             throw new Error(data.message || "Could not load live projects.");
@@ -20851,7 +20851,7 @@
         try {
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 7000);
-          const controller = new AbortController(); clearTimeout(timeoutId); const timeoutId = setTimeout(() => controller.abort(), 8000); const res = await fetch("/api/ai/models", { credentials: "include", signal: controller.signal, signal: controller.signal }); clearTimeout(timeoutId);
+          const res = await fetch("/api/ai/models", { credentials: "include", signal: controller.signal });
           const data = await res.json().catch(() => ({}));
           if (!res.ok || !data.success) {
             throw new Error(
