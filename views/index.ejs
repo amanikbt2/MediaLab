@@ -18896,7 +18896,7 @@
         document.getElementById("adsense-link-modal")?.classList.add("hidden");
         document.getElementById("adsense-link-modal")?.classList.remove("flex");
       }
-      function disconnectAdsenseAccount() {
+      async function disconnectAdsenseAccount() {
         if (!loggedIn || !currentUser) {
           showLogin();
           return;
