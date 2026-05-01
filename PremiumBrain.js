@@ -1,8 +1,6 @@
 import nodeFetch from "node-fetch";
-import fs from "fs";
-import path from "path";
+import AiKey from "./models/AiKey.js";
 
-const STATE_FILE = path.join(process.cwd(), "ai_key_state.json");
 const rawKeys = process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || "";
 const GEMINI_KEYS = rawKeys.split(",").map(k => k.trim()).filter(k => k.length > 0);
 
@@ -10,60 +8,97 @@ function getSafeKeyLabel(index = 0) {
   return `Key-${index + 1}`;
 }
 
-function loadState() {
-  if (fs.existsSync(STATE_FILE)) {
-    try { return JSON.parse(fs.readFileSync(STATE_FILE, "utf8")); } catch(e) {}
-  }
-  return {};
-}
-function saveState(state) {
-  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
-}
-
-if (!global.geminiKeyPool) {
-  const savedState = loadState();
-  global.geminiKeyPool = {};
-  GEMINI_KEYS.forEach((key, i) => {
-    const label = getSafeKeyLabel(i);
-    const saved = savedState[key] || { usageCount: 0, exhausted: false, disabled: false, resetTime: 0 };
-    global.geminiKeyPool[key] = { 
-      id: label, 
-      exhausted: saved.exhausted || false, 
-      disabled: saved.disabled || false,
-      resetTime: saved.resetTime || 0, 
-      usageCount: saved.usageCount || 0 
-    };
-  });
-  saveState(global.geminiKeyPool);
-
-  // Background Health Check (Every 3 Hours)
-  setInterval(async () => {
-     console.log("[PremiumBrain] Running 3-Hour Health Check on Exhausted API Keys...");
-     for (const key of GEMINI_KEYS) {
-        const state = global.geminiKeyPool[key];
-        if (state && state.exhausted && !state.disabled) {
-           try {
-             const res = await nodeFetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
-               method: "POST", headers: { "Content-Type": "application/json" },
-               body: JSON.stringify({ contents: [{ parts: [{ text: "ping" }] }] })
-             });
-             if (res.ok) {
-               console.log(`[PremiumBrain] API Key ${state.id} limit restored! Back to READY.`);
-               state.exhausted = false;
-               state.resetTime = 0;
-               state.usageCount = 0;
-               saveState(global.geminiKeyPool);
-             }
-           } catch(e) {}
-        }
-     }
-  }, 3 * 60 * 60 * 1000);
-}
-
 export const PremiumBrain = {
-  getAvailableKey() {
+  isInitialized: false,
+
+  async initDB() {
+    if (this.isInitialized) return;
+    
+    global.geminiKeyPool = {};
+    
+    try {
+      // Fetch existing keys from DB
+      const dbKeys = await AiKey.find();
+      const dbKeyMap = {};
+      for (const k of dbKeys) {
+        dbKeyMap[k.key] = k;
+      }
+
+      // Sync .env keys with DB
+      for (let i = 0; i < GEMINI_KEYS.length; i++) {
+        const key = GEMINI_KEYS[i];
+        if (!dbKeyMap[key]) {
+           const newKey = await AiKey.create({
+              key,
+              label: getSafeKeyLabel(i),
+              exhausted: false,
+              disabled: false,
+              resetTime: 0,
+              usageCount: 0
+           });
+           dbKeyMap[key] = newKey;
+        }
+        
+        global.geminiKeyPool[key] = {
+           id: dbKeyMap[key].label,
+           exhausted: dbKeyMap[key].exhausted,
+           disabled: dbKeyMap[key].disabled,
+           resetTime: dbKeyMap[key].resetTime,
+           usageCount: dbKeyMap[key].usageCount
+        };
+      }
+      
+      this.isInitialized = true;
+      console.log(`[PremiumBrain] DB Synced. Loaded ${GEMINI_KEYS.length} keys into rotation pool.`);
+
+      // Background Health Check (Every 3 Hours)
+      if (!global.premiumBrainHealthCheckStarted) {
+          global.premiumBrainHealthCheckStarted = true;
+          setInterval(async () => {
+             console.log("[PremiumBrain] Running 3-Hour Health Check on Exhausted API Keys...");
+             for (const key of GEMINI_KEYS) {
+                const state = global.geminiKeyPool[key];
+                if (state && state.exhausted && !state.disabled) {
+                   try {
+                     const res = await nodeFetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
+                       method: "POST", headers: { "Content-Type": "application/json" },
+                       body: JSON.stringify({ contents: [{ parts: [{ text: "ping" }] }] })
+                     });
+                     if (res.ok) {
+                       console.log(`[PremiumBrain] API Key ${state.id} limit restored! Back to READY.`);
+                       state.exhausted = false;
+                       state.resetTime = 0;
+                       state.usageCount = 0;
+                       await AiKey.updateOne({ key }, { exhausted: false, resetTime: 0, usageCount: 0 });
+                     }
+                   } catch(e) {}
+                }
+             }
+          }, 3 * 60 * 60 * 1000);
+      }
+    } catch (error) {
+      console.error("[PremiumBrain] Error initializing DB:", error);
+    }
+  },
+
+  async syncStateToDB(key) {
+    if (global.geminiKeyPool[key]) {
+      const state = global.geminiKeyPool[key];
+      await AiKey.updateOne({ key }, {
+         exhausted: state.exhausted,
+         disabled: state.disabled,
+         resetTime: state.resetTime,
+         usageCount: state.usageCount
+      }).catch(err => console.error("[PremiumBrain] DB Sync Error:", err));
+    }
+  },
+
+  async getAvailableKey() {
+    if (!this.isInitialized) await this.initDB();
+    
     const now = Date.now();
-    let updated = false;
+    let updatedAny = false;
+    
     for (const key of GEMINI_KEYS) {
       const state = global.geminiKeyPool[key];
       if (!state || state.disabled) {
@@ -72,10 +107,9 @@ export const PremiumBrain = {
       if (state.exhausted && now > state.resetTime) {
          state.exhausted = false; // Cooldown expired
          state.usageCount = 0;
-         updated = true;
+         await this.syncStateToDB(key);
       }
     }
-    if (updated) saveState(global.geminiKeyPool);
 
     for (const key of GEMINI_KEYS) {
       if (!global.geminiKeyPool[key].exhausted && !global.geminiKeyPool[key].disabled) {
@@ -99,21 +133,21 @@ export const PremiumBrain = {
     return global.geminiKeyPool[key]?.id || "unknown-key";
   },
 
-  markKeyExhausted(key, retryMs) {
+  async markKeyExhausted(key, retryMs) {
     if (global.geminiKeyPool[key]) {
        global.geminiKeyPool[key].exhausted = true;
        global.geminiKeyPool[key].resetTime = Date.now() + retryMs;
-       saveState(global.geminiKeyPool);
+       await this.syncStateToDB(key);
        console.log(`[PremiumBrain] ${global.geminiKeyPool[key].id} exhausted! Cooldown: ${retryMs/1000}s`);
     }
   },
 
-  disableKey(key, reason = "disabled") {
+  async disableKey(key, reason = "disabled") {
     if (global.geminiKeyPool[key]) {
       global.geminiKeyPool[key].disabled = true;
       global.geminiKeyPool[key].exhausted = true;
       global.geminiKeyPool[key].resetTime = Number.MAX_SAFE_INTEGER;
-      saveState(global.geminiKeyPool);
+      await this.syncStateToDB(key);
       console.log(
         `[PremiumBrain] ${global.geminiKeyPool[key].id} disabled from rotation pool: ${reason}`,
       );
@@ -124,6 +158,8 @@ export const PremiumBrain = {
     if (GEMINI_KEYS.length === 0) {
       throw new Error("GEMINI_API_KEYS is not configured for Premium features.");
     }
+    
+    if (!this.isInitialized) await this.initDB();
     
     // Agentic Loop: 1. Generate code, 2. Self-Review, 3. Output
     console.log("[PremiumBrain] Initiating Agentic Loop for Pro User...");
@@ -146,6 +182,8 @@ export const PremiumBrain = {
   },
 
   async callGemini(messages, retryCount = 0) {
+    if (!this.isInitialized) await this.initDB();
+    
     // Prevent infinite loops if all keys fail repeatedly
     if (retryCount >= GEMINI_KEYS.length) {
        throw new Error("Gemini API Error: All keys in the rotation pool are currently exhausted/rate-limited.");
@@ -156,7 +194,7 @@ export const PremiumBrain = {
     const userMessage = messages.find(m => m.role === "user")?.content || "";
     const combinedPrompt = `${systemMessage}\n\nUser Request:\n${userMessage}`;
 
-    const apiKey = this.getAvailableKey();
+    const apiKey = await this.getAvailableKey();
     if (!apiKey) {
        throw new Error("Gemini API Error: All keys in the rotation pool are currently exhausted/rate-limited.");
     }
@@ -169,7 +207,7 @@ export const PremiumBrain = {
     });
 
     global.geminiKeyPool[apiKey].usageCount++;
-    saveState(global.geminiKeyPool);
+    await this.syncStateToDB(apiKey);
 
     const response = await nodeFetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
       method: "POST",
@@ -200,7 +238,7 @@ export const PremiumBrain = {
                const msgMatch = err.match(/retry in ([\d\.]+)s/);
                if (msgMatch) retryMs = parseFloat(msgMatch[1]) * 1000;
            }
-           this.markKeyExhausted(apiKey, retryMs);
+           await this.markKeyExhausted(apiKey, retryMs);
            console.log("[PremiumBrain] Rotation handoff triggered:", {
              exhaustedKey: keyLabel,
              retryMs,
@@ -217,7 +255,7 @@ export const PremiumBrain = {
          err.includes("API_KEY_INVALID") ||
          err.includes("invalid API key")
        ) {
-           this.disableKey(apiKey, "permission denied / leaked / invalid");
+           await this.disableKey(apiKey, "permission denied / leaked / invalid");
            if (retryCount + 1 < GEMINI_KEYS.length) {
              console.log(`[PremiumBrain] Retrying with next safe key... (Attempt ${retryCount + 2}/${GEMINI_KEYS.length})`);
              return await this.callGemini(messages, retryCount + 1);

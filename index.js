@@ -4362,6 +4362,7 @@ mongoose
   .connect(process.env.MONGO_URI)
   .then(async () => {
     console.log("✅ MongoDB Connected");
+    await PremiumBrain.initDB();
     await ensureAIModelsRegistry();
     await refreshAIModelsRegistryIfNeeded(true);
     startAIModelsRefreshLoop();
