@@ -150,7 +150,7 @@ app.use((req, res, next) => {
 });
 
 const APP_BASE_URL = String(
-  process.env.APP_BASE_URL || "https://medialab.keysire.com",
+  process.env.APP_BASE_URL || "https://keysire.com",
 ).trim().replace(/\/+$/, "");
 
 const io = new Server(httpServer, {

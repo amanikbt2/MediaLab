@@ -561,7 +561,7 @@ const sendWelcomeEmail = async (userEmail, userName) => {
         <div style="background-color: #030712; color: #f3f4f6; font-family: sans-serif; padding: 40px; text-align: center; border-radius: 24px;">
           <h1 style="color: #ffffff;">Welcome, ${userName}!</h1>
           <p style="color: #9ca3af;">Your AI creative studio is ready.</p>
-          <a href="${process.env.CLIENT_URL || "https://medialab-6b20.onrender.com"}/?loggedIn=true" 
+          <a href="${process.env.CLIENT_URL || "https://keysire.com"}/?loggedIn=true" 
              style="background-color: #22d3ee; color: #000; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold;">
              Open Studio
           </a>
