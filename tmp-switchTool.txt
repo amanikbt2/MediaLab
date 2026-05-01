@@ -1,0 +1,1410 @@
+20985:       async function switchTool(id) {
+20986:         const switchToken = ++studioToolSwitchToken;
+20987:         currentStudioToolId = id;
+20988:         syncUrl({
+20989:           tool: id || null,
+20990:           view: id === "marketplace" ? marketplaceBrowseView : null,
+20991:         });
+20992:         try {
+20993:           sessionStorage.setItem("medialab:lastTool", String(id || "console"));
+20994:         } catch {}
+20995:         scheduleTerminalProjectSync(60);
+20996:         updateStudioToolSwitches();
+20997:         logUsageActivity("tool-open", `opened tool ${id}`, "tool-switch", {
+20998:           toolId: id,
+20999:         });
+21000:         const area = document.getElementById("tool-display");
+21001:         const builderToolbar = document.getElementById("web-builder-toolbar");
+21002:         const contentArea = document.getElementById("content-area");
+21003:         let html = "";
+21004:         if (area) {
+21005:           area.innerHTML = renderToolLoadingShell(id);
+21006:         }
+21007:         if (contentArea) {
+21008:           contentArea.classList.toggle("overflow-y-auto", id !== "web-builder");
+21009:           contentArea.classList.toggle("overflow-hidden", id === "web-builder");
+21010:         }
+21011:         if (id !== "marketplace") {
+21012:           stopMarketplacePreviewRotation();
+21013:         }
+21014:         // 1. Contextual Toolbar Management
+21015:         // Only show the specialized Web Builder toolbar when that tool is active
+21016:         if (id === "web-builder") {
+21017:           if (builderToolbar) builderToolbar.classList.remove("hidden");
+21018:         } else {
+21019:           if (builderToolbar) builderToolbar.classList.add("hidden");
+21020:         }
+21021:         if (LOGIN_REQUIRED_TOOL_IDS.includes(id) && !loggedIn) {
+21022:           html = renderLoginRequiredFeatureGate(id);
+21023:           if (
+21024:             switchToken !== studioToolSwitchToken ||
+21025:             currentStudioToolId !== id
+21026:           )
+21027:             return;
+21028:           area.innerHTML = html;
+21029:           showLogin();
+21030:           return;
+21031:         }
+21032:         if (PREMIUM_TOOL_IDS.includes(id) && !hasPremiumAccess()) {
+21033:           html = renderPremiumFeatureGate(id);
+21034:           if (
+21035:             switchToken !== studioToolSwitchToken ||
+21036:             currentStudioToolId !== id
+21037:           )
+21038:             return;
+21039:           area.innerHTML = html;
+21040:           return;
+21041:         }
+21042:         // =============================================================
+21043:         // 0. STUDIO CONSOLE
+21044:         // =============================================================
+21045:         if (id === "console") {
+21046:           const liveProjects =
+21047:             loggedIn && currentUser?.githubUsername
+21048:               ? await fetchGithubProjects()
+21049:               : currentUser?.liveProjects || [];
+21050:           const adsenseReport = loggedIn
+21051:             ? await fetchAdsenseConsoleReport()
+21052:             : null;
+21053:           aiInfrastructureModels = await fetchAiInfrastructureModels();
+21054:           const recentProjects = liveProjects.slice(0, 3);
+21055:           const balance = getCurrentBalance();
+21056:           const canRedeemPro = loggedIn && balance >= 5;
+21057:           html = `
+21058:                   <div class="animate-fadeIn h-full">
+21059:                     <div class="max-w-6xl mx-auto min-h-full space-y-6 sm:space-y-8">
+21060:                       <div class="relative overflow-hidden rounded-[2.25rem] border border-cyan-500/15 bg-[radial-gradient(circle_at_top_right,rgba(34,211,238,0.14),transparent_28%),linear-gradient(135deg,rgba(8,145,178,0.18),rgba(2,6,23,0.96))] px-5 py-6 sm:px-7 sm:py-8 shadow-[0_28px_80px_rgba(2,6,23,0.42)]">
+21061:                         <div class="absolute inset-y-0 right-0 w-40 bg-[radial-gradient(circle,rgba(34,211,238,0.22),transparent_65%)] blur-2xl opacity-70"></div>
+21062:                         <div class="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+21063:                           <div class="max-w-2xl">
+21064:                             <p class="text-[10px] font-black uppercase tracking-[0.28em] text-cyan-300">Studio Console</p>
+21065:                             <h2 class="mt-3 text-3xl sm:text-4xl font-semibold text-white tracking-tighter">Operate your sites like a real creator cloud.</h2>
+21066:                             <p class="mt-3 text-sm leading-6 text-slate-300/80">Everything important stays in one polished surface: wallet, GitHub hosting, and recent live projects built for mobile speed and desktop clarity.</p>
+21067:                           </div>
+21068:                           <div class="grid grid-cols-2 gap-3 sm:w-auto sm:min-w-[280px]">
+21069:                             <div class="rounded-[1.5rem] border border-white/10 bg-white/8 px-4 py-4 backdrop-blur-xl">
+21070:                               <p class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Balance</p>
+21071:                               <p class="mt-2 text-2xl font-black text-white">${formatCurrency(balance)}</p>
+21072:                             </div>
+21073:                             <div class="rounded-[1.5rem] border border-white/10 bg-white/8 px-4 py-4 backdrop-blur-xl">
+21074:                               <p class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Live Sites</p>
+21075:                               <p class="mt-2 text-2xl font-black text-white">${liveProjects.length}</p>
+21076:                             </div>
+21077:                           </div>
+21078:                         </div>
+21079:                       </div>
+21080:                       <div class="grid grid-cols-1 xl:grid-cols-[1.05fr_0.95fr] gap-6 lg:gap-8">
+21081:                         <div class="space-y-6">
+21082:                           <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+21083:                             <div class="relative overflow-hidden rounded-[2rem] border border-cyan-400/20 bg-[linear-gradient(145deg,rgba(6,182,212,0.18),rgba(15,23,42,0.98))] p-5 sm:p-6 shadow-[0_24px_70px_rgba(8,145,178,0.22)] backdrop-blur-2xl">
+21084:                               <div class="absolute -right-8 -top-8 h-28 w-28 rounded-full bg-cyan-300/10 blur-2xl"></div>
+21085:                               <p class="relative text-[10px] font-black uppercase tracking-[0.24em] text-cyan-200/80">MediaLab Payout Balance</p>
+21086:                               <div class="relative mt-4 flex items-end justify-between gap-4">
+21087:                                 <div>
+21088:                                   <p class="text-4xl sm:text-5xl font-black text-white tracking-tight">${formatCurrency(balance)}</p>
+21089:                                   <p class="mt-2 text-xs leading-5 text-cyan-100/70">This is your MediaLab wallet balance for creator rewards, secure redemptions, and platform payouts.</p>
+21090:                                 </div>
+21091:                                 <div class="w-14 h-14 rounded-[1.4rem] border border-white/10 bg-white/10 flex items-center justify-center text-cyan-100 text-xl shadow-[0_10px_35px_rgba(34,211,238,0.18)]">
+21092:                                   <i class="fas fa-wallet"></i>
+21093:                                 </div>
+21094:                               </div>
+21095:                               <div class="relative mt-6 flex items-center justify-between gap-4">
+21096:                                 <button onclick="openAccountModal()" ${canRedeemPro ? "" : "disabled"} class="inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] transition-all ${canRedeemPro ? "bg-white text-slate-950 hover:bg-cyan-50 shadow-[0_18px_35px_rgba(255,255,255,0.16)]" : "bg-white/10 text-slate-400 cursor-not-allowed border border-white/10"}">
+21097:                                   <i class="fas fa-arrow-up-right-from-square"></i>
+21098:                                   Redeem Pro
+21099:                                 </button>
+21100:                                 <p class="text-[11px] text-right text-slate-300/70">${canRedeemPro ? "Ready for payout" : balance >= 5 ? "Awaiting AdSense approval" : "Minimum redemption is 1000 XP"}</p>
+21101:                               </div>
+21102:                             </div>
+21103:                             <div class="relative overflow-hidden rounded-[2rem] border border-emerald-400/20 bg-[linear-gradient(145deg,rgba(16,185,129,0.18),rgba(15,23,42,0.98))] p-5 sm:p-6 shadow-[0_24px_70px_rgba(16,185,129,0.18)] backdrop-blur-2xl">
+21104:                               <div class="absolute -left-8 -bottom-8 h-28 w-28 rounded-full bg-emerald-300/10 blur-2xl"></div>
+21105:                               <p class="relative text-[10px] font-black uppercase tracking-[0.24em] text-emerald-200/80">Total Live Sites</p>
+21106:                               <div class="relative mt-4 flex items-end justify-between gap-4">
+21107:                                 <div>
+21108:                                   <p class="text-4xl sm:text-5xl font-black text-white tracking-tight">${liveProjects.length}</p>
+21109:                                   <p class="mt-2 text-xs leading-5 text-emerald-100/70">Published from MediaLab into your GitHub Pages storage with managed cloud delivery.</p>
+21110:                                 </div>
+21111:                                 <div class="w-14 h-14 rounded-[1.4rem] border border-white/10 bg-white/10 flex items-center justify-center text-emerald-100 text-xl shadow-[0_10px_35px_rgba(16,185,129,0.16)]">
+21112:                                   <i class="fas fa-globe"></i>
+21113:                                 </div>
+21114:                               </div>
+21115:                               <div class="relative mt-6 flex items-center justify-between gap-4">
+21116:                                 <button onclick="switchTool('history')" class="inline-flex items-center gap-2 rounded-2xl bg-white/10 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white hover:bg-white/15 transition-all border border-white/10">
+21117:                                   <i class="fas fa-layer-group"></i>
+21118:                                   Open Library
+21119:                                 </button>
+21120:                                 <p class="text-[11px] text-right text-slate-300/70">Recent sites stay synced here.</p>
+21121:                               </div>
+21122:                             </div>
+21123:                           </div>
+21124:                           <div class="rounded-[2rem] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(15,23,42,0.82))] backdrop-blur-2xl p-5 sm:p-6 shadow-[0_24px_60px_rgba(2,6,23,0.32)]">
+21125:                             <div class="flex items-start justify-between gap-4">
+21126:                               <div>
+21127:                                 <p class="text-[10px] font-black uppercase tracking-[0.24em] text-amber-300">AdSense Revenue</p>
+21128:                                 <h3 class="mt-2 text-2xl font-semibold tracking-tight text-white">Real-time creator stats</h3>
+21129:                                 <p class="mt-2 text-sm text-slate-400">${
+21130:                                   adsenseReport?.connected
+21131:                                     ? "Live numbers pulled from your Google AdSense connection across your hosted MediaLab domains."
+21132:                                     : "Monetization Disabled for real-time earnings, impressions, RPM, and click performance."
+21133:                                 }</p>
+21134:                               </div>
+21135:                               <div class="flex items-center gap-2">
+21136:                                 ${
+21137:                                   adsenseReport?.connected
+21138:                                     ? `<button onclick="openAdsenseConnectionInfo()" class="inline-flex h-10 w-10 items-center justify-center rounded-[1rem] border border-white/10 bg-white/5 text-slate-300 hover:border-amber-400/30 hover:text-amber-200 transition-all" aria-label="AdSense account options">
+21139:                                         <i class="fas fa-info text-sm"></i>
+21140:                                       </button>`
+21141:                                     : ``
+21142:                                 }
+21143:                                 <div class="w-12 h-12 rounded-[1.3rem] border border-amber-400/20 bg-amber-500/10 flex items-center justify-center text-amber-300 shadow-[0_10px_30px_rgba(245,158,11,0.14)]">
+21144:                                   <i class="fab fa-google"></i>
+21145:                                 </div>
+21146:                               </div>
+21147:                             </div>
+21148:                               ${
+21149:                                 hasAdsenseStats(adsenseReport)
+21150:                                   ? `<div class="mt-5 grid grid-cols-2 gap-3">
+21151:                                       <div class="rounded-[1.4rem] border border-white/10 bg-slate-950/70 p-4">
+21152:                                         <p class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Estimated Earnings</p>
+21153:                                         <p class="mt-2 text-2xl font-black text-white">$${Number(adsenseReport.stats.estimatedEarnings || 0).toFixed(2)}</p>
+21154:                                       </div>
+21155:                                       <div class="rounded-[1.4rem] border border-white/10 bg-slate-950/70 p-4">
+21156:                                         <p class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Impressions</p>
+21157:                                         <p class="mt-2 text-2xl font-black text-white">${formatCompactNumber(adsenseReport.stats.impressions || 0)}</p>
+21158:                                       </div>
+21159:                                       <div class="rounded-[1.4rem] border border-white/10 bg-slate-950/70 p-4">
+21160:                                         <p class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Page RPM</p>
+21161:                                         <p class="mt-2 text-2xl font-black text-white">$${Number(adsenseReport.stats.pageViewsRpm || 0).toFixed(2)}</p>
+21162:                                       </div>
+21163:                                       <div class="rounded-[1.4rem] border border-white/10 bg-slate-950/70 p-4">
+21164:                                         <p class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Clicks</p>
+21165:                                         <p class="mt-2 text-2xl font-black text-white">${formatCompactNumber(adsenseReport.stats.clicks || 0)}</p>
+21166:                                       </div>
+21167:                                     </div>
+21168:                                     <p class="mt-4 text-xs leading-6 text-slate-400">${adsenseReport.message || ""}</p>`
+21169:                                   : adsenseReport?.connected
+21170:                                     ? `<div class="mt-5 rounded-[1.5rem] border border-dashed border-emerald-400/20 bg-emerald-500/5 p-5">
+21171:                                         <div class="grid grid-cols-2 gap-3">
+21172:                                           <div class="rounded-[1.2rem] border border-white/10 bg-slate-950/50 p-4">
+21173:                                             <p class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">AdSense Status</p>
+21174:                                             <p class="mt-2 text-base font-semibold text-white">${getAdsenseReviewLabel(adsenseReport.siteStatus || currentUser?.adsenseSiteStatus || "")}</p>
+21175:                                           </div>
+21176:                                           <div class="rounded-[1.2rem] border border-white/10 bg-slate-950/50 p-4">
+21177:                                             <p class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Publisher ID</p>
+21178:                                             <p class="mt-2 break-all text-sm leading-6 font-semibold text-white sm:text-base">${currentUser?.adsenseId || "Waiting"}</p>
+21179:                                           </div>
+21180:                                         </div>
+21181:                                         <p class="mt-4 text-sm leading-6 text-slate-400">${adsenseReport.message || "No current AdSense data yet. Once Google starts returning live stats for your hosted domain, they will appear here automatically."}</p>
+21182:                                         <p class="mt-3 text-xs text-emerald-300">Last checked: ${adsenseReport.lastCheckedAt ? formatProjectTimestamp(adsenseReport.lastCheckedAt) : "Waiting"}</p>
+21183:                                       </div>`
+21184:                                     : `<div class="mt-5 rounded-[1.5rem] border border-dashed border-amber-400/20 bg-amber-500/5 p-5">
+21185:                                       <p class="text-sm font-semibold text-white">Monetization Disabled for Real-Time Stats</p>
+21186:                                       <p class="mt-2 text-sm leading-6 text-slate-400">MediaLab will reuse your Google sign-in, request AdSense read access, and then pull your actual earnings and traffic metrics into the Console.</p>
+21187:                                       <button onclick="openAdsenseLinkModal()" class="mt-4 inline-flex items-center gap-2 rounded-2xl bg-white text-slate-950 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] hover:bg-amber-50 transition-all shadow-[0_18px_35px_rgba(255,255,255,0.12)]">
+21188:                                         <i class="fas fa-link"></i>
+21189:                                         Monetization Disabled
+21190:                                       </button>
+21191:                                     </div>`
+21192:                               }
+21193:                           </div>
+21194:                           ${buildGithubStorageStatusMarkup("console")}
+21195:                           ${renderAiInfrastructureConsoleCard(aiInfrastructureModels)}
+21196:                         </div>
+21197:                         <div class="rounded-[2rem] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(15,23,42,0.82))] backdrop-blur-2xl p-5 sm:p-6 shadow-[0_24px_60px_rgba(2,6,23,0.32)]">
+21198:                           <div class="flex items-start justify-between gap-4 mb-5">
+21199:                             <div>
+21200:                               <p class="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-400">Quick Project List</p>
+21201:                               <h3 class="mt-2 text-2xl font-semibold tracking-tight text-white">Recent live sites</h3>
+21202:                               <p class="mt-2 text-sm text-slate-400">A focused project rail for fast management, monitoring, and opening the full control center.</p>
+21203:                             </div>
+21204:                             <div class="w-12 h-12 rounded-[1.3rem] border border-white/10 bg-white/5 flex items-center justify-center text-cyan-300 shadow-[0_10px_30px_rgba(34,211,238,0.12)]">
+21205:                               <i class="fas fa-rocket"></i>
+21206:                             </div>
+21207:                           </div>
+21208:                           <div class="space-y-3">
+21209:                             ${
+21210:                               recentProjects.length
+21211:                                 ? recentProjects
+21212:                                     .map((project) => {
+21213:                                       const filename =
+21214:                                         project.filename ||
+21215:                                         project.fileName ||
+21216:                                         "";
+21217:                                       const lastPublished = new Date(
+21218:                                         project.updatedAt ||
+21219:                                           project.lastSyncedAt ||
+21220:                                           project.createdAt ||
+21221:                                           Date.now(),
+21222:                                       ).toLocaleString();
+21223:                                       return `
+21224:                                         <div class="rounded-[1.6rem] border border-white/10 bg-slate-950/75 px-4 py-4 shadow-[0_18px_40px_rgba(2,6,23,0.35)] transition-all hover:border-cyan-400/25 hover:bg-slate-950/90">
+21225:                                           <div class="flex items-start justify-between gap-4">
+21226:                                             <div class="min-w-0">
+21227:                                               <p class="text-sm font-semibold text-white truncate">${project.name || filename || "Untitled Project"}</p>
+21228:                                               <p class="mt-1 text-[11px] text-slate-500 truncate">${project.liveUrl || project.url || ""}</p>
+21229:                                               ${
+21230:                                                 !project.renderHostedConfirmed &&
+21231:                                                 project.renderUrl
+21232:                                                   ? `<p class="mt-2 inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-amber-300"><i class="fas fa-spinner animate-spin"></i> Deploying on Render</p>`
+21233:                                                   : ""
+21234:                                               }
+21235:                                               <p class="mt-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Last Published ${lastPublished}</p>
+21236:                                             </div>
+21237:                                             <button onclick="openLiveProjectDetail('${encodeURIComponent(String(filename || ""))}')" class="shrink-0 inline-flex items-center gap-2 rounded-2xl bg-cyan-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-cyan-300 border border-cyan-400/20 hover:bg-cyan-500/15 transition-all">
+21238:                                               <i class="fas fa-sliders"></i>
+21239:                                               Manage
+21240:                                             </button>
+21241:                                           </div>
+21242:                                         </div>`;
+21243:                                     })
+21244:                                     .join("")
+21245:                                 : `<div class="rounded-[1.6rem] border border-dashed border-white/10 bg-slate-950/55 px-5 py-10 text-center">
+21246:                                     <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-[1.4rem] bg-white/5 border border-white/10 text-cyan-300">
+21247:                                       <i class="fas fa-cloud"></i>
+21248:                                     </div>
+21249:                                     <p class="mt-4 text-base font-semibold text-white">No live sites yet</p>
+21250:                                     <p class="mt-2 text-sm leading-6 text-slate-400">Use the Web Builder to publish your first page to the cloud.</p>
+21251:                                   </div>`
+21252:                             }
+21253:                           </div>
+21254:                           <button onclick="switchTool('history')" class="mt-5 w-full inline-flex items-center justify-center gap-2 rounded-[1.4rem] bg-cyan-500/10 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-cyan-200 border border-cyan-400/20 hover:bg-cyan-500/15 transition-all">
+21255:                             <i class="fas fa-arrow-right"></i>
+21256:                             View All Projects
+21257:                           </button>
+21258:                         </div>
+21259:                       </div>
+21260:                     </div>
+21261:                   </div>`;
+21262:         } else if (id === "marketplace") {
+21263:           if (!loggedIn || !currentUser) {
+21264:             stopMarketplacePreviewRotation();
+21265:             html = `<div class="animate-fadeIn rounded-[2rem] border border-rose-500/20 bg-rose-500/10 p-8 text-center">
+21266:                     <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-[1.4rem] border border-rose-400/20 bg-white/5 text-rose-200">
+21267:                       <i class="fas fa-lock text-xl"></i>
+21268:                     </div>
+21269:                     <h3 class="mt-5 text-2xl font-semibold text-white">Marketplace isn't currently available</h3>
+21270:                     <p class="mt-3 text-sm leading-6 text-rose-100">Please login to access.</p>
+21271:                     <button onclick="showLogin()" class="mt-5 inline-flex items-center gap-2 rounded-2xl bg-white text-slate-950 px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em]">Login Required</button>
+21272:                   </div>`;
+21273:           } else {
+21274:             try {
+21275:               await refreshMarketplaceData();
+21276:               if (
+21277:                 switchToken !== studioToolSwitchToken ||
+21278:                 currentStudioToolId !== id
+21279:               )
+21280:                 return;
+21281:               startMarketplacePreviewRotation();
+21282:               html = renderMarketplaceTool();
+21283:             } catch (error) {
+21284:               if (
+21285:                 switchToken !== studioToolSwitchToken ||
+21286:                 currentStudioToolId !== id
+21287:               )
+21288:                 return;
+21289:               html = `<div class="animate-fadeIn rounded-[2rem] border border-rose-500/20 bg-rose-500/10 p-8 text-center">
+21290:                     <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-[1.4rem] border border-rose-400/20 bg-white/5 text-rose-200">
+21291:                       <i class="fas fa-store-slash text-xl"></i>
+21292:                     </div>
+21293:                     <h3 class="mt-5 text-2xl font-semibold text-white">Marketplace unavailable</h3>
+21294:                     <p class="mt-3 text-sm leading-6 text-slate-300">${escapeHtmlText(error.message || "Could not load marketplace projects right now.")}</p>
+21295:                     <button onclick="switchTool('marketplace')" class="mt-5 inline-flex items-center gap-2 rounded-2xl bg-white text-slate-950 px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em]">Retry</button>
+21296:                   </div>`;
+21297:             }
+21298:           }
+21299:         }
+21300:         // =============================================================
+21301:         // 0. PROJECT HISTORY / LIBRARY
+21302:         // =============================================================
+21303:         else if (id === "history") {
+21304:           const liveProjects =
+21305:             loggedIn && currentUser?.githubUsername
+21306:               ? await fetchGithubProjects()
+21307:               : currentUser?.liveProjects || [];
+21308:           const projects = currentUser?.projects || [];
+21309:           const drafts = currentUser?.builderDrafts || [];
+21310:           html = `
+21311:                   <div class="animate-fadeIn">
+21312:                       <div class="mb-10">
+21313:                           <h2 class="text-3xl font-semibold text-white tracking-tighter">Live Projects</h2>
+21314:                           <p class="text-sm text-gray-500 mt-3">${loggedIn ? "Manage hosted MediaLab pages, reopen code, and keep your live sites in sync." : "Sign in to manage live hosting, drafts, and project history."}</p>
+21315:                       </div>
+21316:                       ${
+21317:                         !loggedIn
+21318:                           ? `<div class="feature-gate-shell max-w-3xl">
+21319:                               <div class="feature-gate-card">
+21320:                                 <div class="feature-gate-badge">Login Required</div>
+21321:                                 <div class="feature-gate-icon"><i class="fas fa-folder-open text-4xl text-cyan-400"></i></div>
+21322:                                 <h3 class="feature-gate-title">Your library is cloud-saved</h3>
+21323:                                 <p class="feature-gate-text">Sign in to access project history and builder drafts across sessions.</p>
+21324:                                 <button onclick="showLogin()" class="feature-gate-button active:scale-95">
+21325:                                   <span>Sign In to Continue</span>
+21326:                                   <i class="fas fa-arrow-right"></i>
+21327:                                 </button>
+21328:                               </div>
+21329:                             </div>`
+21330:                           : `<div class="space-y-10">
+21331:                               <div>
+21332:                                 <div class="flex items-center justify-between mb-5">
+21333:                                   <div>
+21334:                                     <h3 class="text-xl font-semibold text-white">Managed Projects</h3>
+21335:                                     <p class="mt-1 text-xs text-slate-400">Hosted from your GitHub <span class="font-black text-white">medialab</span> repository like a premium hosting dashboard.</p>
+21336:                                   </div>
+21337:                                   <span class="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">${liveProjects.length} Live</span>
+21338:                                 </div>
+21339:                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+21340:                                   ${
+21341:                                     currentUser?.githubUsername
+21342:                                       ? renderLiveProjectItems(liveProjects)
+21343:                                       : `<div class="col-span-full rounded-[2.75rem] border border-dashed border-white/10 bg-gray-900/55 p-10 sm:p-14 text-center">
+21344:                                           <div class="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-[1.75rem] border border-white/10 bg-white/5 text-white">
+21345:                                             <i class="fab fa-github text-2xl"></i>
+21346:                                           </div>
+21347:                                           <h3 class="text-2xl font-semibold tracking-tight text-white">Connect GitHub to activate live hosting</h3>
+21348:                                           <p class="mx-auto mt-3 max-w-2xl text-sm leading-6 text-slate-400">Link GitHub from the sidebar, set up hosting, then publish straight from the Web Builder.</p>
+21349:                                         </div>`
+21350:                                   }
+21351:                                 </div>
+21352:                               </div>
+21353:                               <div>
+21354:                                 <div class="flex items-center justify-between mb-5">
+21355:                                   <h3 class="text-xl font-semibold text-white">Drafts</h3>
+21356:                                   <span class="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">${drafts.length}/10</span>
+21357:                                 </div>
+21358:                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+21359:                                   ${renderDraftItems(drafts)}
+21360:                                 </div>
+21361:                               </div>
+21362:                               <div>
+21363:                                 <div class="flex items-center justify-between mb-5">
+21364:                                   <h3 class="text-xl font-semibold text-white">Completed Downloads</h3>
+21365:                                   <span class="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">${projects.length}/10</span>
+21366:                                 </div>
+21367:                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+21368:                                   ${renderHistoryItems(projects)}
+21369:                                 </div>
+21370:                               </div>
+21371:                             </div>`
+21372:                       }
+21373:                   </div>`;
+21374:         }
+21375:         // =============================================================
+21376:         // 1. IMAGE → PDF CONVERTER
+21377:         // =============================================================
+21378:         // =============================================================
+21379:         // 1. IMAGE → PDF CONVERTER (GATED)
+21380:         // =============================================================
+21381:         else if (id === "image-pdf") {
+21382:           if (!loggedIn) {
+21383:             // SHOW LOCK SCREEN IF NOT LOGGED IN
+21384:             html = `
+21385:             <div class="feature-gate-shell">
+21386:                 <div class="feature-gate-card">
+21387:                     <div class="feature-gate-badge">Login Required</div>
+21388:                     <div class="feature-gate-icon">
+21389:                         <i class="fas fa-lock text-4xl text-cyan-400"></i>
+21390:                     </div>
+21391:                     <h3 class="feature-gate-title">Login Required</h3>
+21392:                     <p class="feature-gate-text">
+21393:                         To access high-resolution **Image → PDF** compilation and cloud storage, please sign in to your MediaLab account.
+21394:                     </p>
+21395:                     <button onclick="showLogin()" class="feature-gate-button active:scale-95">
+21396:                         <span>Sign In to Unlock</span>
+21397:                         <i class="fas fa-arrow-right"></i>
+21398:                     </button>
+21399:                 </div>
+21400:             </div>`;
+21401:           } else {
+21402:             // SHOW ACTUAL TOOL IF LOGGED IN
+21403:             html = `
+21404:             <div class="flex flex-col sm:flex-row justify-between items-center mb-8 gap-4 animate-fadeIn">
+21405:                 <h2 class="text-3xl sm:text-4xl font-semibold text-white tracking-tighter">Image → PDF</h2>
+21406:                 <button id="clear-all-btn" onclick="resetImageTool()"
+21407:                         class="${currentImages.length > 0 ? "" : "hidden"} text-[10px] font-black text-gray-500 hover:text-red-400 uppercase tracking-widest transition-all">
+21408:                     <i class="fas fa-trash-sweep mr-2"></i>Clear Project
+21409:                 </button>
+21410:             </div>
+21411:             <div id="result-display" class="hidden mb-8 animate-fadeIn"></div>
+21412:             <div id="drop-zone-image"
+21413:                  onclick="document.getElementById('img-input').click()"
+21414:                  class="drop-zone border-2 border-dashed border-gray-700 hover:border-cyan-400 rounded-3xl p-12 text-center cursor-pointer bg-gray-900/50 transition-all shadow-inner group">
+21415:                 <div class="w-20 h-20 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
+21416:                     <i class="fas fa-images text-4xl text-gray-600 group-hover:text-cyan-400"></i>
+21417:                 </div>
+21418:                 <p class="text-lg font-medium text-gray-200">Drag & drop images here</p>
+21419:                 <p class="text-sm text-gray-500 mt-1">PNG, png, or WEBP supported</p>
+21420:                 <input type="file" id="img-input" multiple accept="image/*" class="hidden"
+21421:                        onclick="event.stopPropagation()" onchange="handleImages(this.files)">
+21422:             </div>
+21423:             <div id="img-preview" class="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-8"></div>
+21424:             <button id="convert-btn" onclick="convertImagesToPDF()"
+21425:                     class="mt-12 w-full py-5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-2xl text-lg font-bold transition-all active:scale-[0.98] shadow-xl flex items-center justify-center gap-x-3 group">
+21426:                 <span>Compile to PDF</span>
+21427:                 <i class="fas fa-file-pdf group-hover:rotate-12 transition-transform"></i>
+21428:             </button>`;
+21429:           }
+21430:         }
+21431:         // =============================================================
+21432:         else if (id === "web-builder") {
+21433:           html = `
+21434:           <div id="studio-container" class="relative h-[calc(100vh-140px)] w-full overflow-hidden animate-fadeIn">
+21435: 
+21436:               <div id="editor-welcome" class="studio-launch-overlay">
+21437:                   <div class="feature-gate-shell w-full">
+21438:                       <div class="feature-gate-card">
+21439:                           <div class="feature-gate-badge">Studio Access</div>
+21440:                           <div class="feature-gate-icon">
+21441:                               <i class="fas fa-rocket text-3xl text-cyan-400"></i>
+21442:                           </div>
+21443:                           <h2 class="feature-gate-title">Elite Studio Mode</h2>
+21444:                           <p class="feature-gate-text">Open the visual builder workspace with the same clean MediaLab layout used across the rest of the app.</p>
+21445:                           <button onclick="launchBossMode()" class="feature-gate-button active:scale-95">
+21446:                               <span>Launch Studio</span>
+21447:                               <i class="fas fa-arrow-right"></i>
+21448:                           </button>
+21449:                       </div>
+21450:                   </div>
+21451:               </div>
+21452:               <div id="studio-workspace" class="hidden absolute inset-0 bg-[#06080d] flex flex-col">
+21453:                   <div class="sticky top-0 z-[110] px-2 sm:px-4 pt-2 sm:pt-4">
+21454:                       <div id="builder-toolbar-shell" class="bg-gray-950/85 backdrop-blur-3xl border border-white/10 rounded-[1.2rem] sm:rounded-[1.6rem] px-2 py-2 sm:px-3 sm:py-2.5 flex flex-wrap items-center justify-between gap-2 shadow-[0_25px_80px_rgba(0,0,0,0.6)] ring-1 ring-white/5 relative">
+21455:                           <div class="flex items-center gap-2 min-w-0 flex-1">
+21456:                               <div class="relative">
+21457:                                   <button id="studio-menu-toggle" onclick="toggleStudioMenu(event)" class="w-9 h-9 flex items-center justify-center text-gray-300 hover:text-white border border-white/5 rounded-xl bg-white/5 transition-colors">
+21458:                                       <i class="fas fa-bars text-sm"></i>
+21459:                                   </button>
+21460:                                   <div id="studio-menu-panel" class="studio-menu-panel hidden">
+21461:                                       <div class="space-y-3">
+21462:                                           <div class="px-1">
+21463:                                               <p class="text-[9px] font-black uppercase tracking-[0.22em] text-cyan-400">Workflow AI Guide</p>
+21464:                                               <p class="text-[11px] text-slate-400">Replay the builder tutorial whenever you want.</p>
+21465:                                           </div>
+21466:                                           <div class="grid grid-cols-2 gap-2">
+21467:                                               <button onclick="requestNewBuilderProject(); hideStudioMenu();" class="builder-cmd"><i class="fas fa-file-circle-plus text-cyan-400"></i><span>New Project<small>Clear canvas and start fresh</small></span></button>
+21468:                                               <button onclick="saveBuilderDraft(); hideStudioMenu();" class="builder-cmd"><i class="fas fa-floppy-disk text-cyan-400"></i><span>Save Draft<small>Store current project locally</small></span></button>
+21469:                                           </div>
+21470:                                           <button onclick="openBuilderDraftChooser(); hideStudioMenu();" class="builder-cmd"><i class="fas fa-folder-open text-cyan-400"></i><span>Draft Projects <small id="builder-drafts-count-label">0 saved projects</small></span></button>
+21471:                                           <button onclick="restartBuilderTutorial(); hideStudioMenu();" class="builder-cmd"><i class="fas fa-person-chalkboard text-cyan-400"></i><span>Start Tutorial<small>Replay the Workflow AI guide</small></span></button>
+21472:                                           <button onclick="switchTool('history'); exitStudio(); hideStudioMenu();" class="builder-cmd"><i class="fas fa-clock-rotate-left text-cyan-400"></i><span>Project History<small>Open MediaLab history library</small></span></button>
+21473:                                           <div>
+21474:                                               <p class="text-[9px] font-black uppercase tracking-[0.22em] text-slate-500 px-1 mb-2">Draft Projects</p>
+21475:                                               <div id="builder-drafts-list" class="space-y-2"></div>
+21476:                                           </div>
+21477:                                       </div>
+21478:                                   </div>
+21479:                               </div>
+21480:                               <button id="builder-quick-run" onclick="handleQuickRunClick()" class="w-9 h-9 shrink-0 flex items-center justify-center text-emerald-300 hover:text-white border border-emerald-400/20 rounded-xl bg-emerald-500/10 transition-colors shadow-[0_0_0_1px_rgba(16,185,129,0.06)]">
+21481:                                   <i class="fas fa-play text-sm"></i>
+21482:                               </button>
+21483:                               <button id="builder-ai-toggle" onclick="toggleBuilderAiPopup()" class="w-9 h-9 shrink-0 flex items-center justify-center text-cyan-300 hover:text-white border border-cyan-400/20 rounded-xl bg-cyan-500/10 transition-colors shadow-[0_0_0_1px_rgba(6,182,212,0.12)]">
+21484:                                   <i class="fas fa-robot text-sm"></i>
+21485:                               </button>
+21486:                               <div class="builder-tabbar">
+21487:                               <button id="tab-insert" onclick="toggleBuilderTab('insert', event)" class="builder-tab">Insert</button>
+21488:                               <button id="tab-file" onclick="toggleBuilderTab('file', event)" class="builder-tab">File</button>
+21489:                               <button id="tab-edit" onclick="toggleBuilderTab('edit', event)" class="builder-tab">Edit</button>
+21490:                               <button id="tab-arrange" onclick="toggleBuilderTab('arrange', event)" class="builder-tab">Arrange</button>
+21491:                               <button id="tab-templates" onclick="toggleBuilderTab('templates', event)" class="builder-tab">Templates</button>
+21492:                               <button id="tab-community" onclick="toggleBuilderTab('community', event)" class="builder-tab">Community</button>
+21493:                               <button id="builder-code-toggle" onclick="toggleBuilderCodeMode()" class="builder-tab">Code</button>
+21494:                               <button id="tab-exit" onclick="quickExitStudio(); hideBuilderPanels();" class="builder-tab builder-tab-exit">Exit</button>
+21495:                           </div>
+21496:                           </div>
+21497:                           <div class="flex items-center gap-2">
+21498:                               <div class="hidden md:flex flex-col items-end">
+21499:                                   <span class="text-[8px] font-black text-cyan-500 uppercase tracking-widest">Studio Engine v3.0</span>
+21500:                                   <span id="builder-status" class="text-[7px] text-gray-500 font-bold uppercase tracking-widest">Freeform Builder Ready</span>
+21501:                               </div>
+21502:                               <div id="builder-view-only-badge" class="builder-collab-badge hidden">
+21503:                                   <span class="dot"></span>
+21504:                                   <span>View Only Mode</span>
+21505:                               </div>
+21506:                           </div>
+21507:                           <div id="builder-panel-insert" class="builder-popover hidden">
+21508:                               <div class="space-y-3">
+21509:                                   <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+21510:                                       <button id="builder-insert-tab-element" onclick="toggleElementPicker(event); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-plus-circle text-cyan-400"></i><span>Element<small>Open element library</small></span></button>
+21511:                                       <button id="builder-insert-tab-feature" onclick="insertStarterBlock('feature'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-layer-group text-cyan-400"></i><span>Feature Block<small>Insert feature row</small></span></button>
+21512:                                       <button id="builder-insert-tab-background" onclick="openDesignModal('templates'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-image text-cyan-400"></i><span>Background<small>Set page background</small></span></button>
+21513:                                   </div>
+21514:                               </div>
+21515:                           </div>
+21516:                           <div id="builder-panel-file" class="builder-popover hidden">
+21517:                               <div class="builder-popover-grid">
+21518:                                   <button onclick="requestNewBuilderProject(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-file-circle-plus text-cyan-400"></i><span>New Project<small>Reset current canvas</small></span></button>
+21519:                                   <button onclick="saveBuilderDraft(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-floppy-disk text-cyan-400"></i><span>Save Draft<small>Keep work locally</small></span></button>
+21520:                                   <button onclick="openBuilderFilePicker('builder-file-input'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-file-import text-cyan-400"></i><span>Import HTML<small>Open local project code</small></span></button>
+21521:                                   <button onclick="openBuilderFilePicker('builder-folder-input'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-folder-tree text-emerald-400"></i><span>Import Folder<small>Preview a full website project</small></span></button>
+21522:                                   <button id="builder-run-btn" onclick="handleBuilderRunClick()" class="builder-cmd"><i class="fas fa-play text-emerald-400"></i><span>Run Site<small>Open a clean live preview</small></span></button>
+21523:                                   <button onclick="downloadBuilderHtmlFile(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-file-export text-cyan-400"></i><span>Export HTML<small>Download polished page file</small></span></button>
+21524:                                   <button onclick="openBuilderPublishModal(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-rocket text-emerald-400"></i><span>Publish To Web<small>Push live HTML to GitHub Pages</small></span></button>
+21525:                                   <button onclick="downloadBuilderStylesTxt(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-file-lines text-cyan-400"></i><span>Export TXT<small>Download full code as text</small></span></button>
+21526:                                   <button onclick="requestCanvasClear(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-trash-can text-red-400"></i><span>Clear Canvas<small>Remove all current elements</small></span></button>
+21527:                               </div>
+21528:                           </div>
+21529:                           <div id="builder-panel-edit" class="builder-popover hidden">
+21530:                               <div class="builder-popover-grid">
+21531:                                   <button onclick="builderUndo(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-undo text-cyan-400"></i><span>Undo<small>Reverse last change</small></span></button>
+21532:                                   <button onclick="builderRedo(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-redo text-cyan-400"></i><span>Redo<small>Restore change</small></span></button>
+21533:                                   <button id="multi-select-toggle" onclick="toggleMultiSelectMode(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-object-group text-cyan-400"></i><span>Multi Select<small>Select many objects</small></span></button>
+21534:                                   <button id="builder-snap-toggle" onclick="toggleBuilderSnap(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-border-all text-cyan-400"></i><span>Snap Grid<small>Precision placement</small></span></button>
+21535:                               </div>
+21536:                           </div>
+21537:                           <div id="builder-panel-arrange" class="builder-popover hidden">
+21538:                               <div class="builder-popover-grid">
+21539:                                   <button onclick="duplicateSelectedElement(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-clone text-cyan-400"></i><span>Duplicate<small>Clone selected object</small></span></button>
+21540:                                   <button onclick="shiftSelectedLayer('forward'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-layer-group text-cyan-400"></i><span>Bring Forward<small>Move above nearby layers</small></span></button>
+21541:                                   <button onclick="shiftSelectedLayer('backward'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-layer-group text-cyan-400"></i><span>Send Backward<small>Move behind nearby layers</small></span></button>
+21542:                                   <button onclick="groupSelectedElements(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-object-group text-cyan-400"></i><span>Group<small>Combine selection</small></span></button>
+21543:                                   <button onclick="ungroupSelectedElements(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-object-ungroup text-cyan-400"></i><span>Ungroup<small>Break selected group</small></span></button>
+21544:                                   <button onclick="toggleSelectedLock(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-lock text-cyan-400"></i><span>Lock<small>Protect placement</small></span></button>
+21545:                                   <button onclick="removeSelectedElement(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-trash-alt text-red-400"></i><span>Delete<small>Remove selection</small></span></button>
+21546:                               </div>
+21547:                           </div>
+21548:                           <div id="builder-panel-templates" class="builder-popover hidden">
+21549:                               <div class="builder-popover-grid">
+21550:                                   <button id="builder-template-candycrush" onclick="handleCandyCrushTemplateSelection(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-candy-cane text-pink-400"></i><span>Candy Crush Game<small>Playable free game template</small></span></button>
+21551:                                   <button id="builder-template-login" onclick="insertStarterBlock('login'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-right-to-bracket text-cyan-400"></i><span>Login Form<small>Auth page starter</small></span></button>
+21552:                                   <button onclick="loadBuilderSiteTemplate('portfolio'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-user-astronaut text-cyan-400"></i><span>Portfolio Site<small>Personal brand website</small></span></button>
+21553:                                   <button onclick="loadBuilderSiteTemplate('arcade'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-gamepad text-cyan-400"></i><span>Game Launch<small>Arcade landing page</small></span></button>
+21554:                                   <button onclick="loadBuilderSiteTemplate('studio'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-bezier-curve text-cyan-400"></i><span>Creative Studio<small>Agency homepage starter</small></span></button>
+21555:                                   <button onclick="insertStarterBlock('hero'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-panorama text-cyan-400"></i><span>Landing Hero<small>Marketing homepage</small></span></button>
+21556:                                   <button onclick="insertStarterBlock('feature'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-th-large text-cyan-400"></i><span>Features Section<small>Service showcase</small></span></button>
+21557:                                   <button onclick="insertStarterBlock('contact'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-envelope text-cyan-400"></i><span>Contact Form<small>Lead capture layout</small></span></button>
+21558:                                   <button onclick="insertStarterBlock('pricing'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-tags text-cyan-400"></i><span>Pricing Cards<small>Product pricing section</small></span></button>
+21559:                                   <button onclick="insertStarterBlock('dashboard'); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-chart-line text-cyan-400"></i><span>Dashboard Hero<small>SaaS product starter</small></span></button>
+21560:                                   <div id="builder-community-template-list" class="contents"></div>
+21561:                               </div>
+21562:                           </div>
+21563:                           <div id="builder-panel-community" class="builder-popover hidden">
+21564:                               <div class="builder-popover-grid">
+21565:                                   <button onclick="openFeedbackModal(); hideBuilderPanels();" class="builder-cmd"><i class="fas fa-star text-cyan-400"></i><span>Give Feedback<small>Rate the studio and share improvement ideas</small></span></button>
+21566:                               </div>
+21567:                           </div>
+21568:                       </div>
+21569:                   </div>
+21570:                   <div id="terminal-drawer" class="terminal-drawer">
+21571:                       <div class="terminal-drawer-header">
+21572:                           <div class="min-w-0">
+21573:                               <div id="terminal-project-chip" class="terminal-chip"><i class="fas fa-terminal text-[11px]"></i><span>medialab&gt;</span></div>
+21574:                               <p id="terminal-status-text" class="mt-2 text-[11px] text-slate-400">Project-aware virtual shell ready.</p>
+21575:                           </div>
+21576:                           <button type="button" onclick="toggleTerminalDrawer(false)" class="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white transition-all">
+21577:                               <i class="fas fa-chevron-down text-sm"></i>
+21578:                           </button>
+21579:                       </div>
+21580:                       <div class="terminal-surface">
+21581:                           <div id="terminal-instance" class="terminal-instance"></div>
+21582:                       </div>
+21583:                   </div>
+21584:                   <div id="builder-collaboration-dropdown" class="builder-collaboration-dropdown hidden"></div>
+21585:                   <div id="builder-collab-video-stage" class="builder-collab-video-stage"></div>
+21586:                   <div id="builder-collab-join-overlay" class="builder-collab-join-overlay hidden">
+21587:                       <div class="builder-collab-join-card">
+21588:                           <div class="flex items-start gap-4">
+21589:                               <div class="flex h-12 w-12 items-center justify-center rounded-[1.2rem] border border-cyan-400/20 bg-cyan-500/10 text-cyan-200">
+21590:                                   <i class="fas fa-globe-americas text-lg"></i>
+21591:                               </div>
+21592:                               <div class="min-w-0 flex-1">
+21593:                                   <p class="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-300">Collaboration Session</p>
+21594:                                   <h3 id="builder-collab-join-title" class="mt-2 text-xl font-semibold text-white">Joining collaboration workspace</h3>
+21595:                                   <p id="builder-collab-join-subtitle" class="mt-2 text-sm leading-6 text-slate-300">Hosted session details are loading...</p>
+21596:                               </div>
+21597:                           </div>
+21598:                           <div class="mt-5 rounded-[1.4rem] border border-white/10 bg-white/[0.03] p-4">
+21599:                               <div class="flex items-center gap-3">
+21600:                                   <span class="builder-collab-spinner"></span>
+21601:                                   <p id="builder-collab-join-status" class="text-sm font-semibold text-white">Preparing collaboration workspace...</p>
+21602:                               </div>
+21603:                               <div id="builder-collab-join-bar" class="builder-collab-join-progress mt-4" style="--join-progress:18%;">
+21604:                                   <span></span>
+21605:                               </div>
+21606:                           </div>
+21607:                       </div>
+21608:                   </div>
+21609:                   <div id="builder-collab-media-prompt" class="builder-collab-media-prompt hidden" onclick="if (event.target === this) closeCollaborationMediaPrompt();">
+21610:                       <div class="builder-collab-media-prompt-card">
+21611:                           <div class="border-b border-white/10 px-5 py-4">
+21612:                               <p class="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-300">Workspace Live Setup</p>
+21613:                               <h3 class="mt-2 text-xl font-semibold text-white">Turn on audio or camera</h3>
+21614:                               <p class="mt-2 text-sm leading-6 text-slate-400">Your room is ready. Pick what you want to share now. You can still change this anytime from the toolbar.</p>
+21615:                           </div>
+21616:                           <div class="space-y-3 px-5 py-5">
+21617:                               <button type="button" id="builder-collab-prompt-audio" onclick="handleCollaborationMediaPromptToggle('audio')" class="builder-collab-media-prompt-option">
+21618:                                   <span class="builder-collab-media-prompt-icon"><i class="fas fa-microphone"></i></span>
+21619:                                   <span class="min-w-0">
+21620:                                       <span class="block text-sm font-semibold text-white">Turn on Audio</span>
+21621:                                       <span class="mt-1 block text-xs leading-5 text-slate-400">Speak and be heard instantly in the room.</span>
+21622:                                   </span>
+21623:                               </button>
+21624:                               <button type="button" id="builder-collab-prompt-video" onclick="handleCollaborationMediaPromptToggle('video')" class="builder-collab-media-prompt-option">
+21625:                                   <span class="builder-collab-media-prompt-icon"><i class="fas fa-video"></i></span>
+21626:                                   <span class="min-w-0">
+21627:                                       <span class="block text-sm font-semibold text-white">Turn on Camera</span>
+21628:                                       <span class="mt-1 block text-xs leading-5 text-slate-400">Show a floating live frame to everyone in this room.</span>
+21629:                                   </span>
+21630:                               </button>
+21631:                           </div>
+21632:                           <div class="flex items-center justify-between gap-3 border-t border-white/10 px-5 py-4">
+21633:                               <button type="button" onclick="closeCollaborationMediaPrompt()" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-black text-slate-200 hover:bg-white/10">Not now</button>
+21634:                               <button type="button" onclick="applyCollaborationMediaPromptSelection()" class="rounded-2xl bg-cyan-500 px-4 py-3 text-sm font-black text-slate-950 hover:bg-cyan-400">Continue</button>
+21635:                           </div>
+21636:                       </div>
+21637:                   </div>
+21638:                   <div id="builder-collab-inactive-overlay" class="builder-collab-inactive-overlay hidden">
+21639:                       <div class="builder-collab-inactive-card">
+21640:                           <div class="flex items-start gap-4">
+21641:                               <div class="flex h-12 w-12 items-center justify-center rounded-[1.2rem] border border-rose-400/20 bg-rose-500/10 text-rose-200">
+21642:                                   <i class="fas fa-link-slash text-lg"></i>
+21643:                               </div>
+21644:                               <div class="min-w-0 flex-1">
+21645:                                   <p class="text-[10px] font-black uppercase tracking-[0.22em] text-rose-300">Meeting Unavailable</p>
+21646:                                   <h3 id="builder-collab-inactive-title" class="mt-2 text-xl font-semibold text-white">This meeting is not active.</h3>
+21647:                                   <p id="builder-collab-inactive-message" class="mt-2 text-sm leading-6 text-slate-300">The meeting ID is no longer available.</p>
+21648:                               </div>
+21649:                           </div>
+21650:                           <div class="mt-5 flex justify-end">
+21651:                               <button type="button" onclick="continueAnywayFromCollaboration()" class="rounded-2xl bg-cyan-500 px-4 py-3 text-sm font-black text-slate-950 hover:bg-cyan-400">Continue Anyway</button>
+21652:                           </div>
+21653:                       </div>
+21654:                   </div>
+21655:                   <div id="builder-collaboration-modal" class="hidden absolute inset-0 z-[160] bg-slate-950/78 p-4 backdrop-blur-xl" onclick="if (event.target === this) closeCollaborationModal();">
+21656:                       <div class="mx-auto mt-10 w-full max-w-xl rounded-[2rem] border border-white/10 bg-[#08111f] shadow-[0_28px_90px_rgba(2,6,23,0.58)]">
+21657:                           <div class="flex items-start justify-between gap-4 border-b border-white/10 px-5 py-4">
+21658:                               <div>
+21659:                                   <p class="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-300">Collaborate on Project</p>
+21660:                                   <h3 class="mt-2 text-xl font-semibold text-white">Real-time builder session</h3>
+21661:                                   <p class="mt-1 text-sm text-slate-400">Generate a shareable room link, invite guests, and control edit access live.</p>
+21662:                               </div>
+21663:                               <button onclick="closeCollaborationModal()" class="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10">
+21664:                                   <i class="fas fa-times"></i>
+21665:                               </button>
+21666:                           </div>
+21667:                           <div class="space-y-5 px-5 py-5">
+21668:                               <div id="builder-share-link-info-card" class="rounded-[1.6rem] border border-cyan-400/15 bg-cyan-500/[0.06] p-4">
+21669:                                   <p class="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-300">Session Link</p>
+21670:                                   <p class="mt-2 text-sm leading-6 text-slate-300">Guests open this room link and join as viewers by default. You can grant edit access from the live session menu.</p>
+21671:                                   <div class="mt-4 flex flex-wrap items-center gap-3">
+21672:                                       <button id="builder-generate-share-link" onclick="generateCollaborationLink()" class="rounded-2xl bg-cyan-500 px-4 py-3 text-sm font-black text-slate-950 hover:bg-cyan-400">Generate Shareable Link</button>
+21673:                                       <span id="builder-collaboration-role" class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Host inactive</span>
+21674:                                   </div>
+21675:                               </div>
+21676:                               <div id="builder-share-link-wrap" class="hidden rounded-[1.6rem] border border-white/10 bg-white/[0.03] p-4">
+21677:                                   <label class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Share this link</label>
+21678:                                   <div class="mt-3 flex items-center gap-3">
+21679:                                       <input id="builder-collaboration-link" readonly class="min-w-0 flex-1 rounded-2xl border border-white/10 bg-slate-950/85 px-4 py-3 text-sm text-cyan-100 outline-none" value="" />
+21680:                                       <button onclick="copyCollaborationLink()" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-black text-white hover:bg-white/10">Copy</button>
+21681:                                   </div>
+21682:                               </div>
+21683:                           </div>
+21684:                       </div>
+21685:                   </div>
+21686:                   <div id="builder-explorer-shell" class="builder-explorer-shell hidden">
+21687:                       <div class="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
+21688:                           <div class="min-w-0">
+21689:                               <p class="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-400">Project Explorer</p>
+21690:                               <div class="mt-1 flex items-center gap-2">
+21691:                                   <p id="builder-explorer-project-name" ondblclick="beginBuilderProjectRename()" class="min-w-0 flex-1 truncate text-sm font-semibold text-white">MediaLab Project</p>
+21692:                                   <input id="builder-project-name-input" class="builder-project-name-input hidden" value="MediaLab Project" onblur="commitBuilderProjectRename(this.value)" onkeydown="handleBuilderProjectRenameKeydown(event)" />
+21693:                                   <button onclick="beginBuilderProjectRename()" class="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white">
+21694:                                       <i class="fas fa-pen text-[11px]"></i>
+21695:                                   </button>
+21696:                               </div>
+21697:                           </div>
+21698:                           <div class="flex items-center gap-2">
+21699:                               <button onclick="promptAddBuilderFile()" class="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-200 hover:border-cyan-400/25 hover:text-cyan-200 transition-all">
+21700:                                   <i class="fas fa-file-circle-plus"></i>
+21701:                               </button>
+21702:                               <button onclick="promptAddBuilderFolder()" class="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-200 hover:border-cyan-400/25 hover:text-cyan-200 transition-all">
+21703:                                   <i class="fas fa-folder-plus"></i>
+21704:                               </button>
+21705:                               <button onclick="toggleBuilderExplorer(false)" class="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10">
+21706:                                   <i class="fas fa-times"></i>
+21707:                               </button>
+21708:                           </div>
+21709:                       </div>
+21710:                       <div id="builder-explorer-tree" class="builder-explorer-tree"></div>
+21711:                   </div>
+21712:                   <div id="builder-context-menu-root" class="hidden fixed z-[5000] min-w-[180px] rounded-2xl border border-white/10 bg-[#010409]/[0.99] p-2 shadow-[0_22px_60px_rgba(0,0,0,0.62)]"></div>
+21713:                   <div id="builder-html-properties-modal" onclick="if (event.target === this) closeBuilderHtmlPropertiesModal()" class="hidden absolute inset-0 z-[145] bg-slate-950/72 p-4 backdrop-blur-xl">
+21714:                       <div class="mx-auto mt-12 w-full max-w-xl rounded-[2rem] border border-white/10 bg-[#08111f] shadow-[0_28px_90px_rgba(2,6,23,0.58)]">
+21715:                           <div class="flex items-start justify-between gap-4 border-b border-white/10 px-5 py-4">
+21716:                               <div>
+21717:                                   <p class="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-300">HTML Properties</p>
+21718:                                   <h3 id="builder-html-properties-title" class="mt-2 text-xl font-semibold text-white">index.html</h3>
+21719:                                   <p class="mt-1 text-sm text-slate-400">Link CSS in the head and JavaScript before the closing body tag.</p>
+21720:                               </div>
+21721:                               <button onclick="closeBuilderHtmlPropertiesModal()" class="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10">
+21722:                                   <i class="fas fa-times"></i>
+21723:                               </button>
+21724:                           </div>
+21725:                           <div id="builder-html-properties-body" class="space-y-6 px-5 py-5"></div>
+21726:                           <div class="flex items-center justify-end gap-3 border-t border-white/10 px-5 py-4">
+21727:                               <button onclick="closeBuilderHtmlPropertiesModal()" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-slate-200 hover:bg-white/10">Close</button>
+21728:                               <button onclick="applyBuilderHtmlProperties()" class="rounded-2xl bg-cyan-500 px-4 py-3 text-sm font-black text-slate-950 hover:bg-cyan-400">Apply Links</button>
+21729:                           </div>
+21730:                       </div>
+21731:                   </div>
+21732:                   <div id="builder-data-binding-modal" onclick="if (event.target === this) closeBuilderDataBindingModal()" class="hidden absolute inset-0 z-[146] bg-slate-950/72 p-4 backdrop-blur-xl">
+21733:                       <div class="mx-auto mt-12 w-full max-w-xl rounded-[2rem] border border-cyan-400/15 bg-[#08111f] shadow-[0_28px_90px_rgba(2,6,23,0.58)]">
+21734:                           <div class="flex items-start justify-between gap-4 border-b border-white/10 px-5 py-4">
+21735:                               <div>
+21736:                                   <p class="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-300">Bind Data</p>
+21737:                                   <h3 class="mt-2 text-xl font-semibold text-white">Link this element to MongoDB</h3>
+21738:                                   <p class="mt-1 text-sm text-slate-400">Pick the collection field this element should display in run mode.</p>
+21739:                               </div>
+21740:                               <button onclick="closeBuilderDataBindingModal()" class="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10">
+21741:                                   <i class="fas fa-times"></i>
+21742:                               </button>
+21743:                           </div>
+21744:                           <div id="builder-data-binding-body" class="space-y-5 px-5 py-5"></div>
+21745:                           <div class="flex items-center justify-end gap-3 border-t border-white/10 px-5 py-4">
+21746:                               <button onclick="closeBuilderDataBindingModal()" class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-slate-200 hover:bg-white/10">Cancel</button>
+21747:                               <button onclick="applyBuilderDataBinding()" class="rounded-2xl bg-cyan-500 px-4 py-3 text-sm font-black text-slate-950 hover:bg-cyan-400">Apply Binding</button>
+21748:                           </div>
+21749:                       </div>
+21750:                   </div>
+21751:                   <div id="code-mode-panel" class="hidden flex-1 px-2 sm:px-4 pt-2 sm:pt-4 pb-2 sm:pb-4">
+21752:                       <div class="code-mode-shell w-full max-w-[1680px] mx-auto">
+21753:                           <div class="flex flex-wrap items-center justify-end gap-3 px-1">
+21754:                               <div class="flex gap-2">
+21755:                                   <button onclick="copyBuilderCode()" class="px-4 py-2.5 rounded-xl bg-white/5 text-[10px] font-black uppercase tracking-[0.16em] text-gray-300 hover:bg-white/10 transition-all">Copy Code</button>
+21756:                                   <button onclick="applyCodeModeToCanvas()" class="px-4 py-2.5 rounded-xl bg-cyan-600 text-[10px] font-black uppercase tracking-[0.16em] text-white hover:bg-cyan-500 transition-all">Apply to Canvas</button>
+21757:                                   <button onclick="toggleBuilderCodeMode()" class="px-4 py-2.5 rounded-xl bg-white/5 text-[10px] font-black uppercase tracking-[0.16em] text-gray-300 hover:bg-white/10 transition-all">Visual Mode</button>
+21758:                               </div>
+21759:                           </div>
+21760:                           <div class="code-editor-shell">
+21761:                               <div class="code-editor-toolbar">
+21762:                                   <div class="code-window-dots">
+21763:                                       <span class="code-dot bg-red-400"></span>
+21764:                                       <span class="code-dot bg-yellow-400"></span>
+21765:                                       <span class="code-dot bg-green-400"></span>
+21766:                                   </div>
+21767:                                   <div id="builder-code-file-label" class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">index.html</div>
+21768:                               </div>
+21769:                               <div class="code-editor-stage">
+21770:                                   <pre id="builder-code-lines" class="code-line-gutter"></pre>
+21771:                                   <div class="code-editor-pane">
+21772:                                       <pre id="builder-code-highlight" class="code-editor-highlight"></pre>
+21773:                                       <textarea id="builder-code-editor" class="code-editor-input" spellcheck="false" wrap="soft" oninput="handleBuilderCodeInput()" onscroll="syncCodeEditorScroll()" onblur="triggerSmartMagicAutoFix()"></textarea>
+21774:                                   </div>
+21775:                               </div>
+21776:                           </div>
+21777:                       </div>
+21778:                   </div>
+21779:                   <div class="pointer-events-none fixed right-4 top-[5.3rem] z-[117] sm:right-6 sm:top-[6.1rem]">
+21780:                       <button id="builder-explorer-toggle" onclick="toggleBuilderExplorer()" class="pointer-events-auto w-11 h-11 flex items-center justify-center text-cyan-300 hover:text-white border border-cyan-400/20 rounded-2xl bg-[#08111f]/90 backdrop-blur-2xl transition-colors shadow-[0_18px_55px_rgba(2,6,23,0.45)]">
+21781:                           <i class="fas fa-sitemap text-sm"></i>
+21782:                       </button>
+21783:                   </div>
+21784:                   
+21785:                   <div id="ai-chat-popup" class="ai-chat-popup hidden" onclick="if(event.target.id === 'ai-chat-popup') closeBuilderAiChat();">
+21786:                       <div class="ai-chat-shell">
+21787:                           <div class="ai-model-pulse"></div>
+21788:                           <div class="ai-chat-topbar">
+21789:                               <div class="ai-chat-model-wrap">
+21790:                                   <select id="ai-model-picker" onchange="changeAiModel(this.value)" class="ai-chat-model-picker">
+21791:                                       <option value="workflow">Workflow AI ↗</option>
+21792:                                       <option value="xtra">Xtra AI (Auto-Best)</option>
+21793:                                   </select>
+21794:                               </div>
+21795:                               <div class="ai-chat-top-actions">
+21796:                                   <button type="button" onclick="openRemoteWorkflowControl()" class="ai-chat-remote-btn" title="Remote workflow control">
+21797:                                       <i class="fas fa-globe-americas text-sm"></i>
+21798:                                   </button>
+21799:                                   <button onclick="closeBuilderAiChat()" class="ai-chat-close" title="Close chat">
+21800:                                       <i class="fas fa-times text-sm"></i>
+21801:                                   </button>
+21802:                               </div>
+21803:                           </div>
+21804:                           <div class="ai-xp-progress-wrapper">
+21805:                               <div id="ai-xp-progress-bar" class="bg-white/10 rounded-full overflow-hidden">
+21806:                                   <div class="h-full w-0 bg-gradient-to-r from-amber-400 via-yellow-300 to-orange-400 transition-all duration-300" style="height: 0.25rem;"></div>
+21807:                               </div>
+21808:                               <span id="ai-xp-display" class="ai-xp-display">0XP</span>
+21809:                           </div>
+21810:                           <div class="ai-chat-stage">
+21811:                               <div id="ai-chat-messages" class="ai-chat-messages"></div>
+21812:                           </div>
+21813:                           <div class="ai-chat-input-dock">
+21814:                               <p id="ai-inline-status" class="ai-inline-status hidden"><span class="ai-agent-stage-ring"></span><span>Agent is standby</span></p>
+21815:                               <div class="ai-chat-input-row">
+21816:                                   <button id="btn-magic-fix" onclick="triggerMagicFix()" class="ai-chat-tool-btn" title="Magic Auto-Fix">
+21817:                                       <i id="magic-fix-icon" class="fas fa-wand-magic-sparkles text-sm"></i>
+21818:                                   </button>
+21819:                                   <input id="ai-chat-input" type="text" placeholder="Ask for fixes, templates, or backgrounds (e.g. ...)" onkeydown="if(event.key==='Enter'){event.preventDefault();sendBuilderAiChat();}" class="ai-chat-textbox" />
+21820:                                   <button id="ai-chat-send" onclick="sendBuilderAiChat()" class="ai-chat-send-btn" title="Send message"><i class="fas fa-paper-plane text-sm"></i></button>
+21821:                                   <button id="ai-chat-stop" onclick="stopBuilderAiChat()" class="hidden ai-chat-stop-btn" title="Stop AI processing"><i class="fas fa-stop text-sm"></i></button>
+21822:                               </div>
+21823:                               <div class="ai-chat-footer">
+21824:                                   <div class="ai-chat-footer-tools">
+21825:                                       <button onclick="startNewAiChat()" class="ai-chat-mini-btn" title="Start new chat">
+21826:                                           <i class="fas fa-plus text-xs"></i>
+21827:                                       </button>
+21828:                                       <button onclick="clearAiChatHistory()" class="ai-chat-mini-btn" title="Clear history">
+21829:                                           <i class="fas fa-trash-alt text-xs"></i>
+21830:                                       </button>
+21831:                                   </div>
+21832:                                   <span class="ai-chat-message-count"><span id="ai-message-count">0</span> messages</span>
+21833:                               </div>
+21834:                           </div>
+21835:                       </div>
+21836:                   </div>
+21837:                   <div id="ai-remote-control-modal" class="ai-remote-modal hidden" onclick="if (event.target.id === 'ai-remote-control-modal') closeRemoteWorkflowControl();">
+21838:                       <div class="ai-remote-card">
+21839:                           <div class="ai-remote-card-top">
+21840:                               <div>
+21841:                                   <p class="ai-remote-eyebrow">Remote workflow control</p>
+21842:                                   <h3 class="ai-remote-title">Remote workflow control</h3>
+21843:                                   <p class="ai-remote-copy">Create a phone-ready control link for this live builder session.</p>
+21844:                               </div>
+21845:                               <button type="button" onclick="closeRemoteWorkflowControl()" class="ai-chat-close" title="Close remote workflow control">
+21846:                                   <i class="fas fa-times text-sm"></i>
+21847:                               </button>
+21848:                           </div>
+21849:                           <div class="ai-remote-actions">
+21850:                               <button type="button" onclick="generateRemoteWorkflowLink()" class="ai-remote-primary">
+21851:                                   Get Link
+21852:                               </button>
+21853:                           </div>
+21854:                           <div id="ai-remote-link-wrap" class="ai-remote-link-wrap hidden">
+21855:                               <label class="ai-remote-label" for="ai-remote-link-output">Phone control link</label>
+21856:                               <div class="ai-remote-link-row">
+21857:                                   <input id="ai-remote-link-output" type="text" readonly class="ai-remote-link-input" />
+21858:                                   <button type="button" onclick="copyRemoteWorkflowLink()" class="ai-remote-copy-btn">Copy</button>
+21859:                               </div>
+21860:                               <p class="ai-remote-note">Opening this link on your phone joins the current project and launches the dedicated AI control view.</p>
+21861:                           </div>
+21862:                       </div>
+21863:                   </div>
+21864:                   <div id="canvas-container" onclick="deselectAll(event)" class="flex-1 overflow-auto flex justify-center items-start px-2 sm:px-4 pt-2 sm:pt-4 pb-10 sm:pb-12 cursor-default custom-scrollbar" style="touch-action: pan-x pan-y pinch-zoom;">
+21865:                       <div class="relative flex w-max min-w-full flex-col items-center">
+21866:                           <div class="w-full px-1 sm:px-2 pb-2 flex flex-wrap items-center justify-between gap-2">
+21867:                               <div class="flex items-center gap-2">
+21868:                                   <button id="builder-viewport-toggle" type="button" onclick="toggleBuilderViewportPanel()" class="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-slate-400 hover:text-cyan-200 hover:border-cyan-400/30 transition-colors">
+21869:                                       <i class="fas fa-chevron-down text-[10px]"></i>
+21870:                                   </button>
+21871:                                   <div id="builder-canvas-size-label" class="hidden text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Desktop Canvas</div>
+21872:                                   <div id="builder-viewport-panel" class="hidden flex-col items-start">
+21873:                                       <select id="builder-device-select" onchange="setBuilderViewportMode(this.value)" class="w-[210px] rounded-md border border-cyan-400/45 bg-transparent px-2 py-1.5 text-[11px] font-semibold text-slate-100 outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/80">
+21874:                                           <option class="bg-slate-900 text-slate-200" value="desktop">Desktop</option>
+21875:                                           <option class="bg-slate-900 text-slate-200" value="laptop">Laptop 1440</option>
+21876:                                           <option class="bg-slate-900 text-slate-200" value="tablet">iPad 1024</option>
+21877:                                           <option class="bg-slate-900 text-slate-200" value="tablet-portrait">iPad 768</option>
+21878:                                           <option class="bg-slate-900 text-slate-200" value="mobile">iPhone 14 Pro Max</option>
+21879:                                           <option class="bg-slate-900 text-slate-200" value="mobile-small">iPhone SE</option>
+21880:                                           <option class="bg-slate-900 text-slate-200" value="pixel">Pixel 7</option>
+21881:                                           <option class="bg-slate-900 text-slate-200" value="galaxy">Galaxy S8</option>
+21882:                                           <option class="bg-slate-900 text-slate-200" value="responsive">Responsive</option>
+21883:                                       </select>
+21884:                                   </div>
+21885:                                   <button id="builder-terminal-toggle" type="button" onclick="toggleTerminalDrawer()" class="toolbar-item inline-flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-[10px] font-black uppercase tracking-[0.18em] text-slate-300 hover:text-cyan-100">
+21886:                                       <i class="fas fa-terminal text-[11px]"></i>
+21887:                                   </button>
+21888:                                   <button id="builder-collaboration-toggle" type="button" onclick="toggleCollaborationPanel(event)" class="toolbar-item inline-flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-[10px] font-black uppercase tracking-[0.18em] text-slate-300 hover:text-cyan-100">
+21889:                                       <i class="fas fa-globe-americas text-[11px]"></i>
+21890:                                   </button>
+21891:                                   <button id="builder-collab-audio-toggle" type="button" onclick="toggleCollaborationAudio()" class="toolbar-item hidden inline-flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-slate-300 hover:text-emerald-200 opacity-40 pointer-events-none">
+21892:                                       <i class="fas fa-microphone text-[11px] animate-pulse"></i>
+21893:                                   </button>
+21894:                                   <button id="builder-collab-video-toggle" type="button" onclick="toggleCollaborationVideo()" class="toolbar-item hidden inline-flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-slate-300 hover:text-cyan-100 opacity-40 pointer-events-none">
+21895:                                       <i class="fas fa-video text-[11px] animate-pulse"></i>
+21896:                                   </button>
+21897:                                   <div id="builder-view-switcher" class="builder-view-switcher"></div>
+21898:                               </div>
+21899:                               <div class="flex-1 min-w-0"></div>
+21900:                               <div id="builder-responsive-controls" class="hidden items-center gap-2 rounded-lg border border-cyan-400/20 bg-cyan-500/[0.08] px-2.5 py-1.5">
+21901:                                   <span class="text-[9px] font-black uppercase tracking-[0.2em] text-cyan-200">Responsive Width</span>
+21902:                                   <input id="builder-responsive-width" type="range" min="320" max="1680" value="1280" oninput="setBuilderViewportWidth(this.value)" class="h-1.5 w-36 accent-cyan-400" />
+21903:                                   <input id="builder-responsive-width-number" type="number" min="320" max="1680" value="1280" oninput="setBuilderViewportWidth(this.value)" class="w-20 rounded-md border border-white/10 bg-slate-950/80 px-2 py-1 text-[10px] font-black text-slate-200 outline-none focus:border-cyan-400" />
+21904:                                   <span class="text-[9px] font-black uppercase tracking-[0.18em] text-cyan-200">px</span>
+21905:                               </div>
+21906:                           </div>
+21907:                           <div class="relative">
+21908:                               <div id="builder-collab-cursor-layer" class="builder-collab-cursor-layer"></div>
+21909:                               <div id="web-canvas" data-page-background="#ffffff" class="builder-grid bg-white relative shadow-[0_60px_150px_rgba(0,0,0,0.55)] rounded-[1.2rem] sm:rounded-[2rem] overflow-hidden transition-transform duration-500">
+21910:                               </div>
+21911:                           </div>
+21912:                       </div>
+21913:                   </div>
+21914:                   </div>
+21915:                   <div id="element-picker" class="hidden fixed z-[120] bg-gray-950/90 backdrop-blur-2xl border border-white/10 rounded-[2rem] sm:rounded-[3rem] shadow-2xl p-4 sm:p-6 w-[92vw] max-w-[360px] max-h-[72vh] overflow-y-auto animate-fadeIn ring-1 ring-cyan-500/20">
+21916:                       <p class="text-[9px] font-black text-gray-500 uppercase tracking-[0.3em] mb-5 text-center">UI Component Library</p>
+21917:                       <div class="grid grid-cols-3 gap-3">
+21918:                           ${[
+21919:                             { id: "div", icon: "fa-cube", label: "Container" },
+21920:                             {
+21921:                               id: "text",
+21922:                               icon: "fa-font",
+21923:                               label: "Typography",
+21924:                             },
+21925:                             {
+21926:                               id: "button",
+21927:                               icon: "fa-hand-pointer",
+21928:                               label: "UI Button",
+21929:                             },
+21930:                             {
+21931:                               id: "input",
+21932:                               icon: "fa-keyboard",
+21933:                               label: "Input Field",
+21934:                             },
+21935:                             {
+21936:                               id: "textarea",
+21937:                               icon: "fa-align-left",
+21938:                               label: "Text Area",
+21939:                             },
+21940:                             {
+21941:                               id: "range",
+21942:                               icon: "fa-sliders-h",
+21943:                               label: "Slider",
+21944:                             },
+21945:                             {
+21946:                               id: "checkbox",
+21947:                               icon: "fa-check-square",
+21948:                               label: "Checkbox",
+21949:                             },
+21950:                             {
+21951:                               id: "img",
+21952:                               icon: "fa-image",
+21953:                               label: "Local Asset",
+21954:                             },
+21955:                             { id: "a", icon: "fa-link", label: "Hyperlink" },
+21956:                           ]
+21957:                             .map(
+21958:                               (item) => `
+21959:                               <button id="element-picker-item-${item.id}" onclick="${item.id === "img" ? "triggerLocalImage()" : `addCanvasElement('${item.id}')`}; toggleElementPicker()"
+21960:                                       class="flex flex-col items-center gap-3 p-4 bg-white/5 rounded-[1.5rem] hover:bg-cyan-500/20 transition-all border border-transparent hover:border-cyan-500/30 group">
+21961:                                   <i class="fas ${item.icon} text-gray-500 group-hover:text-cyan-400 text-xl transition-transform group-hover:scale-110"></i>
+21962:                                   <span class="text-[7px] font-black text-gray-600 group-hover:text-white uppercase tracking-tighter">${item.label}</span>
+21963:                               </button>
+21964:                           `,
+21965:                             )
+21966:                             .join("")}
+21967:                       </div>
+21968:                       <input type="file" id="local-img-input" accept="image/*" class="hidden" onchange="handleLocalImage(this.files[0])">
+21969:                       <input type="file" id="inspector-bg-img-input" accept="image/*" class="hidden" onchange="handleInspectorBackgroundImage(this.files[0])">
+21970:                       <input type="file" id="builder-file-input" accept=".html,.htm,.ejs,.txt" class="hidden" onchange="handleBuilderFileImport(this.files[0])">
+21971:                       <input type="file" id="builder-folder-input" webkitdirectory directory multiple class="hidden" onchange="handleBuilderFolderImport(this.files)">
+21972:                   </div>
+21973:                   <div id="smart-inspector" class="hidden fixed inset-0 bg-black/60 backdrop-blur-md z-[150] flex items-center justify-center p-4">
+21974:                       <div onclick="event.stopPropagation()" class="relative bg-[#0b0c10] border border-white/10 w-full max-w-[360px] sm:max-w-[392px] min-h-[560px] sm:min-h-[590px] max-h-[min(84vh,640px)] rounded-[2rem] sm:rounded-[2.4rem] overflow-hidden shadow-[0_40px_100px_rgba(0,0,0,0.9)] ring-1 ring-white/10 scale-in flex flex-col">
+21975: 
+21976:                           <div class="h-[180px] sm:h-[190px] shrink-0 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.14),transparent_45%),linear-gradient(180deg,#020617_0%,#0b1120_100%)] flex items-center justify-center border-b border-white/5 relative overflow-hidden">
+21977:                                <div class="absolute inset-0 opacity-40" style="background-image:linear-gradient(rgba(148,163,184,0.12) 1px,transparent 1px),linear-gradient(90deg,rgba(148,163,184,0.12) 1px,transparent 1px);background-size:24px 24px;transform:perspective(700px) rotateX(68deg) scale(1.4);transform-origin:center top;"></div>
+21978:                                <div class="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,transparent_42%,rgba(2,6,23,0.78)_100%)]"></div>
+21979:                                <div id="inspector-preview" class="relative w-full h-full transition-all duration-300 px-5 py-4"></div>
+21980:                           </div>
+21981:                           <div class="inspector-mode-corner">
+21982:                               <button id="inspector-mode-css" type="button" onclick="setInspectorMode('css')" class="inspector-mode-tab active" title="CSS">
+21983:                                   <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+21984:                                       <path d="M9 4 5 20"></path>
+21985:                                       <path d="M19 4 15 20"></path>
+21986:                                       <path d="M21 9H7"></path>
+21987:                                       <path d="M17 15H3"></path>
+21988:                                   </svg>
+21989:                               </button>
+21990:                               <button id="inspector-mode-keyframes" type="button" onclick="setInspectorMode('keyframes')" class="inspector-mode-tab" title="Keyframes">
+21991:                                   <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+21992:                                       <path d="M5 17 11 7 13 12 19 4"></path>
+21993:                                       <path d="M19 4v5"></path>
+21994:                                       <path d="M14 19h5"></path>
+21995:                                   </svg>
+21996:                               </button>
+21997:                           </div>
+21998:                           <div class="p-5 sm:p-6 flex-1 min-h-0 flex flex-col">
+21999:                               <div id="inspector-controls" class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden pr-1 flex flex-col gap-3 custom-scrollbar">
+22000:                                   </div>
+22001: 
+22002:                               <div class="mt-5 pt-4 border-t border-white/5 shrink-0">
+22003:                                   <div class="flex justify-between items-center mb-5 px-1">
+22004:                                       <button id="inspector-page-prev" onclick="changeInspectorPage(-1)" class="w-8 h-8 bg-white/5 rounded-full flex items-center justify-center text-gray-500 hover:text-cyan-400 transition-colors"><i class="fas fa-chevron-left text-xs"></i></button>
+22005:                                       <span id="page-title" class="text-[8px] font-black text-cyan-500 uppercase tracking-[0.3em] flex-1 text-center">Content</span>
+22006:                                       <button id="inspector-page-next" onclick="changeInspectorPage(1)" class="w-8 h-8 bg-white/5 rounded-full flex items-center justify-center text-gray-400 hover:text-cyan-400 transition-colors"><i class="fas fa-chevron-right text-xs"></i></button>
+22007:                                   </div>
+22008:                                   <div class="flex gap-2">
+22009:                                       <button onclick="closeSmartInspector()" class="flex-1 py-3.5 bg-gray-800 text-gray-500 rounded-2xl font-bold text-[9px] uppercase tracking-widest hover:bg-gray-700 transition-all">Cancel</button>
+22010:                                       <button id="inspector-confirm-btn" class="flex-1 py-3.5 bg-cyan-600 text-white rounded-2xl font-bold text-[9px] uppercase tracking-widest shadow-lg shadow-cyan-900/40 hover:bg-cyan-500 transition-all">Apply</button>
+22011:                                   </div>
+22012:                               </div>
+22013:                           </div>
+22014:                       </div>
+22015:                   </div>
+22016:               </div>
+22017:           </div>
+22018:           `;
+22019:           // Force immediate logic bind
+22020:           setTimeout(initCanvasLogic, 100);
+22021:         }
+22022:         // 3. VIDEO → AUDIO CONVERTER
+22023:         // =============================================================
+22024:         else if (id === "__removed_video_audio__") {
+22025:           html = `
+22026:                   <div class="flex flex-col sm:flex-row justify-between items-center mb-8 gap-4 animate-fadeIn">
+22027:                       <h2 class="text-3xl sm:text-4xl font-semibold text-white tracking-tighter">Video → Audio</h2>
+22028:                       <div class="px-4 py-2 bg-gray-900 rounded-2xl border border-gray-800 text-[10px] text-gray-500 uppercase font-black tracking-widest">FFmpeg Active</div>
+22029:                   </div>
+22030:                   <div id="video-tool-wrapper" class="space-y-6">
+22031:                       <div id="drop-zone-video"
+22032:                            onclick="document.getElementById('video-input').click()"
+22033:                            class="drop-zone border-2 border-dashed border-gray-700 hover:border-cyan-400 rounded-3xl p-16 text-center cursor-pointer bg-gray-900/50 transition-all shadow-inner group">
+22034:                           <div class="w-24 h-24 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
+22035:                               <i class="fas fa-video text-4xl text-gray-500 group-hover:text-cyan-400"></i>
+22036:                           </div>
+22037:                           <p class="text-lg font-medium text-gray-200">Upload Video</p>
+22038:                           <input type="file" id="video-input" accept="video/*" class="hidden" onchange="handleVideoSelection(this.files[0])">
+22039:                       </div>
+22040:                       <div id="video-info-display" class="hidden bg-gray-900 border border-cyan-500/20 p-6 rounded-3xl flex items-center justify-between shadow-2xl">
+22041:                           <div class="flex items-center gap-5">
+22042:                               <div class="w-14 h-14 bg-cyan-500/10 rounded-2xl flex items-center justify-center text-cyan-400"><i class="fas fa-file-video text-2xl"></i></div>
+22043:                               <div>
+22044:                                   <p id="file-name-label" class="text-base font-bold text-white truncate max-w-xs">video_file.mp4</p>
+22045:                                   <p class="text-[10px] text-green-400 uppercase font-black tracking-widest">Ready to Extract</p>
+22046:                               </div>
+22047:                           </div>
+22048:                           <button onclick="switchTool('video-audio')" class="text-gray-500 hover:text-red-400"><i class="fas fa-times-circle text-xl"></i></button>
+22049:                       </div>
+22050:                       <div class="flex flex-col sm:flex-row gap-4 mt-8">
+22051:                           <select id="audio-format" class="flex-1 bg-gray-900 border border-gray-700 rounded-2xl px-6 py-4 text-white outline-none focus:border-cyan-400 appearance-none cursor-pointer">
+22052:                               <option value="mp3">MP3 (Standard)</option>
+22053:                               <option value="wav">WAV (Lossless)</option>
+22054:                           </select>
+22055:                           <button id="convert-btn" onclick="startVideoConversion()" class="px-10 py-4 bg-cyan-600 hover:bg-cyan-500 text-white rounded-2xl font-bold transition-all shadow-xl flex items-center justify-center gap-3">
+22056:                               <i class="fas fa-bolt"></i> Extract Audio
+22057:                           </button>
+22058:                       </div>
+22059:                   </div>`;
+22060:         }
+22061:         // =============================================================
+22062:         // 4. DATA EXPLORER
+22063:         // =============================================================
+22064:         else if (id === "data-explorer") {
+22065:           html = `<div></div>`;
+22066:         } else if (id === "database-manager") {
+22067:           html = `
+22068:                   <div class="animate-fadeIn h-full">
+22069:                     <div class="max-w-6xl mx-auto min-h-full space-y-6 sm:space-y-8 p-6">
+22070:                       <div class="text-center py-16">
+22071:                         <i class="fas fa-server text-6xl text-cyan-400 mb-6 block"></i>
+22072:                         <h1 class="text-3xl font-bold text-white mb-3">Database Manager</h1>
+22073:                         <p class="text-gray-400 text-lg mb-8">Create, manage, and sync your database collections</p>
+22074:                         <button onclick="switchTool('data-explorer')" class="bg-cyan-500 hover:bg-cyan-400 text-white px-8 py-3 rounded-xl font-semibold inline-flex items-center gap-2">
+22075:                           <i class="fas fa-database"></i> Open Database
+22076:                         </button>
+22077:                       </div>
+22078:                     </div>
+22079:                   </div>
+22080:                 `;
+22081:         } else if (id === "__removed_text_doc__") {
+22082:           html = `
+22083:                   <div id="word-processor-container" class="word-processor-shell animate-fadeIn">
+22084:                       <div id="word-processor-welcome" class="studio-launch-overlay">
+22085:                           <div class="feature-gate-shell w-full">
+22086:                               <div class="feature-gate-card">
+22087:                                   <div class="feature-gate-badge">Document Studio</div>
+22088:                                   <div class="feature-gate-icon">
+22089:                                       <i class="fas fa-file-word text-3xl text-cyan-400"></i>
+22090:                                   </div>
+22091:                                   <h2 class="feature-gate-title">Studio Word Processor</h2>
+22092:                                   <p class="feature-gate-text">Launch a fullscreen writing workspace.</p>
+22093:                                   <button onclick="launchWordProcessorMode()" class="feature-gate-button active:scale-95">
+22094:                                       <span>Launch Full Screen Mode</span>
+22095:                                       <i class="fas fa-arrow-right"></i>
+22096:                                   </button>
+22097:                               </div>
+22098:                           </div>
+22099:                       </div>
+22100:                       <div id="word-processor-workspace" class="word-processor-workspace hidden">
+22101:                           <div class="word-processor-toolbar-shell">
+22102:                               <div class="word-processor-toolbar-top">
+22103:                                   <div class="word-processor-tabs">
+22104:                                       <button id="word-tab-home" onclick="setWordRibbonTab('home')" class="word-processor-tab active">Home</button>
+22105:                                       <button id="word-tab-insert" onclick="setWordRibbonTab('insert')" class="word-processor-tab">Insert</button>
+22106:                                       <button id="word-tab-layout" onclick="setWordRibbonTab('layout')" class="word-processor-tab">Layout</button>
+22107:                                       <button id="word-tab-review" onclick="setWordRibbonTab('review')" class="word-processor-tab">Review</button>
+22108:                                       <button id="word-tab-export" onclick="setWordRibbonTab('export')" class="word-processor-tab">Export</button>
+22109:                                   </div>
+22110:                                   <div class="word-processor-top-actions">
+22111:                                       <button onclick="exitWordProcessorMode()" class="word-toolbar-btn word-toolbar-btn--exit">
+22112:                                           <i class="fas fa-down-left-and-up-right-to-center"></i>
+22113:                                           <span>Exit</span>
+22114:                                       </button>
+22115:                                   </div>
+22116:                               </div>
+22117:                               <div id="word-processor-ribbon-groups" class="word-processor-ribbon">
+22118:                                   <div data-word-tab="home" class="word-toolbar-group">
+22119:                                       <span class="word-toolbar-label">History</span>
+22120:                                       <button id="btn-undo" onclick="undo()" class="word-toolbar-btn"><i class="fas fa-undo"></i></button>
+22121:                                       <button id="btn-redo" onclick="redo()" class="word-toolbar-btn"><i class="fas fa-redo"></i></button>
+22122:                                       <button onclick="format('removeFormat')" class="word-toolbar-btn"><i class="fas fa-eraser"></i></button>
+22123:                                   </div>
+22124:                                   <div data-word-tab="home" class="word-toolbar-group">
+22125:                                       <span class="word-toolbar-label">Style</span>
+22126:                                       <select id="paragraph-style-select" onchange="setParagraphStyle(this.value)" class="word-toolbar-select">
+22127:                                           <option value="P">Paragraph</option>
+22128:                                           <option value="H1">Heading 1</option>
+22129:                                           <option value="H2">Heading 2</option>
+22130:                                           <option value="H3">Heading 3</option>
+22131:                                           <option value="BLOCKQUOTE">Quote</option>
+22132:                                           <option value="PRE">Code Block</option>
+22133:                                       </select>
+22134:                                       <select id="font-family-select" onchange="setFontFamily(this.value)" class="word-toolbar-select">
+22135:                                           <option value="Arial">Arial</option>
+22136:                                           <option value="Georgia">Georgia</option>
+22137:                                           <option value="Trebuchet MS">Trebuchet</option>
+22138:                                           <option value="Times New Roman">Times</option>
+22139:                                           <option value="Courier New">Courier</option>
+22140:                                       </select>
+22141:                                       <select id="font-size-select" onchange="format('fontSize', this.value)" class="word-toolbar-select">
+22142:                                           <option value="2">14</option>
+22143:                                           <option value="3" selected>16</option>
+22144:                                           <option value="4">18</option>
+22145:                                           <option value="5">24</option>
+22146:                                           <option value="6">32</option>
+22147:                                       </select>
+22148:                                       <button onclick="setTextColor('#0f172a')" class="word-toolbar-btn"><i class="fas fa-font"></i></button>
+22149:                                       <button onclick="setHighlightColor('#fef08a')" class="word-toolbar-btn"><i class="fas fa-highlighter"></i></button>
+22150:                                   </div>
+22151:                                   <div data-word-tab="home" class="word-toolbar-group">
+22152:                                       <span class="word-toolbar-label">Format</span>
+22153:                                       <button id="btn-bold" onclick="format('bold')" class="word-toolbar-btn"><i class="fas fa-bold"></i></button>
+22154:                                       <button id="btn-italic" onclick="format('italic')" class="word-toolbar-btn"><i class="fas fa-italic"></i></button>
+22155:                                       <button id="btn-underline" onclick="format('underline')" class="word-toolbar-btn"><i class="fas fa-underline"></i></button>
+22156:                                       <button id="btn-strikeThrough" onclick="format('strikeThrough')" class="word-toolbar-btn"><i class="fas fa-strikethrough"></i></button>
+22157:                                       <button onclick="format('superscript')" class="word-toolbar-btn"><i class="fas fa-superscript"></i></button>
+22158:                                       <button onclick="format('subscript')" class="word-toolbar-btn"><i class="fas fa-subscript"></i></button>
+22159:                                   </div>
+22160:                                   <div data-word-tab="layout" class="word-toolbar-group">
+22161:                                       <span class="word-toolbar-label">Arrange</span>
+22162:                                       <button id="btn-justifyLeft" onclick="format('justifyLeft')" class="word-toolbar-btn"><i class="fas fa-align-left"></i></button>
+22163:                                       <button id="btn-justifyCenter" onclick="format('justifyCenter')" class="word-toolbar-btn"><i class="fas fa-align-center"></i></button>
+22164:                                       <button id="btn-justifyRight" onclick="format('justifyRight')" class="word-toolbar-btn"><i class="fas fa-align-right"></i></button>
+22165:                                       <button id="btn-justifyFull" onclick="format('justifyFull')" class="word-toolbar-btn"><i class="fas fa-align-justify"></i></button>
+22166:                                       <button onclick="document.execCommand('outdent', false, null); saveHistory();" class="word-toolbar-btn"><i class="fas fa-outdent"></i></button>
+22167:                                       <button onclick="document.execCommand('indent', false, null); saveHistory();" class="word-toolbar-btn"><i class="fas fa-indent"></i></button>
+22168:                                   </div>
+22169:                                   <div data-word-tab="layout" class="word-toolbar-group">
+22170:                                       <span class="word-toolbar-label">View</span>
+22171:                                       <select onchange="setEditorLineSpacing(this.value)" class="word-toolbar-select">
+22172:                                           <option value="1.4">Compact</option>
+22173:                                           <option value="1.7" selected>Comfort</option>
+22174:                                           <option value="2">Wide</option>
+22175:                                       </select>
+22176:                                       <select id="zoom-select" onchange="setEditorZoom(this.value)" class="word-toolbar-select">
+22177:                                           <option value="90">90%</option>
+22178:                                           <option value="100" selected>100%</option>
+22179:                                           <option value="110">110%</option>
+22180:                                           <option value="125">125%</option>
+22181:                                       </select>
+22182:                                   </div>
+22183:                                   <div data-word-tab="insert" class="word-toolbar-group">
+22184:                                       <span class="word-toolbar-label">Insert</span>
+22185:                                       <button onclick="applyListStyle('bullet')" class="word-toolbar-btn"><i class="fas fa-list-ul"></i></button>
+22186:                                       <button onclick="applyListStyle('number')" class="word-toolbar-btn"><i class="fas fa-list-ol"></i></button>
+22187:                                       <button onclick="insertLinkInEditor()" class="word-toolbar-btn"><i class="fas fa-link"></i></button>
+22188:                                       <button onclick="format('unlink')" class="word-toolbar-btn"><i class="fas fa-link-slash"></i></button>
+22189:                                       <button onclick="insertImageInEditor()" class="word-toolbar-btn"><i class="fas fa-image"></i></button>
+22190:                                       <button onclick="insertTableInEditor()" class="word-toolbar-btn"><i class="fas fa-table"></i></button>
+22191:                                       <button onclick="insertDividerInEditor()" class="word-toolbar-btn"><i class="fas fa-minus"></i></button>
+22192:                                       <button onclick="insertChecklistInEditor()" class="word-toolbar-btn"><i class="fas fa-list-check"></i></button>
+22193:                                       <button onclick="insertHtmlIntoEditor('<p><strong>Date:</strong> ${new Date().toLocaleDateString()}</p>')" class="word-toolbar-btn"><i class="fas fa-calendar-day"></i></button>
+22194:                                       <button onclick="setParagraphStyle('BLOCKQUOTE')" class="word-toolbar-btn"><i class="fas fa-quote-left"></i></button>
+22195:                                       <button onclick="setParagraphStyle('PRE')" class="word-toolbar-btn"><i class="fas fa-code"></i></button>
+22196:                                   </div>
+22197:                                   <div data-word-tab="review" class="word-toolbar-group">
+22198:                                       <span class="word-toolbar-label">Review</span>
+22199:                                       <button onclick="insertDocumentTemplate('meeting')" class="word-toolbar-btn"><i class="fas fa-comments"></i><span>Notes</span></button>
+22200:                                       <button onclick="insertDocumentTemplate('proposal')" class="word-toolbar-btn"><i class="fas fa-file-signature"></i><span>Proposal</span></button>
+22201:                                       <button onclick="insertDocumentTemplate('report')" class="word-toolbar-btn"><i class="fas fa-chart-line"></i><span>Report</span></button>
+22202:                                       <button onclick="insertDocumentTemplate('officialLetter')" class="word-toolbar-btn"><i class="fas fa-envelope-open-text"></i><span>Letter</span></button>
+22203:                                       <button onclick="insertDocumentTemplate('cv')" class="word-toolbar-btn"><i class="fas fa-id-badge"></i><span>CV</span></button>
+22204:                                       <button onclick="smartCleanDocument()" class="word-toolbar-btn"><i class="fas fa-wand-magic-sparkles"></i><span>Smart Clean</span></button>
+22205:                                       <button onclick="clearEditorFormatting()" class="word-toolbar-btn"><i class="fas fa-eraser"></i><span>Clear Style</span></button>
+22206:                                   </div>
+22207:                                   <div data-word-tab="export" class="word-toolbar-group">
+22208:                                       <span class="word-toolbar-label">Export</span>
+22209:                                       <select id="format-select" class="word-toolbar-select">
+22210:                                           <option value="pdf">PDF Document</option>
+22211:                                           <option value="docx">Word (.docx)</option>
+22212:                                           <option value="html">HTML</option>
+22213:                                           <option value="txt">Text</option>
+22214:                                       </select>
+22215:                                       <button id="convert-btn" onclick="convertTextToDoc()" class="word-toolbar-btn word-toolbar-btn--accent">
+22216:                                           <i class="fas fa-file-export"></i>
+22217:                                           <span>Export</span>
+22218:                                       </button>
+22219:                                   </div>
+22220:                               </div>
+22221:                           </div>
+22222:                           <div id="word-processor-main-grid" class="word-processor-body">
+22223:                               <main id="text-tool-wrapper" class="word-processor-canvas">
+22224:                                   <input type="file" id="word-image-input" accept="image/*" class="hidden" onchange="handleWordImageUpload(this.files[0])" />
+22225:                                   <div class="word-processor-ruler">
+22226:                                       <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+22227:                                   </div>
+22228:                                   <div id="word-processor-page-shell">
+22229:                                       <div id="word-processor-page" class="word-processor-page">
+22230:                                           <div id="text-input" contenteditable="true">
+22231:                                               <h1>Project Overview</h1>
+22232:                                               <p>This document gives a short, clear summary of the purpose, scope, and next action.</p>
+22233:                                               <p>Replace this text with your final content, or load a professional template from the Review tab.</p>
+22234:                                           </div>
+22235:                                       </div>
+22236:                                   </div>
+22237:                               </main>
+22238:                           </div>
+22239:                           <div id="result-display" class="hidden word-processor-canvas"></div>
+22240:                           <div id="export-filename-modal" onclick="closeDocumentFilenameModal()" class="hidden fixed inset-0 z-[3800] bg-slate-950/75 backdrop-blur-xl p-4 flex items-center justify-center">
+22241:                               <div onclick="event.stopPropagation()" class="w-full max-w-sm rounded-[2rem] border border-white/10 bg-[#08111f] p-5 sm:p-6 shadow-[0_30px_80px_rgba(2,6,23,0.65)]">
+22242:                                   <div class="feature-gate-badge mb-4">Export File</div>
+22243:                                   <h3 class="text-2xl font-semibold text-white tracking-tight">Choose file name</h3>
+22244:                                   <p class="mt-2 text-sm text-slate-300">Enter a clean document name before export.</p>
+22245:                                   <input id="export-filename-input" onkeydown="handleDocumentFilenameKeydown(event)" class="mt-4 w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white outline-none focus:border-cyan-400" placeholder="MediaLab Document" />
+22246:                                   <div class="mt-5 flex gap-3">
+22247:                                       <button onclick="closeDocumentFilenameModal()" class="flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-slate-200">Cancel</button>
+22248:                                       <button onclick="confirmDocumentExport()" class="flex-1 rounded-2xl bg-cyan-500 px-4 py-3 text-sm font-bold text-slate-950">Continue</button>
+22249:                                   </div>
+22250:                               </div>
+22251:                           </div>
+22252:                       </div>
+22253:                   </div>`;
+22254:           setTimeout(attachEditorListeners, 100);
+22255:         }
+22256:         // =============================================================
+22257:         // 5. PREMIUM / PRO TOOLS (LOCKED)
+22258:         // =============================================================
+22259:         else if (id === "__removed_voice_clone__") {
+22260:           html = `
+22261:                   <div class="animate-fadeIn space-y-8">
+22262:                       <div class="flex flex-col sm:flex-row justify-between items-center gap-4">
+22263:                           <div>
+22264:                               <h2 class="text-3xl sm:text-4xl font-semibold text-white tracking-tighter">AI Voice Clone</h2>
+22265:                               <p class="text-sm text-slate-400 mt-2">Convert your recorded voice into a polished AI voice with Puter.js and ElevenLabs, directly in the browser.</p>
+22266:                           </div>
+22267:                           <div class="px-4 py-2 bg-cyan-500/10 border border-cyan-500/20 rounded-2xl text-[10px] text-cyan-400 uppercase font-black tracking-widest">Puter Voice Studio</div>
+22268:                       </div>
+22269: 
+22270:                       <div class="grid grid-cols-1 xl:grid-cols-[0.92fr_1.08fr] gap-6 lg:gap-8">
+22271:                           <div class="space-y-6">
+22272:                               <div id="drop-zone-voice"
+22273:                                    onclick="document.getElementById('voice-sample-input').click()"
+22274:                                    ondragover="handleDragOver(event)"
+22275:                                    onmouseleave="handleDragLeave(event)"
+22276:                                    ondrop="handleVoiceDrop(event)"
+22277:                                    class="drop-zone border-2 border-dashed border-gray-700 hover:border-cyan-400 rounded-[2rem] sm:rounded-[2.5rem] p-8 sm:p-12 text-center cursor-pointer bg-gray-900/50 transition-all group">
+22278:                                   <div class="w-20 h-20 bg-gray-800 rounded-3xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
+22279:                                       <i class="fas fa-microphone-alt text-4xl text-gray-500 group-hover:text-cyan-400"></i>
+22280:                                   </div>
+22281:                                   <p class="text-lg font-medium text-gray-200">Upload Source Recording</p>
+22282:                                   <p class="text-sm text-gray-500 mt-1">Use a clean speech clip in mp3, wav, m4a, or ogg for the best conversion result.</p>
+22283:                                   <input type="file" id="voice-sample-input" accept="audio/*" class="hidden" onchange="handleVoiceUpload(this.files[0])">
+22284:                               </div>
+22285: 
+22286:                               <div id="voice-status-card" class="hidden bg-gray-900 border border-cyan-500/20 p-5 sm:p-6 rounded-[2rem] flex items-center justify-between shadow-2xl gap-4">
+22287:                                   <div class="flex items-center gap-4 min-w-0">
+22288:                                       <div class="w-12 h-12 bg-green-500/20 rounded-2xl flex items-center justify-center text-green-400 shrink-0">
+22289:                                           <i class="fas fa-check-circle text-xl"></i>
+22290:                                       </div>
+22291:                                       <div class="min-w-0">
+22292:                                           <p id="voice-sample-name" class="text-sm font-bold text-white truncate">sample.mp3</p>
+22293:                                           <p id="voice-sample-meta" class="text-[10px] text-gray-500 uppercase font-black tracking-widest">Voice Model Analyzed</p>
+22294:                                       </div>
+22295:                                   </div>
+22296:                                   <button onclick="resetVoiceCloneTool()" class="text-gray-600 hover:text-red-400 transition-colors shrink-0"><i class="fas fa-sync-alt"></i></button>
+22297:                               </div>
+22298: 
+22299:                               <div class="bg-gray-900/50 border border-gray-800 rounded-[2rem] p-5 sm:p-6">
+22300:                                   <div class="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3">Studio Tips</div>
+22301:                                   <ul class="space-y-2 text-sm text-slate-300">
+22302:                                       <li>Use one speaker with low background noise.</li>
+22303:                                       <li>Keep the clip clear, steady, and close to the microphone.</li>
+22304:                                       <li>Pick the target voice style that best matches the final tone you want.</li>
+22305:                                   </ul>
+22306:                               </div>
+22307:                           </div>
+22308: 
+22309:                           <div class="bg-gray-900/50 border border-gray-800 rounded-[2rem] sm:rounded-[2.5rem] p-5 sm:p-8 space-y-6">
+22310:                               <div>
+22311:                                   <label class="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3 block">Target Voice</label>
+22312:                                   <select id="voice-target-profile" class="w-full bg-gray-950 border border-gray-800 rounded-2xl px-5 py-4 text-white text-sm outline-none focus:border-cyan-500 cursor-pointer">
+22313:                                       <option value="rachel">Rachel • Balanced</option>
+22314:                                       <option value="antoni">Antoni • Deep</option>
+22315:                                       <option value="bella">Bella • Smooth</option>
+22316:                                       <option value="adam">Adam • Cinematic</option>
+22317:                                       <option value="charlotte">Charlotte • Premium</option>
+22318:                                       <option value="daniel">Daniel • Narration</option>
+22319:                                       <option value="emily">Emily • Bright</option>
+22320:                                       <option value="nicole">Nicole • Warm</option>
+22321:                                   </select>
+22322:                               </div>
+22323: 
+22324:                               <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+22325:                                   <label class="rounded-2xl border border-gray-800 bg-gray-950 px-5 py-4 text-sm text-slate-200 flex items-center justify-between gap-4">
+22326:                                       <span>Remove background noise</span>
+22327:                                       <input id="voice-remove-noise" type="checkbox" checked class="h-4 w-4 accent-cyan-500" />
+22328:                                   </label>
+22329:                                   <label class="rounded-2xl border border-gray-800 bg-gray-950 px-5 py-4 text-sm text-slate-200 flex items-center justify-between gap-4">
+22330:                                       <span>Keep natural pacing</span>
+22331:                                       <input id="voice-preserve-pacing" type="checkbox" checked class="h-4 w-4 accent-cyan-500" />
+22332:                                   </label>
+22333:                               </div>
+22334: 
+22335:                               <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-4">
+22336:                                   <div class="rounded-2xl border border-gray-800 bg-gray-950 px-5 py-4">
+22337:                                       <div class="text-[10px] uppercase tracking-[0.25em] text-gray-500 font-black">Engine</div>
+22338:                                       <div class="mt-2 text-sm text-white">Puter.js + ElevenLabs Speech to Speech</div>
+22339:                                   </div>
+22340:                                   <button id="convert-btn" onclick="startVoiceCloning()" class="px-8 py-4 bg-cyan-600 hover:bg-cyan-500 text-white rounded-2xl font-bold transition-all shadow-lg shadow-cyan-900/20 flex items-center justify-center gap-3">
+22341:                                       <i class="fas fa-magic"></i><span>Clone</span>
+22342:                                   </button>
+22343:                               </div>
+22344: 
+22345:                               <div id="voice-result-card" class="hidden rounded-[2rem] border border-green-500/20 bg-[#07131f] p-5 sm:p-6 shadow-[0_25px_70px_rgba(8,145,178,0.14)]">
+22346:                                   <div class="flex items-start justify-between gap-4">
+22347:                                       <div>
+22348:                                           <div class="text-[10px] font-black uppercase tracking-[0.28em] text-green-400">Clone Ready</div>
+22349:                                           <h3 class="mt-2 text-2xl font-semibold text-white tracking-tight">Generated Voice Preview</h3>
+22350:                                           <p class="mt-2 text-sm text-slate-300">Play the sample, then save the generated audio if it sounds right.</p>
+22351:                                       </div>
+22352:                                       <button onclick="downloadClonedVoice()" class="rounded-2xl bg-green-500 px-4 py-3 text-sm font-bold text-slate-950">Download</button>
+22353:                                   </div>
+22354:                                   <audio id="voice-result-audio" controls class="mt-5 w-full"></audio>
+22355:                               </div>
+22356:                           </div>
+22357:                       </div>
+22358:                   </div>`;
+22359:         } else if (id === "__removed_text_to_speech__") {
+22360:           html = `
+22361:                   <div class="feature-gate-shell max-w-3xl">
+22362:                       <div class="feature-gate-card feature-gate-card--premium">
+22363:                           <div class="absolute -top-24 -left-24 w-80 h-80 bg-amber-500/5 rounded-full blur-3xl opacity-50"></div>
+22364:                           <div class="feature-gate-badge feature-gate-badge--premium">Pro Feature</div>
+22365:                           <div class="feature-gate-icon">
+22366:                               <i class="fas fa-volume-up text-4xl text-amber-500"></i>
+22367:                           </div>
+22368:                           <h3 class="feature-gate-title">${Krank} Text to Speech</h3>
+22369:                           <p class="feature-gate-text">
+22370:                               ${
+22371:                                 loggedIn
+22372:                                   ? `You've reached your daily limit. Upgrade to <b>MediaLab Pro</b> for unlimited neural processing.`
+22373:                                   : `Access high-performance neural engines. Sign in to unlock <b>Text to Speech</b>.`
+22374:                               }
+22375:                           </p>
+22376:                           <button onclick="${loggedIn ? "upgradePlan()" : "showLogin()"}" class="feature-gate-button feature-gate-button--premium relative hover:scale-[1.03] transition-all">
+22377:                               <span>${loggedIn ? "Upgrade to Pro" : "Sign in to Unlock"}</span>
+22378:                               <i class="fas fa-arrow-right"></i>
+22379:                           </button>
+22380:                       </div>
+22381:                   </div>`;
+22382:         }
+22383:         // Inject the final HTML into the main viewport
+22384:         if (
+22385:           switchToken !== studioToolSwitchToken ||
+22386:           currentStudioToolId !== id ||
+22387:           !area
+22388:         )
+22389:           return;
+22390:         area.innerHTML = html;
+22391:         if (id === "data-explorer") {
+22392:           renderDataExplorerTool();
+22393:         }
+22394:       } // ====================== HELPER: RENDER HISTORY ITEMS ======================

@@ -4462,7 +4462,7 @@
             <div class="mt-6">
               <button
                 id="open-redeem-btn"
-                onclick="openRedeem ProModal()"
+                onclick="openRedeemProModal()"
                 class="w-full rounded-2xl bg-emerald-500 text-slate-950 py-3.5 font-black text-sm hover:bg-emerald-400 transition-all disabled:opacity-45 disabled:cursor-not-allowed disabled:hover:bg-emerald-500"
               >
                 Redeem Pro
@@ -4590,7 +4590,7 @@
               </div>
               <button
                 id="open-adsense-redeem-btn"
-                onclick="openAdsenseXP RedemptionCenter()"
+                onclick="openAdsenseXPRedemptionCenter()"
                 class="mt-4 w-full rounded-2xl bg-white/5 border border-white/10 text-white py-3 text-sm font-black hover:bg-white/10 transition-all disabled:opacity-45 disabled:cursor-not-allowed"
               >
                 Open AdSense XP Redemption
@@ -4621,7 +4621,7 @@
                 </div>
                 <button
                   id="open-redeem-status-btn"
-                  onclick="openXP RedemptionStatusModal()"
+                  onclick="openXPRedemptionStatusModal()"
                   class="rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 text-xs font-black uppercase tracking-[0.16em] text-slate-100 hover:bg-white/10 transition-all"
                 >
                   XP Redemption Status
@@ -5120,7 +5120,7 @@
     <div
       id="redeem-modal"
       class="hidden builder-modal-backdrop"
-      onclick="if (event.target === this) closeRedeem ProModal();"
+      onclick="if (event.target === this) closeRedeemProModal();"
     >
       <div
         class="builder-modal-card w-full max-w-3xl max-h-[calc(100vh-20px)] overflow-y-auto p-5 sm:p-8"
@@ -5142,7 +5142,7 @@
             </p>
           </div>
           <button
-            onclick="closeRedeem ProModal()"
+            onclick="closeRedeemProModal()"
             class="w-10 h-10 rounded-2xl border border-white/10 text-gray-400 hover:text-white hover:bg-white/5 transition-all"
           >
             <i class="fas fa-times"></i>
@@ -5163,7 +5163,7 @@
               <button
                 type="button"
                 id="redeem-method-paypal"
-                onclick="selectRedeem ProMethod('paypal')"
+                onclick="selectRedeemProMethod('paypal')"
                 class="redeem-method-card rounded-[1.5rem] border border-white/10 bg-white/[0.03] p-4 text-left transition-all hover:border-cyan-400/40"
               >
                 <div
@@ -5179,7 +5179,7 @@
               <button
                 type="button"
                 id="redeem-method-mpesa"
-                onclick="selectRedeem ProMethod('mpesa')"
+                onclick="selectRedeemProMethod('mpesa')"
                 class="redeem-method-card rounded-[1.5rem] border border-white/10 bg-white/[0.03] p-4 text-left transition-all hover:border-cyan-400/40"
               >
                 <div
@@ -5195,7 +5195,7 @@
               <button
                 type="button"
                 id="redeem-method-airtel"
-                onclick="selectRedeem ProMethod('airtel')"
+                onclick="selectRedeemProMethod('airtel')"
                 class="redeem-method-card rounded-[1.5rem] border border-white/10 bg-white/[0.03] p-4 text-left transition-all hover:border-cyan-400/40"
               >
                 <div
@@ -5271,14 +5271,14 @@
             class="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3"
           >
             <button
-              onclick="closeRedeem ProModal()"
+              onclick="closeRedeemProModal()"
               class="px-4 py-3 rounded-2xl bg-white/5 text-sm font-bold text-slate-300 hover:bg-white/10 transition-all"
             >
               Cancel
             </button>
             <button
               id="redeem-continue-btn"
-              onclick="goToRedeem ProConfirmation()"
+              onclick="goToRedeemProConfirmation()"
               class="px-5 py-3 rounded-2xl bg-cyan-500 text-slate-950 text-sm font-black hover:bg-cyan-400 transition-all"
             >
               Continue
@@ -5345,14 +5345,14 @@
           >
             <button
               id="redeem-back-btn"
-              onclick="backToRedeem ProForm()"
+              onclick="backToRedeemProForm()"
               class="px-4 py-3 rounded-2xl bg-white/5 text-sm font-bold text-slate-300 hover:bg-white/10 transition-all"
             >
               Back
             </button>
             <button
               id="redeem-submit-btn"
-              onclick="submitXP RedemptionRequest()"
+              onclick="submitXPRedemptionRequest()"
               class="px-5 py-3 rounded-2xl bg-emerald-500 text-slate-950 text-sm font-black hover:bg-emerald-400 transition-all"
             >
               Confirm XP Redemption
@@ -5364,7 +5364,7 @@
     <div
       id="redeem-success-modal"
       class="hidden builder-modal-backdrop"
-      onclick="if (event.target === this) closeRedeem ProSuccessModal();"
+      onclick="if (event.target === this) closeRedeemProSuccessModal();"
     >
       <div
         class="builder-modal-card w-full max-w-md p-5 sm:p-6"
@@ -5385,7 +5385,7 @@
             </p>
           </div>
           <button
-            onclick="closeRedeem ProSuccessModal()"
+            onclick="closeRedeemProSuccessModal()"
             class="w-10 h-10 rounded-2xl border border-white/10 text-gray-400 hover:text-white hover:bg-white/5 transition-all"
           >
             <i class="fas fa-times"></i>
@@ -5393,13 +5393,13 @@
         </div>
         <div class="mt-5 flex flex-col gap-3">
           <button
-            onclick="openXP RedemptionStatusFromSuccess()"
+            onclick="openXPRedemptionStatusFromSuccess()"
             class="w-full rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-black text-slate-950 hover:bg-emerald-300 transition-all"
           >
             XP Redemption Status
           </button>
           <button
-            onclick="closeRedeem ProSuccessModal()"
+            onclick="closeRedeemProSuccessModal()"
             class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-black text-white hover:bg-white/10 transition-all"
           >
             Close
@@ -5410,7 +5410,7 @@
     <div
       id="redeem-status-modal"
       class="hidden builder-modal-backdrop"
-      onclick="if (event.target === this) closeXP RedemptionStatusModal();"
+      onclick="if (event.target === this) closeXPRedemptionStatusModal();"
     >
       <div
         class="builder-modal-card w-full max-w-2xl max-h-[calc(100vh-20px)] overflow-y-auto p-5 sm:p-6"
@@ -5431,7 +5431,7 @@
             </p>
           </div>
           <button
-            onclick="closeXP RedemptionStatusModal()"
+            onclick="closeXPRedemptionStatusModal()"
             class="w-10 h-10 rounded-2xl border border-white/10 text-gray-400 hover:text-white hover:bg-white/5 transition-all"
           >
             <i class="fas fa-times"></i>
@@ -5481,12 +5481,12 @@
             let pendingAdsTxtFile = null;
             let builderRunPreviewUrl = null;
             let customUpgradeFeatureLabel = "";
-            let selectedXP RedemptionMethod = "";
+            let selectedXPRedemptionMethod = "";
             let redemptionStep = "form";
             let redemptionSubmissionInFlight = false;
             let redeemMethodsCollapsed = false;
             let currentXPRedemptionRequests = [];
-            let expandedXP RedemptionRequestId = "";
+            let expandedXPRedemptionRequestId = "";
             let currentReferralStatus = null;
             let accountSuspendStep = "verify";
             let accountSuspendCaptcha = "";
@@ -11039,7 +11039,7 @@
                     ? "Airtel Money"
                     : "Not selected";
             }
-            function formatXP RedemptionStatus(status = "") {
+            function formatXPRedemptionStatus(status = "") {
               const normalized = String(status || "").toLowerCase();
               return normalized === "paid"
                 ? "Approved"
@@ -11051,7 +11051,7 @@
                       ? "Pending"
                       : "No status yet";
             }
-            function getXP RedemptionStatusTone(status = "") {
+            function getXPRedemptionStatusTone(status = "") {
               const normalized = String(status || "").toLowerCase();
               return normalized === "paid"
                 ? "text-emerald-300"
@@ -11139,10 +11139,10 @@
                 return;
               }
               if (line) {
-                line.textContent = `${formatXP RedemptionStatus(latest.status)} · ${formatCurrency(
+                line.textContent = `${formatXPRedemptionStatus(latest.status)} · ${formatCurrency(
                   latest.amount,
                 )}`;
-                line.className = `text-sm mt-2 font-semibold ${getXP RedemptionStatusTone(latest.status)}`;
+                line.className = `text-sm mt-2 font-semibold ${getXPRedemptionStatusTone(latest.status)}`;
               }
               if (subline) {
                 subline.textContent =
@@ -11153,7 +11153,7 @@
                       )}. Click for more details.`;
               }
             }
-            function renderXP RedemptionStatusModal() {
+            function renderXPRedemptionStatusModal() {
               const currentNode = document.getElementById("redeem-status-current");
               const listNode = document.getElementById("redeem-status-list");
               if (!currentNode || !listNode) return;
@@ -11172,7 +11172,7 @@
               currentNode.innerHTML = `
                 <div class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Current</div>
                 <div class="mt-3 flex items-center justify-between gap-3">
-                  <div class="text-2xl font-black ${getXP RedemptionStatusTone(latest.status)}">${formatXP RedemptionStatus(
+                  <div class="text-2xl font-black ${getXPRedemptionStatusTone(latest.status)}">${formatXPRedemptionStatus(
                     latest.status,
                   )}</div>
                   <div class="text-sm text-slate-400">${formatCurrency(latest.amount)}</div>
@@ -11189,11 +11189,11 @@
               `;
               listNode.innerHTML = currentXPRedemptionRequests
                 .map((item) => {
-                  const expanded = expandedXP RedemptionRequestId === String(item._id || "");
+                  const expanded = expandedXPRedemptionRequestId === String(item._id || "");
                   return `
                     <div class="border-b border-white/6 pb-2">
                       <button
-                        onclick="toggleXP RedemptionStatusItem('${item._id || ""}')"
+                        onclick="toggleXPRedemptionStatusItem('${item._id || ""}')"
                         class="w-full text-left py-2 flex items-center justify-between gap-3 hover:text-white transition-all"
                       >
                         <span class="min-w-0 truncate text-slate-200">
@@ -11201,7 +11201,7 @@
                     item.amount,
                   )} - ${formatDate(item.createdAt)}
                         </span>
-                        <span class="text-xs ${getXP RedemptionStatusTone(item.status)}">${formatXP RedemptionStatus(
+                        <span class="text-xs ${getXPRedemptionStatusTone(item.status)}">${formatXPRedemptionStatus(
                     item.status,
                   )}</span>
                       </button>
@@ -11212,7 +11212,7 @@
                         <div>Fee: ${formatCurrency(item.fee || 0)}</div>
                         <div>Requested: ${formatDate(item.createdAt)}</div>
                         <div>Reviewed: ${item.reviewedAt ? formatDate(item.reviewedAt) : "Waiting"}</div>
-                        <div>Status: ${formatXP RedemptionStatus(item.status)}</div>
+                        <div>Status: ${formatXPRedemptionStatus(item.status)}</div>
                         ${
                           item.deniedReason
                             ? `<div class="break-words text-rose-300">Denied reason: ${item.deniedReason}</div>`
@@ -11224,10 +11224,10 @@
                 })
                 .join("");
             }
-            function toggleXP RedemptionStatusItem(id = "") {
-              expandedXP RedemptionRequestId =
-                expandedXP RedemptionRequestId === String(id || "") ? "" : String(id || "");
-              renderXP RedemptionStatusModal();
+            function toggleXPRedemptionStatusItem(id = "") {
+              expandedXPRedemptionRequestId =
+                expandedXPRedemptionRequestId === String(id || "") ? "" : String(id || "");
+              renderXPRedemptionStatusModal();
             }
             function getRecentLiveProjects(limit = 3) {
               return [...(currentUser?.liveProjects || [])]
@@ -11375,14 +11375,14 @@
             }
             function updateAccountModalUi() {
               const balance = getCurrentBalance();
-              const canRedeem Pro = balance >= 5;
-              const adsensePayoutEligible = canRedeem Pro && isAdsenseApprovedUser();
+              const canRedeemPro = balance >= 5;
+              const adsensePayoutEligible = canRedeemPro && isAdsenseApprovedUser();
               const balanceValue = document.getElementById("account-balance-value");
               const balanceNote = document.getElementById("account-balance-note");
               const redeemBtn = document.getElementById("open-redeem-btn");
               const minimumNote = document.getElementById("redeem-minimum-note");
-              const adsenseRedeem ProBtn = document.getElementById("open-adsense-redeem-btn");
-              const adsenseRedeem ProNote = document.getElementById("account-adsense-payout-note");
+              const adsenseRedeemProBtn = document.getElementById("open-adsense-redeem-btn");
+              const adsenseRedeemProNote = document.getElementById("account-adsense-payout-note");
               const accountName = document.getElementById("account-name");
               const accountEmail = document.getElementById("account-email");
               const accountPlan = document.getElementById("account-plan");
@@ -11392,35 +11392,35 @@
               const accountGithubDisconnectBtn = document.getElementById("account-github-disconnect-btn");
               if (balanceValue) balanceValue.textContent = formatCurrency(balance);
               if (balanceNote) {
-                balanceNote.textContent = canRedeem Pro
+                balanceNote.textContent = canRedeemPro
                   ? "Your MediaLab payout balance is ready for redemption."
                   : "Minimum MediaLab redemption is $5.";
               }
               if (redeemBtn) {
-                redeemBtn.disabled = !canRedeem Pro;
-                redeemBtn.title = canRedeem Pro ? "Open redemption form" : "Minimum MediaLab redemption is $5";
+                redeemBtn.disabled = !canRedeemPro;
+                redeemBtn.title = canRedeemPro ? "Open redemption form" : "Minimum MediaLab redemption is $5";
               }
-              minimumNote?.classList.toggle("hidden", canRedeem Pro);
+              minimumNote?.classList.toggle("hidden", canRedeemPro);
               if (minimumNote) {
                 minimumNote.textContent = "Minimum MediaLab redemption is $5";
               }
-              if (adsenseRedeem ProBtn) {
-                adsenseRedeem ProBtn.disabled = !adsensePayoutEligible;
+              if (adsenseRedeemProBtn) {
+                adsenseRedeemProBtn.disabled = !adsensePayoutEligible;
               }
-              if (adsenseRedeem ProNote) {
-                adsenseRedeem ProNote.textContent = !currentUser?.adsenseConnected
+              if (adsenseRedeemProNote) {
+                adsenseRedeemProNote.textContent = !currentUser?.adsenseConnected
                   ? "Monetization Disabled first, then use Google’s official payout center."
                   : adsensePayoutEligible
                     ? "Your AdSense account is eligible. Open Google’s payout center safely."
-                    : canRedeem Pro
+                    : canRedeemPro
                       ? "Your AdSense approval is still pending."
                       : "AdSense payouts unlock when your balance reaches at least $5 and Google approval is complete.";
               }
-              if (adsenseRedeem ProNote && !currentUser?.adsenseConnected) {
-                adsenseRedeem ProNote.textContent =
+              if (adsenseRedeemProNote && !currentUser?.adsenseConnected) {
+                adsenseRedeemProNote.textContent =
                   "This is separate from your MediaLab payout balance. Monetization Disabled first, then use Google’s official payout center.";
-              } else if (adsenseRedeem ProNote && adsensePayoutEligible) {
-                adsenseRedeem ProNote.textContent =
+              } else if (adsenseRedeemProNote && adsensePayoutEligible) {
+                adsenseRedeemProNote.textContent =
                   "This is separate from your MediaLab payout balance. Your AdSense revenue is eligible for Google payout.";
               }
               if (accountName) accountName.textContent = currentUser?.name || "User";
@@ -11675,7 +11675,7 @@
                 setAccountSuspendError(error.message || "Could not suspend this account right now.");
               }
             }
-            async function openAdsenseXP RedemptionCenter() {
+            async function openAdsenseXPRedemptionCenter() {
               try {
                 const res = await fetch("/api/adsense/redemption-eligibility", {
                   credentials: "include",
@@ -11712,11 +11712,11 @@
                 );
               }
             }
-            function closeRedeem ProSuccessModal() {
+            function closeRedeemProSuccessModal() {
               document.getElementById("redeem-success-modal")?.classList.add("hidden");
               document.getElementById("redeem-success-modal")?.classList.remove("flex");
             }
-            async function openXP RedemptionStatusModal() {
+            async function openXPRedemptionStatusModal() {
               logUsageActivityOnce(
                 "wallet-redemption-status-open",
                 "wallet-redemption-status-open",
@@ -11725,17 +11725,17 @@
                 { toolId: currentStudioToolId || "console" },
               );
               await fetchXPRedemptionRequests();
-              renderXP RedemptionStatusModal();
+              renderXPRedemptionStatusModal();
               document.getElementById("redeem-status-modal")?.classList.remove("hidden");
               document.getElementById("redeem-status-modal")?.classList.add("flex");
             }
-            function closeXP RedemptionStatusModal() {
+            function closeXPRedemptionStatusModal() {
               document.getElementById("redeem-status-modal")?.classList.add("hidden");
               document.getElementById("redeem-status-modal")?.classList.remove("flex");
             }
-            async function openXP RedemptionStatusFromSuccess() {
-              closeRedeem ProSuccessModal();
-              await openXP RedemptionStatusModal();
+            async function openXPRedemptionStatusFromSuccess() {
+              closeRedeemProSuccessModal();
+              await openXPRedemptionStatusModal();
             }
             function playAdsenseApprovedChime() {
               try {
@@ -12085,8 +12085,8 @@
               document.getElementById("account-modal")?.classList.add("hidden");
               document.getElementById("account-modal")?.classList.remove("flex");
             }
-            function resetXP RedemptionFlow() {
-              selectedXP RedemptionMethod = "";
+            function resetXPRedemptionFlow() {
+              selectedXPRedemptionMethod = "";
               redeemMethodsCollapsed = false;
               redemptionStep = "form";
               redemptionSubmissionInFlight = false;
@@ -12112,7 +12112,7 @@
               document.getElementById("redeem-submit-btn").disabled = false;
               document.getElementById("redeem-submit-btn").textContent = "Confirm XP Redemption";
             }
-            function openRedeem ProModal() {
+            function openRedeemProModal() {
               if (!loggedIn || !currentUser) {
                 showLogin();
                 return;
@@ -12121,19 +12121,19 @@
                 updateAccountModalUi();
                 return;
               }
-              resetXP RedemptionFlow();
+              resetXPRedemptionFlow();
               updateAccountModalUi();
               document.getElementById("redeem-modal")?.classList.remove("hidden");
               document.getElementById("redeem-modal")?.classList.add("flex");
             }
-            function closeRedeem ProModal() {
+            function closeRedeemProModal() {
               document.getElementById("redeem-modal")?.classList.add("hidden");
               document.getElementById("redeem-modal")?.classList.remove("flex");
             }
-            function updateXP RedemptionMethodLayout() {
+            function updateXPRedemptionMethodLayout() {
               const methodGrid = document.getElementById("redeem-method-grid");
               document.querySelectorAll(".redeem-method-card").forEach((card) => {
-                const isSelected = card.id === `redeem-method-${selectedXP RedemptionMethod}`;
+                const isSelected = card.id === `redeem-method-${selectedXPRedemptionMethod}`;
                 card.classList.toggle("hidden", redeemMethodsCollapsed && !isSelected);
                 card.classList.toggle("sm:col-span-3", redeemMethodsCollapsed && isSelected);
               });
@@ -12142,9 +12142,9 @@
                 methodGrid.classList.toggle("sm:grid-cols-3", !redeemMethodsCollapsed);
               }
             }
-            function selectRedeem ProMethod(method) {
-              const clickedSameMethod = selectedXP RedemptionMethod === method;
-              selectedXP RedemptionMethod = method;
+            function selectRedeemProMethod(method) {
+              const clickedSameMethod = selectedXPRedemptionMethod === method;
+              selectedXPRedemptionMethod = method;
               redeemMethodsCollapsed = clickedSameMethod ? !redeemMethodsCollapsed : true;
               const destinationBlock = document.getElementById("redeem-destination-block");
               const destinationLabel = document.getElementById("redeem-destination-label");
@@ -12159,7 +12159,7 @@
                   "bg-cyan-500/10",
                   "shadow-[0_16px_40px_rgba(34,211,238,0.12)]",
                 );
-              updateXP RedemptionMethodLayout();
+              updateXPRedemptionMethodLayout();
               if (destinationBlock) destinationBlock.classList.remove("hidden");
               if (destinationLabel) {
                 destinationLabel.textContent =
@@ -12175,18 +12175,18 @@
                 destinationInput.focus();
               }
             }
-            function showRedeem ProError(message, targetId = "redeem-error") {
+            function showRedeemProError(message, targetId = "redeem-error") {
               const el = document.getElementById(targetId);
               if (!el) return;
               el.textContent = message;
               el.classList.remove("hidden");
             }
-            function clearRedeem ProErrors() {
+            function clearRedeemProErrors() {
               document.getElementById("redeem-error")?.classList.add("hidden");
               document.getElementById("redeem-confirm-error")?.classList.add("hidden");
             }
-            function validateXP RedemptionForm() {
-              clearRedeem ProErrors();
+            function validateXPRedemptionForm() {
+              clearRedeemProErrors();
               const balance = getCurrentBalance();
               const destination = String(
                 document.getElementById("redeem-destination-input")?.value || "",
@@ -12194,46 +12194,46 @@
               const amount = Number(
                 document.getElementById("redeem-amount-input")?.value || 0,
               );
-              if (!selectedXP RedemptionMethod) {
-                showRedeem ProError("Select a redemption method first.");
+              if (!selectedXPRedemptionMethod) {
+                showRedeemProError("Select a redemption method first.");
                 return null;
               }
               if (!destination) {
-                showRedeem ProError("Enter your payout destination.");
+                showRedeemProError("Enter your payout destination.");
                 return null;
               }
               if (
-                selectedXP RedemptionMethod === "paypal" &&
+                selectedXPRedemptionMethod === "paypal" &&
                 !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(destination)
               ) {
-                showRedeem ProError("Enter a valid PayPal email address.");
+                showRedeemProError("Enter a valid PayPal email address.");
                 return null;
               }
               if (
-                (selectedXP RedemptionMethod === "mpesa" ||
-                  selectedXP RedemptionMethod === "airtel") &&
+                (selectedXPRedemptionMethod === "mpesa" ||
+                  selectedXPRedemptionMethod === "airtel") &&
                 !/^\+?[0-9]{9,15}$/.test(destination.replace(/\s+/g, ""))
               ) {
-                showRedeem ProError("Enter a valid phone number with country code.");
+                showRedeemProError("Enter a valid phone number with country code.");
                 return null;
               }
               if (!Number.isFinite(amount) || amount < 5) {
-                showRedeem ProError("Minimum redemption is 1000 XP.");
+                showRedeemProError("Minimum redemption is 1000 XP.");
                 return null;
               }
               if (amount > balance) {
-                showRedeem ProError("XP Redemption amount cannot exceed your available balance.");
+                showRedeemProError("XP Redemption amount cannot exceed your available balance.");
                 return null;
               }
               return {
-                method: selectedXP RedemptionMethod,
+                method: selectedXPRedemptionMethod,
                 destination,
                 amount: Number(amount.toFixed(2)),
                 fee: 0,
               };
             }
-            function goToRedeem ProConfirmation() {
-              const payload = validateXP RedemptionForm();
+            function goToRedeemProConfirmation() {
+              const payload = validateXPRedemptionForm();
               if (!payload) return;
               redemptionStep = "confirm";
               document.getElementById("redeem-step-form")?.classList.add("hidden");
@@ -12247,16 +12247,16 @@
               document.getElementById("redeem-confirm-fee").textContent =
                 formatCurrency(payload.fee);
             }
-            function backToRedeem ProForm() {
+            function backToRedeemProForm() {
               redemptionStep = "form";
               document.getElementById("redeem-step-confirm")?.classList.add("hidden");
               document.getElementById("redeem-step-form")?.classList.remove("hidden");
             }
-            async function submitXP RedemptionRequest() {
+            async function submitXPRedemptionRequest() {
               if (redemptionSubmissionInFlight) return;
-              const payload = validateXP RedemptionForm();
+              const payload = validateXPRedemptionForm();
               if (!payload) {
-                backToRedeem ProForm();
+                backToRedeemProForm();
                 return;
               }
               redemptionSubmissionInFlight = true;
@@ -12265,7 +12265,7 @@
                 submitBtn.disabled = true;
                 submitBtn.textContent = "Processing...";
               }
-              clearRedeem ProErrors();
+              clearRedeemProErrors();
               try {
                 const res = await fetch("/api/account/redeem-xp", {
                   method: "POST",
@@ -12294,12 +12294,12 @@
                   { amount: payload.amount },
                 );
                 setTimeout(() => {
-                  closeRedeem ProModal();
+                  closeRedeemProModal();
                   document.getElementById("redeem-success-modal")?.classList.remove("hidden");
                   document.getElementById("redeem-success-modal")?.classList.add("flex");
                 }, 1400);
               } catch (error) {
-                showRedeem ProError(
+                showRedeemProError(
                   error.message || "XP Redemption request failed.",
                   "redeem-confirm-error",
                 );
@@ -13809,7 +13809,7 @@
                 const adsenseReport = loggedIn ? await fetchAdsenseConsoleReport() : null;
                 const recentProjects = liveProjects.slice(0, 3);
                 const balance = getCurrentBalance();
-                const canRedeem Pro = loggedIn && balance >= 5;
+                const canRedeemPro = loggedIn && balance >= 5;
                 html = `
                   <div class="animate-fadeIn h-full">
                     <div class="max-w-6xl mx-auto min-h-full space-y-6 sm:space-y-8">
@@ -13849,11 +13849,11 @@
                                 </div>
                               </div>
                               <div class="relative mt-6 flex items-center justify-between gap-4">
-                                <button onclick="openAccountModal()" ${canRedeem Pro ? "" : "disabled"} class="inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] transition-all ${canRedeem Pro ? "bg-white text-slate-950 hover:bg-cyan-50 shadow-[0_18px_35px_rgba(255,255,255,0.16)]" : "bg-white/10 text-slate-400 cursor-not-allowed border border-white/10"}">
+                                <button onclick="openAccountModal()" ${canRedeemPro ? "" : "disabled"} class="inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] transition-all ${canRedeemPro ? "bg-white text-slate-950 hover:bg-cyan-50 shadow-[0_18px_35px_rgba(255,255,255,0.16)]" : "bg-white/10 text-slate-400 cursor-not-allowed border border-white/10"}">
                                   <i class="fas fa-arrow-up-right-from-square"></i>
                                   Redeem Pro
                                 </button>
-                                <p class="text-[11px] text-right text-slate-300/70">${canRedeem Pro ? "Ready for payout" : balance >= 5 ? "Awaiting AdSense approval" : "Minimum redemption is 1000 XP"}</p>
+                                <p class="text-[11px] text-right text-slate-300/70">${canRedeemPro ? "Ready for payout" : balance >= 5 ? "Awaiting AdSense approval" : "Minimum redemption is 1000 XP"}</p>
                               </div>
                             </div>
                             <div class="relative overflow-hidden rounded-[2rem] border border-emerald-400/20 bg-[linear-gradient(145deg,rgba(16,185,129,0.18),rgba(15,23,42,0.98))] p-5 sm:p-6 shadow-[0_24px_70px_rgba(16,185,129,0.18)] backdrop-blur-2xl">

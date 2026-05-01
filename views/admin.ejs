@@ -225,7 +225,7 @@
     <div
       id="redemption-failure-modal"
       class="hidden fixed inset-0 z-50 items-center justify-center p-4 bg-slate-950/82 backdrop-blur-xl"
-      onclick="if (event.target === this) closeXP RedemptionFailurePrompt();"
+      onclick="if (event.target === this) closeXPRedemptionFailurePrompt();"
     >
       <div
         onclick="event.stopPropagation()"
@@ -259,14 +259,14 @@
         ></p>
         <div class="flex gap-3 mt-6">
           <button
-            onclick="closeXP RedemptionFailurePrompt()"
+            onclick="closeXPRedemptionFailurePrompt()"
             class="flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-slate-200"
           >
             Cancel
           </button>
           <button
             id="redemption-failure-submit-btn"
-            onclick="submitXP RedemptionFailure()"
+            onclick="submitXPRedemptionFailure()"
             class="flex-1 rounded-2xl bg-rose-500 px-4 py-3 text-sm font-bold text-white"
           >
             Deny Request
@@ -377,7 +377,7 @@
                 class="top-tab px-4 py-3 rounded-2xl text-sm font-bold transition-all"
                 onclick="showAdminTab('redemptions', this)"
               >
-                XP Redemptions
+                XPRedemptions
                 <span id="badge-redemptions" class="hidden ml-2 rounded-full bg-rose-500/20 px-2 py-0.5 text-[10px] font-black text-rose-200"></span>
               </button>
               <button
@@ -454,7 +454,7 @@
       let adminUsageLogs = [];
       let adminPremiumRequests = [];
       let adminDownloads = [];
-      let adminXP Redemptions = [];
+      let adminXPRedemptions = [];
       let adminPayoutUsers = [];
       let adminNotifications = [];
       let adminAiUsage = null;
@@ -490,7 +490,7 @@
       let adminNotifyEmail = "";
       let adminNotifyMessage = "";
       let redemptionFilterTab = "pending";
-      let pendingXP RedemptionFailureId = "";
+      let pendingXPRedemptionFailureId = "";
       let feedbackFilters = {
         name: "",
         email: "",
@@ -1162,7 +1162,7 @@
           ["feedbacks", "Feedbacks", adminAnalytics.totalFeedbacks || 0],
           ["premiumRequests", "Premium Requests", adminAnalytics.totalUpgradeRequests || 0],
           ["downloads", "Downloads", adminAnalytics.totalDownloads || 0],
-          ["redemptions", "XP Redemptions", adminAnalytics.totalXP Redemptions || 0],
+          ["redemptions", "XPRedemptions", adminAnalytics.totalXPRedemptions || 0],
           ["usageLogs", "Usage Logs", adminAnalytics.totalUsageLogs || 0],
         ];
         el.innerHTML = `
@@ -1200,9 +1200,9 @@
             <div class="glass border border-white/10 rounded-[1.5rem] p-5">
               <div class="text-[11px] uppercase tracking-[0.22em] text-slate-400 font-bold">Payout Summary</div>
               <div class="space-y-3 mt-4 text-sm">
-                <div class="flex items-center justify-between"><span class="text-slate-300">All requests</span><strong>${adminAnalytics.totalXP Redemptions || 0}</strong></div>
-                <div class="flex items-center justify-between"><span class="text-slate-300">Pending</span><strong>${adminAnalytics.pendingXP Redemptions || 0}</strong></div>
-                <div class="flex items-center justify-between"><span class="text-slate-300">Paid</span><strong>${adminAnalytics.paidXP Redemptions || 0}</strong></div>
+                <div class="flex items-center justify-between"><span class="text-slate-300">All requests</span><strong>${adminAnalytics.totalXPRedemptions || 0}</strong></div>
+                <div class="flex items-center justify-between"><span class="text-slate-300">Pending</span><strong>${adminAnalytics.pendingXPRedemptions || 0}</strong></div>
+                <div class="flex items-center justify-between"><span class="text-slate-300">Paid</span><strong>${adminAnalytics.paidXPRedemptions || 0}</strong></div>
               </div>
             </div>
           </div>
@@ -1237,7 +1237,7 @@
                 <div class="text-xl font-bold mt-2">${adminAnalytics.last30Days?.errors || 0}</div>
               </div>
               <div class="rounded-2xl border border-white/8 bg-white/[0.02] px-4 py-4">
-                <div class="text-[10px] uppercase tracking-[0.18em] text-slate-500 font-bold">XP Redemptions</div>
+                <div class="text-[10px] uppercase tracking-[0.18em] text-slate-500 font-bold">XPRedemptions</div>
                 <div class="text-xl font-bold mt-2">${adminAnalytics.last30Days?.redemptions || 0}</div>
               </div>
               <div class="rounded-2xl border border-white/8 bg-white/[0.02] px-4 py-4">
@@ -1576,32 +1576,32 @@
           .join("");
       }
 
-      function renderXP Redemptions() {
+      function renderXPRedemptions() {
         const el = document.getElementById("tab-redemptions");
         if (!el) return;
-        if (!adminXP Redemptions.length) {
+        if (!adminXPRedemptions.length) {
           el.innerHTML = `<div class="rounded-[1.5rem] border border-dashed border-white/10 p-8 text-center text-slate-400">No redemption requests yet.</div>`;
           return;
         }
-        const pendingCount = adminXP Redemptions.filter((item) =>
+        const pendingCount = adminXPRedemptions.filter((item) =>
           ["pending", "processing"].includes(String(item.status || "").toLowerCase()),
         ).length;
-        const paidCount = adminXP Redemptions.filter(
+        const paidCount = adminXPRedemptions.filter(
           (item) => String(item.status || "").toLowerCase() === "paid",
         ).length;
-        const failedCount = adminXP Redemptions.filter(
+        const failedCount = adminXPRedemptions.filter(
           (item) => String(item.status || "").toLowerCase() === "failed",
         ).length;
-        const filtered = adminXP Redemptions.filter((item) =>
+        const filtered = adminXPRedemptions.filter((item) =>
           redemptionFilterTab === "pending"
             ? ["pending", "processing"].includes(String(item.status || "").toLowerCase())
             : String(item.status || "").toLowerCase() === redemptionFilterTab,
         );
         el.innerHTML = `
           <div class="flex gap-2 overflow-x-auto hide-scrollbar mb-4">
-            <button onclick="setXP RedemptionFilterTab('pending')" class="mini-tab ${redemptionFilterTab === "pending" ? "active" : ""} px-4 py-2 rounded-2xl text-xs font-bold uppercase tracking-[0.16em]">Pending (${pendingCount})</button>
-            <button onclick="setXP RedemptionFilterTab('paid')" class="mini-tab ${redemptionFilterTab === "paid" ? "active" : ""} px-4 py-2 rounded-2xl text-xs font-bold uppercase tracking-[0.16em]">Paid (${paidCount})</button>
-            <button onclick="setXP RedemptionFilterTab('failed')" class="mini-tab ${redemptionFilterTab === "failed" ? "active" : ""} px-4 py-2 rounded-2xl text-xs font-bold uppercase tracking-[0.16em]">Failed (${failedCount})</button>
+            <button onclick="setXPRedemptionFilterTab('pending')" class="mini-tab ${redemptionFilterTab === "pending" ? "active" : ""} px-4 py-2 rounded-2xl text-xs font-bold uppercase tracking-[0.16em]">Pending (${pendingCount})</button>
+            <button onclick="setXPRedemptionFilterTab('paid')" class="mini-tab ${redemptionFilterTab === "paid" ? "active" : ""} px-4 py-2 rounded-2xl text-xs font-bold uppercase tracking-[0.16em]">Paid (${paidCount})</button>
+            <button onclick="setXPRedemptionFilterTab('failed')" class="mini-tab ${redemptionFilterTab === "failed" ? "active" : ""} px-4 py-2 rounded-2xl text-xs font-bold uppercase tracking-[0.16em]">Failed (${failedCount})</button>
           </div>
           ${
             filtered.length
@@ -1639,9 +1639,9 @@
                   ${
                     redemptionFilterTab === "pending"
                       ? `<div class="mt-4 flex flex-wrap gap-2">
-                          <button onclick="updateXP RedemptionStatus('${item._id}', 'processing')" class="px-3.5 py-2 rounded-xl bg-white/5 border border-white/10 text-slate-200 text-xs sm:text-sm font-bold hover:bg-white/10 transition-all">Processing</button>
-                          <button onclick="updateXP RedemptionStatus('${item._id}', 'paid')" class="px-3.5 py-2 rounded-xl bg-emerald-400 text-slate-950 text-xs sm:text-sm font-bold hover:bg-emerald-300 transition-all">Paid</button>
-                          <button onclick="openXP RedemptionFailurePrompt('${item._id}')" class="px-3.5 py-2 rounded-xl bg-rose-500/90 text-white text-xs sm:text-sm font-bold hover:bg-rose-400 transition-all">Failed / Refund</button>
+                          <button onclick="updateXPRedemptionStatus('${item._id}', 'processing')" class="px-3.5 py-2 rounded-xl bg-white/5 border border-white/10 text-slate-200 text-xs sm:text-sm font-bold hover:bg-white/10 transition-all">Processing</button>
+                          <button onclick="updateXPRedemptionStatus('${item._id}', 'paid')" class="px-3.5 py-2 rounded-xl bg-emerald-400 text-slate-950 text-xs sm:text-sm font-bold hover:bg-emerald-300 transition-all">Paid</button>
+                          <button onclick="openXPRedemptionFailurePrompt('${item._id}')" class="px-3.5 py-2 rounded-xl bg-rose-500/90 text-white text-xs sm:text-sm font-bold hover:bg-rose-400 transition-all">Failed / Refund</button>
                         </div>`
                       : ""
                   }
@@ -1657,9 +1657,9 @@
         `;
       }
 
-      function setXP RedemptionFilterTab(tab) {
+      function setXPRedemptionFilterTab(tab) {
         redemptionFilterTab = tab;
-        renderXP Redemptions();
+        renderXPRedemptions();
       }
 
       function renderFeedbacks() {
@@ -2591,13 +2591,13 @@
         renderDownloads();
       }
 
-      function upsertXP Redemption(request) {
-        adminXP Redemptions = [
+      function upsertXPRedemption(request) {
+        adminXPRedemptions = [
           request,
-          ...adminXP Redemptions.filter((item) => item._id !== request._id),
+          ...adminXPRedemptions.filter((item) => item._id !== request._id),
         ].slice(0, 300);
         bumpAdminUnread("redemptions");
-        renderXP Redemptions();
+        renderXPRedemptions();
       }
 
       function upsertPremiumRequest(request) {
@@ -2632,7 +2632,7 @@
           upsertDownload(payload);
         });
         adminSocket.on("admin:redemption-updated", (payload) => {
-          upsertXP Redemption(payload);
+          upsertXPRedemption(payload);
         });
       }
 
@@ -2678,7 +2678,7 @@
         );
       }
 
-      async function updateXP RedemptionStatus(id, status) {
+      async function updateXPRedemptionStatus(id, status) {
         const res = await fetch(`/api/admin/redemptions/${id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json", ...getAdminHeaders() },
@@ -2692,22 +2692,22 @@
         await loadAdminData();
       }
 
-      function openXP RedemptionFailurePrompt(id) {
-        pendingXP RedemptionFailureId = String(id || "");
+      function openXPRedemptionFailurePrompt(id) {
+        pendingXPRedemptionFailureId = String(id || "");
         document.getElementById("redemption-failure-reason").value = "";
         document.getElementById("redemption-failure-error")?.classList.add("hidden");
         document.getElementById("redemption-failure-modal")?.classList.remove("hidden");
         document.getElementById("redemption-failure-modal")?.classList.add("flex");
       }
 
-      function closeXP RedemptionFailurePrompt() {
-        pendingXP RedemptionFailureId = "";
+      function closeXPRedemptionFailurePrompt() {
+        pendingXPRedemptionFailureId = "";
         document.getElementById("redemption-failure-modal")?.classList.add("hidden");
         document.getElementById("redemption-failure-modal")?.classList.remove("flex");
       }
 
-      async function submitXP RedemptionFailure() {
-        const id = String(pendingXP RedemptionFailureId || "").trim();
+      async function submitXPRedemptionFailure() {
+        const id = String(pendingXPRedemptionFailureId || "").trim();
         const reason = String(
           document.getElementById("redemption-failure-reason")?.value || "",
         ).trim();
@@ -2739,7 +2739,7 @@
           if (!data.success) {
             throw new Error(data.message || "Could not deny this redemption.");
           }
-          closeXP RedemptionFailurePrompt();
+          closeXPRedemptionFailurePrompt();
           await loadAdminData();
           showAdminToast("XP Redemption marked as failed with a saved reason.", "success");
         } catch (error) {
@@ -2797,7 +2797,7 @@
           adminUsageLogs = usageLogData.logs || [];
           adminPremiumRequests = premiumData.requests || [];
           adminDownloads = downloadsData.downloads || [];
-          adminXP Redemptions = redemptionsData.redemptions || [];
+          adminXPRedemptions = redemptionsData.redemptions || [];
           adminPayoutUsers = payoutUsersData.users || [];
           adminNotifications = notificationsData.notifications || [];
           adminAiUsage = aiUsageData.usage || null;
@@ -2854,7 +2854,7 @@
           renderUsers();
           renderPremiumRequests();
           renderDownloads();
-          renderXP Redemptions();
+          renderXPRedemptions();
           renderPayouts();
           renderNotifyTab();
           renderAdminMarketplace();
