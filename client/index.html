@@ -3287,6 +3287,7 @@
             M
           </div>
           <span class="font-medium tracking-tighter">MediaLab © 2026</span>
+          <span class="ml-1 font-mono text-[9px] bg-white/10 px-1 py-0.5 rounded text-slate-300">MLV 1.1</span>
         </div>
         <div class="flex gap-x-4 text-gray-600">
           <a
@@ -4711,6 +4712,7 @@
       id="account-suspend-modal"
       class="hidden builder-modal-backdrop"
       onclick="if (event.target === this) closeAccountSuspendModal();"
+      data-nosnippet
     >
       <div
         class="builder-modal-card w-full max-w-2xl p-5 sm:p-7"
@@ -6852,14 +6854,14 @@
                 showLogin();
                 return;
               }
-              beginUniversalProgress("Loading marketplace sale for editing...", 18, 72);
+              beginUniversalProgress("Loading blueprint listing for editing...", 18, 72);
               try {
                 const res = await fetch(`/api/marketplace/${encodeURIComponent(itemId)}/edit`, {
                   credentials: "include",
                 });
                 const data = await res.json();
                 if (!res.ok || !data.success || !data.item) {
-                  throw new Error(data.message || "Could not load this marketplace sale.");
+                  throw new Error(data.message || "Could not load this blueprint listing.");
                 }
                 const item = data.item;
                 marketplaceEditingListingId = itemId;
@@ -6885,12 +6887,12 @@
                   screenshots: Array.isArray(item.screenshots) ? item.screenshots.slice(0, 4) : [],
                   screenshotAssets: Array.isArray(item.screenshotAssets) ? item.screenshotAssets.slice(0, 4) : [],
                 };
-                completeUniversalProgress("Marketplace sale ready to edit.");
+                completeUniversalProgress("Blueprint listing ready to edit.");
                 mountMarketplaceTool();
-                showBuilderSnackbar("Editing marketplace sale.", "success");
+                showBuilderSnackbar("Editing blueprint listing.", "success");
               } catch (error) {
-                failUniversalProgress("Could not load marketplace sale.");
-                showBuilderSnackbar(error.message || "Could not load this marketplace sale.", "error");
+                failUniversalProgress("Could not load blueprint listing.");
+                showBuilderSnackbar(error.message || "Could not load this blueprint listing.", "error");
               }
             }
             function renderMarketplaceCards(items = []) {
@@ -7876,11 +7878,11 @@
               );
               const filesToUpload = files.slice(0, availableSlots);
               if (!filesToUpload.length) {
-                showBuilderSnackbar("You already have 4 marketplace screenshots.", "error");
+                showBuilderSnackbar("You already have 4 blueprint screenshots.", "error");
                 if (input) input.value = "";
                 return;
               }
-              beginUniversalProgress("Uploading marketplace screenshots...", 16, 88);
+              beginUniversalProgress("Uploading blueprint screenshots...", 16, 88);
               let uploaded = 0;
               const uploadedAssets = [];
               const uploadNext = async (file) => {
@@ -7924,7 +7926,7 @@
                   4,
                 ),
               };
-                  completeUniversalProgress("Marketplace screenshots uploaded.");
+                  completeUniversalProgress("Blueprint screenshots uploaded.");
                   if (currentStudioToolId === "marketplace" && marketplaceActiveTab === "create") {
                     mountMarketplaceTool();
                   }
@@ -7955,15 +7957,15 @@
                 return;
               }
               const confirmed = await openAppDialog({
-                chip: "Marketplace Live Project",
+                chip: "Blueprint Live Project",
                 title: "Terminate live project?",
                 message:
-                  "This will remove the live project from hosting and package its current HTML into a marketplace listing source.",
+                  "This will remove the live project from hosting and package its current HTML into a blueprints listing source.",
                 confirmLabel: "Terminate Project",
                 cancelLabel: "Cancel",
               });
               if (!confirmed) return;
-              beginUniversalProgress("Terminating live project for marketplace...", 20, 88);
+              beginUniversalProgress("Terminating live project for blueprints...", 20, 88);
               try {
                 const contentRes = await fetch(
                   `/api/github/project-content?filename=${encodeURIComponent(filename)}`,
@@ -8114,11 +8116,11 @@
                 const message =
                   issues.length > 1
                     ? `${issues[0]} ${issues[1]}`
-                    : issues[0] || "Complete all marketplace steps before submitting.";
+                    : issues[0] || "Complete all blueprints steps before submitting.";
                 showBuilderSnackbar(message, "error");
                 return;
               }
-              beginUniversalProgress("Submitting marketplace listing for review...", 18, 92);
+              beginUniversalProgress("Submitting blueprints listing for review...", 18, 92);
               setMarketplaceSubmitState({
                 active: true,
                 percent: 12,
@@ -8147,7 +8149,7 @@
                   active: true,
                   percent: 74,
                   message: isEditingSale
-                    ? "Finalizing your marketplace update..."
+                    ? "Finalizing your blueprints update..."
                     : "Finalizing your review submission...",
                 });
                 const data = await res.json();
@@ -8155,7 +8157,7 @@
                   throw new Error(data.message || "Could not submit the listing.");
                 }
                 completeUniversalProgress(
-                  isEditingSale ? "Marketplace listing updated." : "Marketplace listing submitted.",
+                  isEditingSale ? "Blueprint listing updated." : "Blueprint listing submitted.",
                 );
                 setMarketplaceSubmitState({
                   active: true,
@@ -8175,16 +8177,16 @@
                 mountMarketplaceTool();
                 showBuilderSnackbar(
                   isEditingSale
-                    ? "Marketplace sale updated and sent for review."
-                    : "Project submitted for marketplace review.",
+                    ? "Blueprint listing updated and sent for review."
+                    : "Project submitted for blueprints review.",
                   "success",
                 );
               } catch (error) {
                 stopMarketplaceSubmitProgressPulse();
-                failUniversalProgress("Marketplace submit failed.");
+                failUniversalProgress("Blueprint submit failed.");
                 marketplaceSubmitState = createEmptyMarketplaceSubmitState();
                 mountMarketplaceTool();
-                showBuilderSnackbar(error.message || "Could not submit this marketplace listing.", "error");
+                showBuilderSnackbar(error.message || "Could not submit this blueprint listing.", "error");
               }
             }
             function openMarketplaceRemoveModal(id = "") {
@@ -8495,7 +8497,7 @@
             async function openMarketplaceDetail(id) {
               if (!id) return;
               document.getElementById("marketplace-detail-modal")?.classList.remove("hidden");
-              document.getElementById("marketplace-detail-title").textContent = "Loading marketplace project";
+              document.getElementById("marketplace-detail-title").textContent = "Loading blueprint project";
               document.getElementById("marketplace-detail-subtitle").textContent = "Preparing live preview, comments, and creator details...";
               document.getElementById("marketplace-detail-body").innerHTML = renderToolLoadingShell("marketplace");
               try {
@@ -8504,7 +8506,7 @@
                 });
                 const data = await res.json();
                 if (!res.ok || !data.success) {
-                  throw new Error(data.message || "Could not open this marketplace item.");
+                  throw new Error(data.message || "Could not open this blueprint item.");
                 }
                 currentMarketplaceItem = data.item;
                 marketplacePreviewVisible = false;
